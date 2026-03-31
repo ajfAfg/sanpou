@@ -1,0 +1,12 @@
+(library
+ (name sanpou)
+ (libraries tla str json)
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving.eq)))
+
+(menhir
+ (flags (--explain))
+ (modules parser))
+
+(ocamllex
+ (modules lexer))

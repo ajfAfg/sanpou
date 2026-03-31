@@ -1,0 +1,70 @@
+mod rwlock {
+  def readerNum = 2;
+  def writerNum = 2;
+
+  def foo(x) = x + 1;
+
+  let rcnt = 0;
+  let wcnt = 0;
+  let lock = false;
+
+  fn lockAcquire() {
+    await lock == false,
+    lock = true;
+    return ();
+  }
+
+  fn lockRelease() {
+    lock = false;
+    return ();
+  }
+
+  fn rwlockReadAcquire() {
+    while (true) {
+      while (0 < wcnt);
+      rcnt = rcnt + 1;
+      if (wcnt == 0) {
+        break;
+      }
+      rcnt = rcnt - 1;
+    }
+    return ();
+  }
+
+  fn rwlockReadRelease() {
+    rcnt = rcnt - 1;
+    return ();
+  }
+
+  fn rwlockWriteAcquire() {
+    wcnt = wcnt + 1;
+    while (0 < rcnt);
+    lockAcquire();
+    return ();
+  }
+
+  fn rwlockWriteRelease() {
+    lockRelease();
+    wcnt = wcnt - 1;
+    return ();
+  }
+
+  fn reader() {
+    while (true) {
+      rwlockReadAcquire();
+      ;
+      rwlockReadRelease();
+    }
+  }
+
+  fn writer() {
+    while (true) {
+      rwlockWriteAcquire();
+      ;
+      rwlockWriteRelease();
+    }
+  }
+
+  process readers = reader in 1..readerNum;
+  process writers = writer in 1..writerNum;
+}

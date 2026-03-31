@@ -1,4 +1,4 @@
 (executable
  (public_name sanpou)
  (name main)
- (libraries sanpou))
+ (libraries sanpou tla))
