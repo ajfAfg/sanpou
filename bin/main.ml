@@ -13,6 +13,7 @@ let cmd_compile file outdir =
   let ic = open_in file in
   let lexbuf = Lexing.from_channel ic in
   let cst = Sanpou.Parser.program Sanpou.Lexer.main lexbuf in
+  Sanpou.Typing.check cst;
   let irs = Sanpou.Compile.compile_to_ir cst in
   if not (Sys.file_exists outdir) then Sys.mkdir outdir 0o755;
   List.iter
