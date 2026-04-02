@@ -51,6 +51,10 @@ let () =
               exact_roundtrip "mod m { fn foo() { bar(1, 2); } }");
           test_case "app expr" `Quick (fun () ->
               exact_roundtrip "mod m { def x = foo(1, 2); }");
+          test_case "let step" `Quick (fun () ->
+              exact_roundtrip "mod m { fn foo() { let x = 5; } }");
+          test_case "let step expr" `Quick (fun () ->
+              exact_roundtrip "mod m { fn foo() { let y = 1 + 2; return (); } }");
           test_case "multiple modules" `Quick (fun () ->
               exact_roundtrip "mod a { let x = 0; }\nmod b { let y = 1; }");
           test_case "full module" `Quick (fun () ->

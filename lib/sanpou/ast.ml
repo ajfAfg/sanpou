@@ -18,6 +18,7 @@ type stmt =
   | While of expr * body
   | If of expr * body
   | Await of expr
+  | Let of id * expr
 [@@deriving show, eq]
 
 and step = stmt list [@@deriving show, eq]

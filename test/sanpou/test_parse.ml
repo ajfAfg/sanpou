@@ -92,6 +92,18 @@ let process_ nm pr lo hi =
 
 let param s = (n, s)
 
+let let_step x e =
+  LetStep
+    {
+      loc = { line = 0; col = 0 };
+      let_t = n;
+      name_t = n;
+      name = x;
+      eq_t = n;
+      value = e;
+      semi_t = n;
+    }
+
 let parse input =
   input |> Lexing.from_string |> Sanpou.Parser.program Sanpou.Lexer.main
 
@@ -371,5 +383,34 @@ let () =
           Alcotest.test_case "parses without error" `Quick (fun () ->
               let _ast = parse full_example in
               ());
+        ] );
+      ( "let_step",
+        [
+          Alcotest.test_case "simple" `Quick (fun () ->
+              let actual = parse_items "fn foo() { let x = 5; return (); }" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [
+                  proc_def "foo" cl0
+                    [
+                      let_step "x" (intlit 5);
+                      simple_step (cl1 (return_ (tuple cl0 None)));
+                    ];
+                ]
+                actual);
+          Alcotest.test_case "with expression" `Quick (fun () ->
+              let actual =
+                parse_items "fn foo() { let y = 1 + 2; return (); }"
+              in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [
+                  proc_def "foo" cl0
+                    [
+                      let_step "y" (binop Plus (intlit 1) (intlit 2));
+                      simple_step (cl1 (return_ (tuple cl0 None)));
+                    ];
+                ]
+                actual);
         ] );
     ]

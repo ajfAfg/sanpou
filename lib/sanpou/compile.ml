@@ -44,6 +44,7 @@ type module_ir = {
   const_defs : (string * tla_expr) list;
   fun_defs : (string * string list * tla_expr) list;
   var_decls : (string * tla_expr) list;
+  local_var_decls : string list;
   procs : proc_ir list;
   processes : process_ir list;
 }
@@ -57,6 +58,26 @@ let fresh_label () =
   "L" ^ string_of_int !label_counter
 
 let reset_label_counter () = label_counter := 0
+
+(* ===== Variable name generation for local vars ===== *)
+
+let var_name_counter = ref 0
+
+let fresh_var_name base =
+  incr var_name_counter;
+  base ^ "__" ^ string_of_int !var_name_counter
+
+let reset_var_name_counter () = var_name_counter := 0
+
+(* Module-level accumulator for local variable TLA+ names *)
+let module_local_vars : string list ref = ref []
+let reset_module_local_vars () = module_local_vars := []
+let collect_local_var name = module_local_vars := name :: !module_local_vars
+let get_module_local_vars () = List.rev !module_local_vars
+let is_local_var name = List.mem name !module_local_vars
+
+let resolve_name env name =
+  match List.assoc_opt name env with Some tla_name -> tla_name | None -> name
 
 (* ===== CST expression → TLA+ expression ===== *)
 
@@ -82,10 +103,27 @@ let rec expr_to_tla = function
 type compile_ctx = {
   proc_name : string;
   all_vars : string list;
+  name_env : (string * string) list;
   break_label : string option;
 }
 
 type compiled = { actions : action list; entry : string; exit_label : string }
+
+let rec expr_to_tla_ctx ctx = function
+  | IntLit { value; _ } -> TInt value
+  | BoolLit { value; _ } -> TBool value
+  | Var { name; _ } ->
+      let tla_name = resolve_name ctx.name_env name in
+      if is_local_var tla_name then TSubscript (TId tla_name, TId "self")
+      else TId tla_name
+  | BinOp { op; lhs; rhs; _ } ->
+      TParens
+        (TBinOp
+           (binop_to_tla op, expr_to_tla_ctx ctx lhs, expr_to_tla_ctx ctx rhs))
+  | App { name; args; _ } ->
+      TApp (name, List.map (expr_to_tla_ctx ctx) args.items)
+  | Tuple { elems; _ } -> TSeqLit (List.map (expr_to_tla_ctx ctx) elems.items)
+  | Paren { inner; _ } -> expr_to_tla_ctx ctx inner
 
 let make_source ~proc_name ~description ~(loc : loc) =
   { proc_name; description; line = loc.line; col = loc.col }
@@ -128,9 +166,10 @@ let compile_simple_stmt ctx label (stmt : simple_stmt) ~guard ~assignments
     ~changed ~stack_op_ref ~actual_next ~extra_actions ~next_label ~source =
   match stmt with
   | Assign { name; value; _ } ->
-      assignments := !assignments @ [ (name, expr_to_tla value) ];
-      changed := name :: !changed
-  | Await { cond; _ } -> guard := Some (expr_to_tla cond)
+      let tla_name = resolve_name ctx.name_env name in
+      assignments := !assignments @ [ (tla_name, expr_to_tla_ctx ctx value) ];
+      changed := tla_name :: !changed
+  | Await { cond; _ } -> guard := Some (expr_to_tla_ctx ctx cond)
   | Call { name; _ } ->
       let pop_label = fresh_label () in
       stack_op_ref := StackPush (name, pop_label);
@@ -144,7 +183,7 @@ let compile_simple_stmt ctx label (stmt : simple_stmt) ~guard ~assignments
       in
       extra_actions := [ pop_action ]
   | Return { value; _ } ->
-      stack_op_ref := StackReturn (expr_to_tla value);
+      stack_op_ref := StackReturn (expr_to_tla_ctx ctx value);
       actual_next := "__return__"
   | Break _ ->
       let break_target =
@@ -175,7 +214,7 @@ let rec compile_step ctx (step : Cst.step) (next_label : string) : compiled =
       | [ Return { value; _ } ] ->
           let a =
             make_action ~label ~pc_next:"__return__" ~assignments:[] ~guard:None
-              ~stack_op:(StackReturn (expr_to_tla value))
+              ~stack_op:(StackReturn (expr_to_tla_ctx ctx value))
               ~changed:[] ~ctx ~source
           in
           { actions = [ a ]; entry = label; exit_label = next_label }
@@ -238,6 +277,7 @@ let rec compile_step ctx (step : Cst.step) (next_label : string) : compiled =
   | BlockStep { stmt = If { cond; body; _ }; loc } ->
       compile_if ctx cond body next_label loc
   | WhileWait { cond; loc; _ } -> compile_while ctx cond [] next_label loc
+  | LetStep _ -> failwith "LetStep should be handled in compile_body"
 
 and compile_while ctx cond body after_loop_label loc =
   let check_label = fresh_label () in
@@ -252,7 +292,8 @@ and compile_while ctx cond body after_loop_label loc =
       guard = None;
       assignments = [];
       pc_dest =
-        PcBranch (expr_to_tla cond, body_compiled.entry, after_loop_label);
+        PcBranch
+          (expr_to_tla_ctx ctx cond, body_compiled.entry, after_loop_label);
       stack_op = StackNone;
       unchanged;
       source;
@@ -275,7 +316,8 @@ and compile_if ctx cond body next_label loc =
       label = check_label;
       guard = None;
       assignments = [];
-      pc_dest = PcBranch (expr_to_tla cond, body_compiled.entry, next_label);
+      pc_dest =
+        PcBranch (expr_to_tla_ctx ctx cond, body_compiled.entry, next_label);
       stack_op = StackNone;
       unchanged;
       source;
@@ -301,19 +343,58 @@ and compile_body ctx (steps : Cst.body) (continuation : string) : compiled =
       in
       { actions = [ a ]; entry = label; exit_label = continuation }
   | _ ->
-      let rev_steps = List.rev steps in
-      let first_step = List.hd rev_steps in
-      let rest_steps = List.tl rev_steps in
-      let compiled = compile_step ctx first_step continuation in
+      (* Forward pass: build per-step env annotations *)
+      let _, annotated_steps =
+        List.fold_left
+          (fun (env, acc) step ->
+            match step with
+            | LetStep { name; _ } ->
+                let tla_name = fresh_var_name name in
+                collect_local_var tla_name;
+                let ann = (step, env, Some tla_name) in
+                let new_env = (name, tla_name) :: env in
+                (new_env, acc @ [ ann ])
+            | _ -> (env, acc @ [ (step, env, None) ]))
+          (ctx.name_env, []) steps
+      in
+      (* Backward pass: compile with per-step env *)
+      let compile_annotated (step, env, let_info) next_lbl =
+        let step_ctx = { ctx with name_env = env } in
+        match let_info with
+        | Some tla_name -> compile_let_step step_ctx tla_name step next_lbl
+        | None -> compile_step step_ctx step next_lbl
+      in
+      let rev_annotated = List.rev annotated_steps in
+      let first = List.hd rev_annotated in
+      let rest = List.tl rev_annotated in
+      let compiled = compile_annotated first continuation in
       List.fold_left
-        (fun acc step ->
-          let c = compile_step ctx step acc.entry in
+        (fun acc ann ->
+          let c = compile_annotated ann acc.entry in
           {
             actions = c.actions @ acc.actions;
             entry = c.entry;
             exit_label = acc.exit_label;
           })
-        compiled rest_steps
+        compiled rest
+
+and compile_let_step ctx tla_name step next_label =
+  let label = fresh_label () in
+  match step with
+  | LetStep { name; value; loc; _ } ->
+      let init_expr = expr_to_tla_ctx ctx value in
+      let source =
+        make_source ~proc_name:ctx.proc_name
+          ~description:("let " ^ name ^ " = " ^ Cst_printer.pretty_expr value)
+          ~loc
+      in
+      let a =
+        make_action ~label ~pc_next:next_label
+          ~assignments:[ (tla_name, init_expr) ]
+          ~guard:None ~stack_op:StackNone ~changed:[ tla_name ] ~ctx ~source
+      in
+      { actions = [ a ]; entry = label; exit_label = next_label }
+  | _ -> failwith "compile_let_step called on non-LetStep"
 
 (* ===== Resolve call targets ===== *)
 
@@ -330,6 +411,8 @@ let resolve_call_target procs action =
 
 let compile_module_ir (m : Cst.module_def) : module_ir =
   reset_label_counter ();
+  reset_var_name_counter ();
+  reset_module_local_vars ();
   let const_defs = ref [] in
   let fun_defs = ref [] in
   let var_decls = ref [] in
@@ -348,7 +431,9 @@ let compile_module_ir (m : Cst.module_def) : module_ir =
           var_decls := !var_decls @ [ (name, expr_to_tla value) ]
       | ProcDef { name; params; body; _ } ->
           let all_vars = List.map fst !var_decls in
-          let ctx = { proc_name = name; all_vars; break_label = None } in
+          let ctx =
+            { proc_name = name; all_vars; name_env = []; break_label = None }
+          in
           let done_label = "Done" in
           let compiled = compile_body ctx body done_label in
           let proc =
@@ -365,32 +450,58 @@ let compile_module_ir (m : Cst.module_def) : module_ir =
             !processes
             @ [ { name; proc; lo = expr_to_tla lo; hi = expr_to_tla hi } ])
     m.items;
+  (* Get all local vars collected during compilation *)
+  let all_local = get_module_local_vars () in
+  (* Fixup UNCHANGED for all actions to include local vars *)
+  let fixup_action a =
+    let missing =
+      List.filter
+        (fun v ->
+          (not (List.mem v a.unchanged))
+          && not (List.exists (fun (var, _) -> var = v) a.assignments))
+        all_local
+    in
+    { a with unchanged = a.unchanged @ missing }
+  in
+  let fixed_procs =
+    List.map
+      (fun (p : proc_ir) ->
+        { p with actions = List.map fixup_action p.actions })
+      !procs
+  in
   (* Resolve call targets *)
   let resolved_procs =
     List.map
       (fun (p : proc_ir) ->
-        { p with actions = List.map (resolve_call_target !procs) p.actions })
-      !procs
+        {
+          p with
+          actions = List.map (resolve_call_target fixed_procs) p.actions;
+        })
+      fixed_procs
   in
   {
     name = m.mod_name;
     const_defs = !const_defs;
     fun_defs = !fun_defs;
     var_decls = !var_decls;
+    local_var_decls = all_local;
     procs = resolved_procs;
     processes = !processes;
   }
 
 (* ===== Action IR → TLA+ AST ===== *)
 
-let action_to_decl proc_entry_labels (action : action) : tla_decl =
+let action_to_decl proc_entry_labels local_vars (action : action) : tla_decl =
   let self = TId "self" in
   let conjuncts = ref [] in
   let add c = conjuncts := !conjuncts @ [ c ] in
   add (TBinOp ("=", TSubscript (TId "pc", self), TStr action.label));
   (match action.guard with Some g -> add g | None -> ());
   List.iter
-    (fun (var, expr) -> add (TBinOp ("=", TPrimed (TId var), expr)))
+    (fun (var, expr) ->
+      if List.mem var local_vars then
+        add (TBinOp ("=", TPrimed (TId var), TExcept (TId var, self, expr)))
+      else add (TBinOp ("=", TPrimed (TId var), expr)))
     action.assignments;
   (match action.stack_op with
   | StackPush (proc_name, return_label) ->
@@ -457,10 +568,11 @@ let action_to_decl proc_entry_labels (action : action) : tla_decl =
     add (TUnchanged (List.map (fun v -> TId v) action.unchanged));
   DOpDef (action.label, [ "self" ], TConj (Block, !conjuncts))
 
-let proc_to_decls proc_entry_labels (proc : proc_ir) : tla_decl list =
+let proc_to_decls proc_entry_labels local_vars (proc : proc_ir) : tla_decl list
+    =
   let action_decls =
     List.concat_map
-      (fun a -> [ action_to_decl proc_entry_labels a; DSeparator ])
+      (fun a -> [ action_to_decl proc_entry_labels local_vars a; DSeparator ])
       proc.actions
   in
   let action_labels = List.map (fun (a : action) -> a.label) proc.actions in
@@ -490,7 +602,7 @@ let generate_module (ir : module_ir) : tla_module =
     ir.fun_defs;
   if ir.fun_defs <> [] then add_sep ();
   let global_vars = List.map fst ir.var_decls in
-  let all_tla_vars = ("pc" :: global_vars) @ [ "stack" ] in
+  let all_tla_vars = ("pc" :: global_vars) @ ir.local_var_decls @ [ "stack" ] in
   add (DVariables all_tla_vars);
   add_sep ();
   add (DOpDef ("vars", [], TSeqLit (List.map (fun v -> TId v) all_tla_vars)));
@@ -509,6 +621,11 @@ let generate_module (ir : module_ir) : tla_module =
     ir.var_decls;
   add_init
     (TBinOp ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit [])));
+  List.iter
+    (fun name ->
+      add_init
+        (TBinOp ("=", TId name, TFuncMap ("self", TId "ProcSet", TInt 0))))
+    ir.local_var_decls;
   (match ir.processes with
   | [ single ] ->
       let proc =
@@ -535,7 +652,7 @@ let generate_module (ir : module_ir) : tla_module =
   add_sep ();
   List.iter
     (fun proc ->
-      List.iter add (proc_to_decls proc_entry_labels proc);
+      List.iter add (proc_to_decls proc_entry_labels ir.local_var_decls proc);
       add_sep ())
     ir.procs;
   let procedure_procs =

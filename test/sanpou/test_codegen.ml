@@ -145,5 +145,58 @@ let () =
               has_in "VARIABLES pc, x, stack" tla_a;
               has_in "---- MODULE b ----" tla_b;
               has_in "VARIABLES pc, y, stack" tla_b);
+          Alcotest.test_case "local variable" `Quick (fun () ->
+              let cst =
+                parse
+                  "mod m {\n\
+                   let g = 0;\n\
+                   fn foo() { let x = 5; g = x; return (); }\n\
+                   process ps = foo in 1..2;\n\
+                   }\n"
+              in
+              let modules = Sanpou.Compile.compile cst in
+              let tla = Tla.Tla_printer.render (List.hd modules) in
+              let has s = has_in s tla in
+              has "VARIABLES pc, g, x__1, stack";
+              has "x__1 = [self \\in ProcSet |-> 0]";
+              has "x__1' = [x__1 EXCEPT ![self] = 5]");
+          Alcotest.test_case "shadowing module var" `Quick (fun () ->
+              let cst =
+                parse
+                  "mod m {\n\
+                   let x = 0;\n\
+                   fn foo() { let x = 42; return (); }\n\
+                   process ps = foo in 1..2;\n\
+                   }\n"
+              in
+              let modules = Sanpou.Compile.compile cst in
+              let tla = Tla.Tla_printer.render (List.hd modules) in
+              let has s = has_in s tla in
+              has "VARIABLES pc, x, x__1, stack";
+              has "x__1' = [x__1 EXCEPT ![self] = 42]");
+          Alcotest.test_case "nested shadowing" `Quick (fun () ->
+              let cst =
+                parse
+                  "mod m {\n\
+                   let g = 0;\n\
+                   fn foo() {\n\
+                   let x = 1;\n\
+                   while (true) {\n\
+                   let x = 2;\n\
+                   g = x;\n\
+                   break;\n\
+                   }\n\
+                   g = x;\n\
+                   return ();\n\
+                   }\n\
+                   process ps = foo in 1..2;\n\
+                   }\n"
+              in
+              let modules = Sanpou.Compile.compile cst in
+              let tla = Tla.Tla_printer.render (List.hd modules) in
+              let has s = has_in s tla in
+              has "VARIABLES pc, g, x__1, x__2, stack";
+              has "x__1' = [x__1 EXCEPT ![self] = 1]";
+              has "x__2' = [x__2 EXCEPT ![self] = 2]");
         ] );
     ]

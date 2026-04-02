@@ -55,6 +55,9 @@ let rec print_step = function
   | BlockStep { stmt; _ } -> print_block_stmt stmt
   | WhileWait { while_t; lp; cond; rp; semi_t; _ } ->
       while_t ^ "while" ^ lp ^ "(" ^ print_expr cond ^ rp ^ ")" ^ semi_t ^ ";"
+  | LetStep { let_t; name_t; name; eq_t; value; semi_t; _ } ->
+      let_t ^ "let" ^ name_t ^ name ^ eq_t ^ "=" ^ print_expr value ^ semi_t
+      ^ ";"
 
 and print_block_stmt = function
   | While { while_t; lp; cond; rp; lb; body; rb } ->
@@ -148,6 +151,8 @@ let rec pretty_step indent = function
   | EmptyStep _ -> indent ^ ";\n"
   | BlockStep { stmt; _ } -> pretty_block_stmt indent stmt
   | WhileWait { cond; _ } -> indent ^ "while (" ^ pretty_expr cond ^ ");\n"
+  | LetStep { name; value; _ } ->
+      indent ^ "let " ^ name ^ " = " ^ pretty_expr value ^ ";\n"
 
 and pretty_block_stmt indent = function
   | While { cond; body; _ } ->

@@ -81,6 +81,15 @@ and step =
       rp : trivia;
       semi_t : trivia;
     }
+  | LetStep of {
+      loc : loc;
+      let_t : trivia;
+      name_t : trivia;
+      name : id;
+      eq_t : trivia;
+      value : expr;
+      semi_t : trivia;
+    }
 
 and body = step list [@@deriving show, eq]
 

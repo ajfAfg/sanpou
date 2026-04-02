@@ -69,6 +69,8 @@ step:
   | semi_t=SEMI { EmptyStep { loc = loc_of_pos $startpos; semi_t } }
   | stmt=block_stmt { BlockStep { loc = loc_of_pos $startpos; stmt } }
   | while_t=WHILE lp=LPAREN cond=expr rp=RPAREN semi_t=SEMI { WhileWait { loc = loc_of_pos $startpos; while_t; lp; cond; rp; semi_t } }
+  | let_t=LET id=ID eq_t=EQ value=expr semi_t=SEMI
+      { let (name_t, name) = id in LetStep { loc = loc_of_pos $startpos; let_t; name_t; name; eq_t; value; semi_t } }
 
 (* comma-separated nonempty simple_stmt list *)
 atomic_stmts_nonempty:

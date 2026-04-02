@@ -33,6 +33,7 @@ and conv_step = function
   | EmptyStep _ -> []
   | BlockStep { stmt; _ } -> [ conv_block_stmt stmt ]
   | WhileWait { cond; _ } -> [ Ast.While (conv_expr cond, []) ]
+  | LetStep { name; value; _ } -> [ Ast.Let (name, conv_expr value) ]
 
 and conv_body steps = List.map conv_step steps
 
