@@ -2,32 +2,34 @@ open Cst
 open Tla.Tla_ast
 open Ir
 
-(* ===== Label generation ===== *)
+(* ===== Compilation state ===== *)
 
-let label_counter = ref 0
+type lower_state = {
+  label_counter : int ref;
+  var_name_counter : int ref;
+  module_local_vars : string list ref;
+}
 
-let fresh_label () =
-  incr label_counter;
-  "L" ^ string_of_int !label_counter
+let create_state () =
+  {
+    label_counter = ref 0;
+    var_name_counter = ref 0;
+    module_local_vars = ref [];
+  }
 
-let reset_label_counter () = label_counter := 0
+let fresh_label st =
+  incr st.label_counter;
+  "L" ^ string_of_int !(st.label_counter)
 
-(* ===== Variable name generation for local vars ===== *)
+let fresh_var_name st base =
+  incr st.var_name_counter;
+  base ^ "__" ^ string_of_int !(st.var_name_counter)
 
-let var_name_counter = ref 0
+let collect_local_var st name =
+  st.module_local_vars := name :: !(st.module_local_vars)
 
-let fresh_var_name base =
-  incr var_name_counter;
-  base ^ "__" ^ string_of_int !var_name_counter
-
-let reset_var_name_counter () = var_name_counter := 0
-
-(* Module-level accumulator for local variable TLA+ names *)
-let module_local_vars : string list ref = ref []
-let reset_module_local_vars () = module_local_vars := []
-let collect_local_var name = module_local_vars := name :: !module_local_vars
-let get_module_local_vars () = List.rev !module_local_vars
-let is_local_var name = List.mem name !module_local_vars
+let get_module_local_vars st = List.rev !(st.module_local_vars)
+let is_local_var st name = List.mem name !(st.module_local_vars)
 
 let resolve_name env name =
   match List.assoc_opt name env with Some tla_name -> tla_name | None -> name
@@ -58,6 +60,7 @@ type compile_ctx = {
   all_vars : string list;
   name_env : (string * string) list;
   break_label : string option;
+  state : lower_state;
 }
 
 type compiled = { actions : action list; entry : string; exit_label : string }
@@ -67,7 +70,8 @@ let rec expr_to_tla_ctx ctx = function
   | BoolLit { value; _ } -> TBool value
   | Var { name; _ } ->
       let tla_name = resolve_name ctx.name_env name in
-      if is_local_var tla_name then TSubscript (TId tla_name, TId "self")
+      if is_local_var ctx.state tla_name then
+        TSubscript (TId tla_name, TId "self")
       else TId tla_name
   | BinOp { op; lhs; rhs; _ } ->
       TParens
@@ -116,7 +120,7 @@ let compile_simple_stmt ctx label (stmt : simple_stmt) ~guard ~assignments
       changed := tla_name :: !changed
   | Await { cond; _ } -> guard := Some (expr_to_tla_ctx ctx cond)
   | Call { name; _ } ->
-      let pop_label = fresh_label () in
+      let pop_label = fresh_label ctx.state in
       stack_op_ref := StackPush (name, pop_label);
       actual_next := "__call__";
       let pop_source =
@@ -140,7 +144,7 @@ let compile_simple_stmt ctx label (stmt : simple_stmt) ~guard ~assignments
       actual_next := break_target
 
 let rec compile_step ctx (step : Cst.step) (next_label : string) : compiled =
-  let label = fresh_label () in
+  let label = fresh_label ctx.state in
   match step with
   | EmptyStep { loc; _ } ->
       let source = make_source ~proc_name:ctx.proc_name ~description:";" ~loc in
@@ -175,7 +179,7 @@ let rec compile_step ctx (step : Cst.step) (next_label : string) : compiled =
           in
           { actions = [ a ]; entry = label; exit_label = next_label }
       | [ Call { name; _ } ] ->
-          let pop_label = fresh_label () in
+          let pop_label = fresh_label ctx.state in
           let call_action =
             make_action ~label ~pc_next:"__call__" ~assignments:[] ~guard:None
               ~stack_op:(StackPush (name, pop_label))
@@ -225,7 +229,7 @@ let rec compile_step ctx (step : Cst.step) (next_label : string) : compiled =
   | LetStep _ -> failwith "LetStep should be handled in compile_body"
 
 and compile_while ctx cond body after_loop_label loc =
-  let check_label = fresh_label () in
+  let check_label = fresh_label ctx.state in
   let body_ctx = { ctx with break_label = Some after_loop_label } in
   let body_compiled = compile_body body_ctx body check_label in
   let desc = "while (" ^ Cst_printer.pretty_expr cond ^ ") [check]" in
@@ -251,7 +255,7 @@ and compile_while ctx cond body after_loop_label loc =
   }
 
 and compile_if ctx cond body next_label loc =
-  let check_label = fresh_label () in
+  let check_label = fresh_label ctx.state in
   let body_compiled = compile_body ctx body next_label in
   let desc = "if (" ^ Cst_printer.pretty_expr cond ^ ") [check]" in
   let source = make_source ~proc_name:ctx.proc_name ~description:desc ~loc in
@@ -277,7 +281,7 @@ and compile_if ctx cond body next_label loc =
 and compile_body ctx (steps : Cst.body) (continuation : string) : compiled =
   match steps with
   | [] ->
-      let label = fresh_label () in
+      let label = fresh_label ctx.state in
       let source =
         make_source ~proc_name:ctx.proc_name ~description:"[empty body]"
           ~loc:{ line = 0; col = 0 }
@@ -294,8 +298,8 @@ and compile_body ctx (steps : Cst.body) (continuation : string) : compiled =
           (fun (env, acc) step ->
             match step with
             | LetStep { name; _ } ->
-                let tla_name = fresh_var_name name in
-                collect_local_var tla_name;
+                let tla_name = fresh_var_name ctx.state name in
+                collect_local_var ctx.state tla_name;
                 let ann = (step, env, Some tla_name) in
                 let new_env = (name, tla_name) :: env in
                 (new_env, acc @ [ ann ])
@@ -324,7 +328,7 @@ and compile_body ctx (steps : Cst.body) (continuation : string) : compiled =
         compiled rest
 
 and compile_let_step ctx tla_name step next_label =
-  let label = fresh_label () in
+  let label = fresh_label ctx.state in
   match step with
   | LetStep { name; value; loc; _ } ->
       let init_expr = expr_to_tla_ctx ctx value in
@@ -355,9 +359,7 @@ let resolve_call_target procs action =
 (* ===== CST module → module_ir ===== *)
 
 let compile_module_ir (m : Cst.module_def) : module_ir =
-  reset_label_counter ();
-  reset_var_name_counter ();
-  reset_module_local_vars ();
+  let st = create_state () in
   let const_defs = ref [] in
   let fun_defs = ref [] in
   let var_decls = ref [] in
@@ -377,7 +379,13 @@ let compile_module_ir (m : Cst.module_def) : module_ir =
       | ProcDef { name; params; body; _ } ->
           let all_vars = List.map fst !var_decls in
           let ctx =
-            { proc_name = name; all_vars; name_env = []; break_label = None }
+            {
+              proc_name = name;
+              all_vars;
+              name_env = [];
+              break_label = None;
+              state = st;
+            }
           in
           let done_label = "Done" in
           let compiled = compile_body ctx body done_label in
@@ -396,7 +404,7 @@ let compile_module_ir (m : Cst.module_def) : module_ir =
             @ [ { name; proc; lo = expr_to_tla lo; hi = expr_to_tla hi } ])
     m.items;
   (* Get all local vars collected during compilation *)
-  let all_local = get_module_local_vars () in
+  let all_local = get_module_local_vars st in
   (* Fixup UNCHANGED for all actions to include local vars *)
   let fixup_action a =
     let missing =
