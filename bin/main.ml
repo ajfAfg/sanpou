@@ -14,11 +14,11 @@ let cmd_compile file outdir =
   let lexbuf = Lexing.from_channel ic in
   let cst = Sanpou.Parser.program Sanpou.Lexer.main lexbuf in
   Sanpou.Typing.check cst;
-  let irs = Sanpou.Compile.compile_to_ir cst in
+  let irs = Sanpou.Lower.compile_to_ir cst in
   if not (Sys.file_exists outdir) then Sys.mkdir outdir 0o755;
   List.iter
-    (fun (ir : Sanpou.Compile.module_ir) ->
-      let tla_module = Sanpou.Compile.generate_module ir in
+    (fun (ir : Sanpou.Ir.module_ir) ->
+      let tla_module = Sanpou.Emit_tla.generate_module ir in
       let tla_path = Filename.concat outdir (tla_module.name ^ ".tla") in
       let oc = open_out tla_path in
       output_string oc (Tla.Tla_printer.render tla_module);
