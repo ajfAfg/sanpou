@@ -31,7 +31,15 @@ jobs:
 
       - run: opam install . --deps-only --with-test
 
-      - run: opam exec -- dune runtest
+      - name: Set up TLA+
+        uses: ./.github/actions/setup-tlaplus
+        id: tlaplus
+
+      - name: Run tests
+        run: opam exec -- dune runtest
+        env:
+          SANPOU_JAVA: ${{ steps.tlaplus.outputs.java-path }}
+          SANPOU_TLA2TOOLS_JAR: ${{ steps.tlaplus.outputs.tla2tools-jar }}
 
   build:
     strategy:
