@@ -1,3 +1,9 @@
 (tests
- (names test_parse test_compile test_cst_printer test_typing)
+ (names
+  test_parse
+  test_compile
+  test_cst_printer
+  test_typing
+  test_alpha_convert
+  test_linearize)
  (libraries sanpou tla alcotest str))

@@ -76,7 +76,9 @@ mod rwlock {
 |}
 
 let compile cst =
-  cst |> Sanpou.Lower.compile_to_ir |> List.map Sanpou.Emit_tla.generate_module
+  Sanpou.Typing.check cst;
+  cst |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
+  |> List.map Sanpou.Emit_tla.generate_module
 
 let has_in s tla =
   Alcotest.(check bool)
