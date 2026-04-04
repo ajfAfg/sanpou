@@ -7,7 +7,10 @@ let binop_str = function
   | Minus -> "-"
   | Mult -> "*"
   | Lt -> "<"
+  | LtEq -> "<="
+  | GtEq -> ">="
   | Eq -> "=="
+  | And -> "&&"
 
 let print_comma_list f (cl : _ comma_list) =
   match cl.items with
@@ -116,7 +119,10 @@ let pretty_binop = function
   | Minus -> " - "
   | Mult -> " * "
   | Lt -> " < "
+  | LtEq -> " <= "
+  | GtEq -> " >= "
   | Eq -> " == "
+  | And -> " && "
 
 let rec pretty_expr = function
   | IntLit { value; _ } -> string_of_int value

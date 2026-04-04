@@ -29,6 +29,8 @@ type tla_expr =
   | TTail of tla_expr
   | TParens of tla_expr
   | TIf of tla_expr * tla_expr * tla_expr
+  | TGlobally of tla_expr
+  | TFinally of tla_expr
 
 type tla_decl =
   | DExtends of string list
