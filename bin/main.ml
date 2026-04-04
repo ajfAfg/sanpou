@@ -14,7 +14,7 @@ let cmd_compile file outdir =
   let lexbuf = Lexing.from_channel ic in
   let cst = Sanpou.Parser.program Sanpou.Lexer.main lexbuf in
   Sanpou.Typing.check cst;
-  let irs = Sanpou.Lower.compile_to_ir cst in
+  let irs = Sanpou.Alpha_convert.transform cst |> Sanpou.Linearize.linearize in
   if not (Sys.file_exists outdir) then Sys.mkdir outdir 0o755;
   List.iter
     (fun (ir : Sanpou.Ir.module_ir) ->

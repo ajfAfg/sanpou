@@ -1,19 +1,63 @@
 open Tla.Tla_ast
 open Ir
 
+(* ===== CST expression → TLA+ expression ===== *)
+
+let binop_to_tla = function
+  | Cst.Plus -> "+"
+  | Cst.Minus -> "-"
+  | Cst.Mult -> "*"
+  | Cst.Lt -> "<"
+  | Cst.Eq -> "="
+
+let rec cst_to_tla local_vars = function
+  | Cst.IntLit { value; _ } -> TInt value
+  | Cst.BoolLit { value; _ } -> TBool value
+  | Cst.Var { name; _ } ->
+      if List.mem name local_vars then TSubscript (TId name, TId "self")
+      else TId name
+  | Cst.BinOp { op; lhs; rhs; _ } ->
+      TParens
+        (TBinOp
+           ( binop_to_tla op,
+             cst_to_tla local_vars lhs,
+             cst_to_tla local_vars rhs ))
+  | Cst.App { name; args; _ } ->
+      TApp (name, List.map (cst_to_tla local_vars) args.items)
+  | Cst.Tuple { elems; _ } ->
+      TSeqLit (List.map (cst_to_tla local_vars) elems.items)
+  | Cst.Paren { inner; _ } -> cst_to_tla local_vars inner
+
+(* Module-level expressions have no local vars *)
+let cst_to_tla_global = cst_to_tla []
+
+(* ===== UNCHANGED computation ===== *)
+
+let compute_unchanged (ir : module_ir) (action : action) : string list =
+  let global_vars = List.map fst ir.var_decls in
+  let all_vars = global_vars @ ir.local_var_decls in
+  let assigned = List.map fst action.assignments in
+  let unchanged = List.filter (fun v -> not (List.mem v assigned)) all_vars in
+  match action.stack_op with
+  | StackNone -> "stack" :: unchanged
+  | _ -> unchanged
+
 (* ===== Action IR → TLA+ AST ===== *)
 
-let action_to_decl proc_entry_labels local_vars (action : action) : tla_decl =
+let action_to_decl proc_entry_labels local_vars (ir : module_ir)
+    (action : action) : tla_decl =
+  let to_tla = cst_to_tla local_vars in
   let self = TId "self" in
   let conjuncts = ref [] in
   let add c = conjuncts := !conjuncts @ [ c ] in
   add (TBinOp ("=", TSubscript (TId "pc", self), TStr action.label));
-  (match action.guard with Some g -> add g | None -> ());
+  (match action.guard with Some g -> add (to_tla g) | None -> ());
   List.iter
     (fun (var, expr) ->
       if List.mem var local_vars then
-        add (TBinOp ("=", TPrimed (TId var), TExcept (TId var, self, expr)))
-      else add (TBinOp ("=", TPrimed (TId var), expr)))
+        add
+          (TBinOp ("=", TPrimed (TId var), TExcept (TId var, self, to_tla expr)))
+      else add (TBinOp ("=", TPrimed (TId var), to_tla expr)))
     action.assignments;
   (match action.stack_op with
   | StackPush (proc_name, return_label) ->
@@ -54,13 +98,13 @@ let action_to_decl proc_entry_labels local_vars (action : action) : tla_decl =
                ( TId "stack",
                  self,
                  TConcat
-                   (TSeqLit [ retval ], TTail (TSubscript (TId "stack", self)))
-               ) ))
+                   ( TSeqLit [ to_tla retval ],
+                     TTail (TSubscript (TId "stack", self)) ) ) ))
   | StackDiscard ->
       let pc_val =
         match action.pc_dest with
         | PcNext l -> TStr l
-        | PcBranch (cond, t, f) -> TIf (cond, TStr t, TStr f)
+        | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
       in
       add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, pc_val)));
       add
@@ -73,18 +117,19 @@ let action_to_decl proc_entry_labels local_vars (action : action) : tla_decl =
       let pc_val =
         match action.pc_dest with
         | PcNext l -> TStr l
-        | PcBranch (cond, t, f) -> TIf (cond, TStr t, TStr f)
+        | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
       in
       add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, pc_val))));
-  if action.unchanged <> [] then
-    add (TUnchanged (List.map (fun v -> TId v) action.unchanged));
+  let unchanged = compute_unchanged ir action in
+  if unchanged <> [] then add (TUnchanged (List.map (fun v -> TId v) unchanged));
   DOpDef (action.label, [ "self" ], TConj (Block, !conjuncts))
 
-let proc_to_decls proc_entry_labels local_vars (proc : proc_ir) : tla_decl list
-    =
+let proc_to_decls proc_entry_labels local_vars (ir : module_ir) (proc : proc_ir)
+    : tla_decl list =
   let action_decls =
     List.concat_map
-      (fun a -> [ action_to_decl proc_entry_labels local_vars a; DSeparator ])
+      (fun a ->
+        [ action_to_decl proc_entry_labels local_vars ir a; DSeparator ])
       proc.actions
   in
   let action_labels = List.map (fun (a : action) -> a.label) proc.actions in
@@ -107,10 +152,13 @@ let generate_module (ir : module_ir) : tla_module =
   let add_sep () = add DSeparator in
   add (DExtends [ "TLC"; "Sequences"; "Integers" ]);
   add_sep ();
-  List.iter (fun (name, expr) -> add (DOpDef (name, [], expr))) ir.const_defs;
+  List.iter
+    (fun (name, expr) -> add (DOpDef (name, [], cst_to_tla_global expr)))
+    ir.const_defs;
   if ir.const_defs <> [] then add_sep ();
   List.iter
-    (fun (name, params, expr) -> add (DOpDef (name, params, expr)))
+    (fun (name, params, expr) ->
+      add (DOpDef (name, params, cst_to_tla_global expr)))
     ir.fun_defs;
   if ir.fun_defs <> [] then add_sep ();
   let global_vars = List.map fst ir.var_decls in
@@ -121,7 +169,8 @@ let generate_module (ir : module_ir) : tla_module =
   add_sep ();
   let proc_set_parts =
     List.map
-      (fun (p : process_ir) -> TParens (TRange (p.lo, p.hi)))
+      (fun (p : process_ir) ->
+        TParens (TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi)))
       ir.processes
   in
   add (DOpDef ("ProcSet", [], TCup proc_set_parts));
@@ -129,7 +178,8 @@ let generate_module (ir : module_ir) : tla_module =
   let init_conjuncts = ref [] in
   let add_init c = init_conjuncts := !init_conjuncts @ [ c ] in
   List.iter
-    (fun (name, expr) -> add_init (TBinOp ("=", TId name, expr)))
+    (fun (name, expr) ->
+      add_init (TBinOp ("=", TId name, cst_to_tla_global expr)))
     ir.var_decls;
   add_init
     (TBinOp ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit [])));
@@ -155,7 +205,10 @@ let generate_module (ir : module_ir) : tla_module =
             let proc =
               List.find (fun (pr : proc_ir) -> pr.proc_name = p.proc) ir.procs
             in
-            (TIn (TId "self", TRange (p.lo, p.hi)), TStr proc.entry_label))
+            ( TIn
+                ( TId "self",
+                  TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi) ),
+              TStr proc.entry_label ))
           ir.processes
       in
       add_init
@@ -164,7 +217,7 @@ let generate_module (ir : module_ir) : tla_module =
   add_sep ();
   List.iter
     (fun proc ->
-      List.iter add (proc_to_decls proc_entry_labels ir.local_var_decls proc);
+      List.iter add (proc_to_decls proc_entry_labels ir.local_var_decls ir proc);
       add_sep ())
     ir.procs;
   let procedure_procs =
@@ -206,7 +259,7 @@ let generate_module (ir : module_ir) : tla_module =
           (TParens
              (TExists
                 ( "self",
-                  TRange (range.lo, range.hi),
+                  TRange (cst_to_tla_global range.lo, cst_to_tla_global range.hi),
                   TApp (p.proc_name, [ TId "self" ]) ))))
       process_procs)
   else
@@ -221,7 +274,7 @@ let generate_module (ir : module_ir) : tla_module =
           (TParens
              (TExists
                 ( "self",
-                  TRange (range.lo, range.hi),
+                  TRange (cst_to_tla_global range.lo, cst_to_tla_global range.hi),
                   TApp (p.proc_name, [ TId "self" ]) ))))
       process_procs;
   add (DOpDef ("Next", [], TDisj (Block, !next_disj)));
