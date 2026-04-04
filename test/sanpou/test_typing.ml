@@ -102,7 +102,7 @@ let () =
                 "mod m {\n\
                 \  let x = 0;\n\
                 \  fn foo() {\n\
-                \    while (0 < x);\n\
+                \    while (0 < x) {}\n\
                 \    return ();\n\
                 \  }\n\
                 \  process ps = foo in 1..2;\n\
@@ -132,7 +132,7 @@ let () =
   }
   fn rwlockReadAcquire() {
     while (true) {
-      while (0 < wcnt);
+      while (0 < wcnt) {}
       rcnt = rcnt + 1;
       if (wcnt == 0) { break; }
       rcnt = rcnt - 1;
@@ -145,7 +145,7 @@ let () =
   }
   fn rwlockWriteAcquire() {
     wcnt = wcnt + 1;
-    while (0 < rcnt);
+    while (0 < rcnt) {}
     lockAcquire();
     return ();
   }

@@ -26,7 +26,7 @@ mod rwlock {
 
   fn rwlockReadAcquire() {
     while (true) {
-      while (0 < wcnt);
+      while (0 < wcnt) {}
       rcnt = rcnt + 1;
       if (wcnt == 0) {
         break;
@@ -43,7 +43,7 @@ mod rwlock {
 
   fn rwlockWriteAcquire() {
     wcnt = wcnt + 1;
-    while (0 < rcnt);
+    while (0 < rcnt) {}
     lockAcquire();
     return ();
   }

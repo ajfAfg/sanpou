@@ -269,10 +269,6 @@ and check_step (ctx : proc_ctx) (step : step) : subst * proc_ctx =
       let ctx' = apply_subst_ctx s12 ctx in
       let s3 = check_body ctx' body in
       (compose_subst s3 s12, ctx)
-  | WhileWait { cond; loc; _ } ->
-      let s1, cond_ty = infer_expr ctx.fresh_tyvar ctx.env cond in
-      let s2 = unify loc [ (cond_ty, TyBool) ] in
-      (compose_subst s2 s1, ctx)
   | LetStep { name; value; _ } ->
       let s1, val_ty = infer_expr ctx.fresh_tyvar ctx.env value in
       let env' = subst_env s1 ctx.env in

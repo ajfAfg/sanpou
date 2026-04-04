@@ -73,14 +73,6 @@ and step =
   | SimpleStep of { loc : loc; stmts : simple_stmt comma_list; semi_t : trivia }
   | EmptyStep of { loc : loc; semi_t : trivia }
   | BlockStep of { loc : loc; stmt : block_stmt }
-  | WhileWait of {
-      loc : loc;
-      while_t : trivia;
-      lp : trivia;
-      cond : expr;
-      rp : trivia;
-      semi_t : trivia;
-    }
   | LetStep of {
       loc : loc;
       let_t : trivia;
