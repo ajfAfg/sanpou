@@ -6,11 +6,11 @@ type entry = {
   col : int;
 }
 
-let extract (ir : Compile.module_ir) : entry list =
+let extract (ir : Ir.module_ir) : entry list =
   List.concat_map
-    (fun (proc : Compile.proc_ir) ->
+    (fun (proc : Ir.proc_ir) ->
       List.map
-        (fun (action : Compile.action) ->
+        (fun (action : Ir.action) ->
           {
             label = action.label;
             proc_name = action.source.proc_name;

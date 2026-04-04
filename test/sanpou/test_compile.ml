@@ -75,6 +75,9 @@ mod rwlock {
 }
 |}
 
+let compile cst =
+  cst |> Sanpou.Lower.compile_to_ir |> List.map Sanpou.Emit_tla.generate_module
+
 let has_in s tla =
   Alcotest.(check bool)
     s true
@@ -98,7 +101,7 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = Sanpou.Compile.compile cst in
+              let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "---- MODULE foo ----";
@@ -109,7 +112,7 @@ let () =
               has "====");
           Alcotest.test_case "full example compiles" `Quick (fun () ->
               let cst = parse full_example in
-              let modules = Sanpou.Compile.compile cst in
+              let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "---- MODULE rwlock ----";
@@ -137,7 +140,7 @@ let () =
                    process qs = g in 1..3;\n\
                    }\n"
               in
-              let modules = Sanpou.Compile.compile cst in
+              let modules = compile cst in
               Alcotest.(check int) "two modules" 2 (List.length modules);
               let tla_a = Tla.Tla_printer.render (List.nth modules 0) in
               let tla_b = Tla.Tla_printer.render (List.nth modules 1) in
@@ -154,7 +157,7 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = Sanpou.Compile.compile cst in
+              let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "VARIABLES pc, g, x__1, stack";
@@ -169,7 +172,7 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = Sanpou.Compile.compile cst in
+              let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "VARIABLES pc, x, x__1, stack";
@@ -192,7 +195,7 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = Sanpou.Compile.compile cst in
+              let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "VARIABLES pc, g, x__1, x__2, stack";
