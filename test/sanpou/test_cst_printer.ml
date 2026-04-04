@@ -32,7 +32,7 @@ let () =
           test_case "while body" `Quick (fun () ->
               exact_roundtrip "mod m { fn foo() { while (true) { break; } } }");
           test_case "while wait" `Quick (fun () ->
-              exact_roundtrip "mod m { fn foo() { while (0 < x); } }");
+              exact_roundtrip "mod m { fn foo() { while (0 < x){} } }");
           test_case "if" `Quick (fun () ->
               exact_roundtrip "mod m { fn foo() { if (x == 0) { break; } } }");
           test_case "tuple empty" `Quick (fun () ->

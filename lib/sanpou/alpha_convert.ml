@@ -71,7 +71,6 @@ let rec alpha_step st env = function
   | SimpleStep r -> SimpleStep { r with stmts = alpha_comma_list env r.stmts }
   | EmptyStep _ as s -> s
   | BlockStep r -> BlockStep { r with stmt = alpha_block_stmt st env r.stmt }
-  | WhileWait r -> WhileWait { r with cond = alpha_expr env r.cond }
   | LetStep _ -> failwith "LetStep should be handled in alpha_body"
 
 and alpha_block_stmt st env = function

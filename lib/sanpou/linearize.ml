@@ -175,7 +175,6 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
       linearize_while ctx cond body next_label loc
   | BlockStep { stmt = If { cond; body; _ }; loc } ->
       linearize_if ctx cond body next_label loc
-  | WhileWait { cond; loc; _ } -> linearize_while ctx cond [] next_label loc
   | LetStep _ -> failwith "LetStep should be handled in linearize_body"
 
 and linearize_while ctx cond body after_loop_label loc =

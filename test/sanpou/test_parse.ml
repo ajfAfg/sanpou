@@ -24,17 +24,6 @@ let simple_step stmts =
 let empty_step = EmptyStep { loc = { line = 0; col = 0 }; semi_t = n }
 let block_step s = BlockStep { loc = { line = 0; col = 0 }; stmt = s }
 
-let while_wait e =
-  WhileWait
-    {
-      loc = { line = 0; col = 0 };
-      while_t = n;
-      lp = n;
-      cond = e;
-      rp = n;
-      semi_t = n;
-    }
-
 let while_ cond body =
   While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n }
 
@@ -137,7 +126,7 @@ mod rwlock {
 
   fn rwlockReadAcquire() {
     while (true) {
-      while (0 < wcnt);
+      while (0 < wcnt) {}
       rcnt = rcnt + 1;
       if (wcnt == 0) {
         break;
@@ -154,7 +143,7 @@ mod rwlock {
 
   fn rwlockWriteAcquire() {
     wcnt = wcnt + 1;
-    while (0 < rcnt);
+    while (0 < rcnt) {}
     lockAcquire();
     return ();
   }
@@ -319,12 +308,12 @@ let () =
                 ]
                 actual);
           Alcotest.test_case "while wait" `Quick (fun () ->
-              let actual = parse_items "fn f() { while (0 < x); }" in
+              let actual = parse_items "fn f() { while (0 < x) {} }" in
               Alcotest.(check (list (testable pp_item equal_item)))
                 "parse"
                 [
                   proc_def "f" cl0
-                    [ while_wait (binop Lt (intlit 0) (var "x")) ];
+                    [ block_step (while_ (binop Lt (intlit 0) (var "x")) []) ];
                 ]
                 actual);
         ] );
