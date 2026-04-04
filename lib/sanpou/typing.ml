@@ -119,7 +119,8 @@ let tysc_of_ty ty = TyScheme ([], ty)
 let ty_prim fresh_tyvar _loc op ty1 ty2 =
   match op with
   | Plus | Minus | Mult -> ([ (ty1, TyInt); (ty2, TyInt) ], TyInt)
-  | Lt -> ([ (ty1, TyInt); (ty2, TyInt) ], TyBool)
+  | Lt | LtEq | GtEq -> ([ (ty1, TyInt); (ty2, TyInt) ], TyBool)
+  | And -> ([ (ty1, TyBool); (ty2, TyBool) ], TyBool)
   | Eq ->
       let tv = fresh_tyvar () in
       ([ (ty1, tv); (ty2, tv) ], TyBool)
@@ -142,6 +143,16 @@ let rec infer_expr fresh_tyvar (env : tyenv) (e : expr) : subst * ty =
       in
       let s3 = unify { line = 0; col = 0 } eqs in
       (compose_subst s3 (compose_subst s2 s1), subst_ty s3 result_ty)
+  | App { name = "globally" | "finally"; args; _ } -> (
+      match args.items with
+      | [ e ] ->
+          let s, ty = infer_expr fresh_tyvar env e in
+          let s2 = unify { line = 0; col = 0 } [ (ty, TyBool) ] in
+          (compose_subst s2 s, TyBool)
+      | _ ->
+          type_error
+            (Arity_mismatch ("globally/finally", 1, List.length args.items))
+            { line = 0; col = 0 })
   | App { name; args; _ } -> (
       match List.assoc_opt name env with
       | None -> type_error (Unbound_variable name) { line = 0; col = 0 }

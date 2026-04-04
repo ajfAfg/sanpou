@@ -1,0 +1,21 @@
+mod semaphore {
+    def num = 2;
+    def threadsNum = 2;
+
+    let cnt = 0;
+
+    def convergence = globally(0 <= cnt) && globally(finally(cnt <= num));
+
+    fn semaphore() {
+        while (true) {
+            while (cnt >= num) {}
+            cnt = cnt + 1;
+            if (cnt <= num) {
+                break;
+            }
+            cnt = cnt - 1;
+        }
+    }
+
+    process processes = semaphore in 1..threadsNum;
+}

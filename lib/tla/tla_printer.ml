@@ -65,6 +65,8 @@ let rec render_expr = function
   | TIf (cond, then_e, else_e) ->
       "IF " ^ render_expr cond ^ " THEN " ^ render_expr then_e ^ " ELSE "
       ^ render_expr else_e
+  | TGlobally e -> "[](" ^ render_expr e ^ ")"
+  | TFinally e -> "<>(" ^ render_expr e ^ ")"
 
 let render_decl = function
   | DExtends modules -> "EXTENDS " ^ String.concat ", " modules

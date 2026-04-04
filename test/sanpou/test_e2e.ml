@@ -223,6 +223,56 @@ mod m {
   in
   check_deadlock "single await deadlock" (snd (List.hd results))
 
+(* --- comparison and logical operators --- *)
+
+let test_lteq_gteq_and () =
+  let results =
+    run_e2e
+      {|
+mod m {
+  let x = 0;
+  fn f() {
+    while (true) {
+      if (x <= 2 && x >= 0) {
+        x = x + 1;
+      }
+      if (x >= 3) {
+        x = 0;
+      }
+    }
+  }
+  process p = f in 1..1;
+}
+|}
+  in
+  check_pass "lteq gteq and" (snd (List.hd results))
+
+let test_semaphore () =
+  let cfg = "SPECIFICATION Spec\nCHECK_DEADLOCK FALSE\n" in
+  let results =
+    run_e2e ~cfg
+      {|
+mod semaphore {
+  def num = 2;
+  def threadsNum = 2;
+  let cnt = 0;
+  def convergence = globally(0 <= cnt) && globally(finally(cnt <= num));
+  fn semaphore() {
+    while (true) {
+      while (cnt >= num) {}
+      cnt = cnt + 1;
+      if (cnt <= num) {
+        break;
+      }
+      cnt = cnt - 1;
+    }
+  }
+  process processes = semaphore in 1..threadsNum;
+}
+|}
+  in
+  check_pass "semaphore" (snd (List.hd results))
+
 (* ===== Runner ===== *)
 
 let () =
@@ -244,5 +294,10 @@ let () =
           [
             test_case "mutual blocking" `Slow test_mutual_deadlock;
             test_case "single await deadlock" `Slow test_single_await_deadlock;
+          ] );
+        ( "operators",
+          [
+            test_case "lteq gteq and" `Slow test_lteq_gteq_and;
+            test_case "semaphore" `Slow test_semaphore;
           ] );
       ]

@@ -8,7 +8,9 @@ type loc = { line : int; col : int } [@@deriving show]
 let equal_loc _ _ = true
 
 type id = string [@@deriving show, eq]
-type binop = Plus | Minus | Mult | Lt | Eq [@@deriving show, eq]
+
+type binop = Plus | Minus | Mult | Lt | LtEq | GtEq | Eq | And
+[@@deriving show, eq]
 
 (* A comma-separated list preserving trivia before each comma *)
 type 'a comma_list = { items : 'a list; commas : trivia list }

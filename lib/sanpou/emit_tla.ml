@@ -8,7 +8,10 @@ let binop_to_tla = function
   | Cst.Minus -> "-"
   | Cst.Mult -> "*"
   | Cst.Lt -> "<"
+  | Cst.LtEq -> "<="
+  | Cst.GtEq -> ">="
   | Cst.Eq -> "="
+  | Cst.And -> "/\\"
 
 let rec cst_to_tla local_vars = function
   | Cst.IntLit { value; _ } -> TInt value
@@ -22,6 +25,14 @@ let rec cst_to_tla local_vars = function
            ( binop_to_tla op,
              cst_to_tla local_vars lhs,
              cst_to_tla local_vars rhs ))
+  | Cst.App { name = "globally"; args; _ } -> (
+      match args.items with
+      | [ e ] -> TGlobally (cst_to_tla local_vars e)
+      | _ -> failwith "globally takes exactly one argument")
+  | Cst.App { name = "finally"; args; _ } -> (
+      match args.items with
+      | [ e ] -> TFinally (cst_to_tla local_vars e)
+      | _ -> failwith "finally takes exactly one argument")
   | Cst.App { name; args; _ } ->
       TApp (name, List.map (cst_to_tla local_vars) args.items)
   | Cst.Tuple { elems; _ } ->
@@ -152,6 +163,12 @@ let generate_module (ir : module_ir) : tla_module =
   let add_sep () = add DSeparator in
   add (DExtends [ "TLC"; "Sequences"; "Integers" ]);
   add_sep ();
+  let global_vars = List.map fst ir.var_decls in
+  let all_tla_vars = ("pc" :: global_vars) @ ir.local_var_decls @ [ "stack" ] in
+  add (DVariables all_tla_vars);
+  add_sep ();
+  add (DOpDef ("vars", [], TSeqLit (List.map (fun v -> TId v) all_tla_vars)));
+  add_sep ();
   List.iter
     (fun (name, expr) -> add (DOpDef (name, [], cst_to_tla_global expr)))
     ir.const_defs;
@@ -161,12 +178,6 @@ let generate_module (ir : module_ir) : tla_module =
       add (DOpDef (name, params, cst_to_tla_global expr)))
     ir.fun_defs;
   if ir.fun_defs <> [] then add_sep ();
-  let global_vars = List.map fst ir.var_decls in
-  let all_tla_vars = ("pc" :: global_vars) @ ir.local_var_decls @ [ "stack" ] in
-  add (DVariables all_tla_vars);
-  add_sep ();
-  add (DOpDef ("vars", [], TSeqLit (List.map (fun v -> TId v) all_tla_vars)));
-  add_sep ();
   let proc_set_parts =
     List.map
       (fun (p : process_ir) ->

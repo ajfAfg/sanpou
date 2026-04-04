@@ -15,13 +15,14 @@ let loc_of_pos (pos : Lexing.position) : loc =
 %token <Cst.trivia> TRUE FALSE
 %token <Cst.trivia> DEF LET FN MOD PROCESS IN
 %token <Cst.trivia> WHILE IF RETURN BREAK AWAIT
-%token <Cst.trivia> PLUS MINUS MULT LT EQ EQEQ
+%token <Cst.trivia> PLUS MINUS MULT LT LTEQ GTEQ EQ EQEQ ANDAND
 %token <Cst.trivia> LPAREN RPAREN LBRACE RBRACE
 %token <Cst.trivia> SEMI COMMA DOTDOT
 %token <Cst.trivia> EOF
 
+%left ANDAND
 %left EQEQ
-%left LT
+%left LT LTEQ GTEQ
 %left PLUS MINUS
 %left MULT
 
@@ -114,6 +115,9 @@ expr:
   | e1=expr op_t=MULT e2=expr { BinOp { lhs = e1; op_t; op = Mult; rhs = e2 } }
   | e1=expr op_t=LT e2=expr { BinOp { lhs = e1; op_t; op = Lt; rhs = e2 } }
   | e1=expr op_t=EQEQ e2=expr { BinOp { lhs = e1; op_t; op = Eq; rhs = e2 } }
+  | e1=expr op_t=LTEQ e2=expr { BinOp { lhs = e1; op_t; op = LtEq; rhs = e2 } }
+  | e1=expr op_t=GTEQ e2=expr { BinOp { lhs = e1; op_t; op = GtEq; rhs = e2 } }
+  | e1=expr op_t=ANDAND e2=expr { BinOp { lhs = e1; op_t; op = And; rhs = e2 } }
 
 expr_:
   | i=INTV { let (t, value) = i in IntLit { t; value } }

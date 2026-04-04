@@ -57,6 +57,12 @@ rule main = parse
     { Parser.MINUS (flush_trivia ()) }
 | "*"
     { Parser.MULT (flush_trivia ()) }
+| "<="
+    { Parser.LTEQ (flush_trivia ()) }
+| ">="
+    { Parser.GTEQ (flush_trivia ()) }
+| "&&"
+    { Parser.ANDAND (flush_trivia ()) }
 | "<"
     { Parser.LT (flush_trivia ()) }
 | "="
