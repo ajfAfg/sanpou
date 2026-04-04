@@ -1,0 +1,23 @@
+name: Set up TLA+
+description: Set up Java and download tla2tools.jar
+
+outputs:
+  java-path:
+    description: Path to the Java executable
+    value: java
+  tla2tools-jar:
+    description: Path to the tla2tools.jar file
+    value: ${{ github.workspace }}/tla2tools.jar
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Java
+      uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+      with:
+        distribution: zulu
+        java-version: "25"
+
+    - name: Download tla2tools.jar
+      shell: bash
+      run: curl -fsSL -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
