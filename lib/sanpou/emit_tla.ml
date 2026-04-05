@@ -290,10 +290,25 @@ let generate_module (ir : module_ir) : tla_module =
       process_procs;
   add (DOpDef ("Next", [], TDisj (Block, !next_disj)));
   add_sep ();
+  let fairness_conjuncts =
+    List.filter_map
+      (fun (p : process_ir) ->
+        if p.fair then
+          Some
+            (TForall
+               ( "self",
+                 TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi),
+                 TApp ("WF_vars", [ TApp (p.proc, [ TId "self" ]) ]) ))
+        else None)
+      ir.processes
+  in
   add
     (DOpDef
        ( "Spec",
          [],
-         TConj (Inline, [ TId "Init"; TBoxAction (TId "Next", TId "vars") ]) ));
+         TConj
+           ( Inline,
+             [ TId "Init"; TBoxAction (TId "Next", TId "vars") ]
+             @ fairness_conjuncts ) ));
   add_sep ();
   { name = ir.name; body = !decls }

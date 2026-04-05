@@ -326,8 +326,10 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
             }
           in
           procs := !procs @ [ proc ]
-      | Process { name; proc; lo; hi; _ } ->
-          processes := !processes @ [ { name; proc; lo; hi } ])
+      | Process { name; proc; fair_t; lo; hi; _ } ->
+          processes :=
+            !processes
+            @ [ { name; proc; fair = Option.is_some fair_t; lo; hi } ])
     m.items;
   (* Resolve call targets *)
   let resolved_procs =

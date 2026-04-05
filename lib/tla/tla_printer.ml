@@ -36,6 +36,8 @@ let rec render_expr = function
         (List.map (fun e -> indent 4 ("\\/ " ^ render_expr e)) es)
   | TExists (x, set, body) ->
       "\\E " ^ x ^ " \\in " ^ render_expr set ^ ": " ^ render_expr body
+  | TForall (x, set, body) ->
+      "\\A " ^ x ^ " \\in " ^ render_expr set ^ ": " ^ render_expr body
   | TCase cases -> (
       let rendered =
         List.map

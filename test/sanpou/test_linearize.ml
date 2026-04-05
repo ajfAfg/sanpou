@@ -14,7 +14,6 @@ let return_ e = Return { t = n; value = e }
 let break_ = Break { t = n }
 let await_ e = Await { t = n; cond = e }
 let tuple0 = Tuple { lp = n; elems = cl0; trailing_comma = None; rp = n }
-
 let simple_step stmts = SimpleStep { loc = loc0; stmts; semi_t = n }
 let empty_step = EmptyStep { loc = loc0; semi_t = n }
 
@@ -26,8 +25,7 @@ let while_block cond body =
   BlockStep
     {
       loc = loc0;
-      stmt =
-        While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n };
+      stmt = While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n };
     }
 
 let if_block cond body =
@@ -64,17 +62,17 @@ let make_fundef name params body_expr =
       name_t = n;
       name;
       lp = n;
-      params =
-        { items = List.map (fun p -> (n, p)) params; commas = [] };
+      params = { items = List.map (fun p -> (n, p)) params; commas = [] };
       rp = n;
       eq_t = n;
       body_expr;
       semi_t = n;
     }
 
-let make_process name proc lo hi =
+let make_process ?(fair = false) name proc lo hi =
   Process
     {
+      fair_t = (if fair then Some n else None);
       process_t = n;
       name_t = n;
       name;
@@ -99,9 +97,7 @@ let linearize_one am =
   List.hd result
 
 let find_action ir label =
-  let all_actions =
-    List.concat_map (fun (p : proc_ir) -> p.actions) ir.procs
-  in
+  let all_actions = List.concat_map (fun (p : proc_ir) -> p.actions) ir.procs in
   List.find (fun (a : action) -> a.label = label) all_actions
 
 let find_proc ir name =
@@ -117,8 +113,7 @@ let () =
               let m =
                 make_module "m"
                   [
-                    make_proc "foo"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
@@ -168,6 +163,18 @@ let () =
               match a.pc_dest with
               | PcNext "Done" -> ()
               | _ -> fail "expected PcNext Done");
+          test_case "fair process preserved in ir" `Quick (fun () ->
+              let m =
+                make_module "m"
+                  [
+                    make_proc "foo" [ empty_step ];
+                    make_process ~fair:true "ps" "foo" (intlit 1) (intlit 2);
+                  ]
+              in
+              let ir = linearize_one (make_alpha_module m []) in
+              match ir.processes with
+              | [ p ] -> Alcotest.(check bool) "fair" true p.fair
+              | _ -> fail "expected one process");
         ] );
       ( "control_flow",
         [
@@ -213,8 +220,7 @@ let () =
                   [
                     make_proc "foo"
                       [
-                        while_block (boollit true)
-                          [ simple_step (cl1 break_) ];
+                        while_block (boollit true) [ simple_step (cl1 break_) ];
                         simple_step (cl1 (return_ tuple0));
                       ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
@@ -240,8 +246,7 @@ let () =
                   foo.actions
               in
               match break_action.pc_dest with
-              | PcNext l ->
-                  check string "break to return" return_action.label l
+              | PcNext l -> check string "break to return" return_action.label l
               | _ -> fail "expected PcNext");
         ] );
       ( "call",
@@ -250,8 +255,7 @@ let () =
               let m =
                 make_module "m"
                   [
-                    make_proc "bar"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "bar" [ simple_step (cl1 (return_ tuple0)) ];
                     make_proc "foo"
                       [
                         simple_step (cl1 (call_ "bar"));
@@ -283,8 +287,7 @@ let () =
               let m =
                 make_module "m"
                   [
-                    make_proc "bar"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "bar" [ simple_step (cl1 (return_ tuple0)) ];
                     make_proc "foo"
                       [
                         simple_step (cl1 (call_ "bar"));
@@ -335,8 +338,7 @@ let () =
                 make_module "m"
                   [
                     make_const "c" (intlit 5);
-                    make_proc "foo"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
@@ -349,8 +351,7 @@ let () =
                 make_module "m"
                   [
                     make_var "x" (intlit 0);
-                    make_proc "foo"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
@@ -363,8 +364,7 @@ let () =
                 make_module "m"
                   [
                     make_fundef "f" [ "x" ] (var "x");
-                    make_proc "foo"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
@@ -377,8 +377,7 @@ let () =
               let m =
                 make_module "m"
                   [
-                    make_proc "foo"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
@@ -391,22 +390,17 @@ let () =
               let m =
                 make_module "m"
                   [
-                    make_proc "foo"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir =
-                linearize_one (make_alpha_module m [ "x__1"; "y__2" ])
-              in
-              check (list string) "locals" [ "x__1"; "y__2" ]
-                ir.local_var_decls);
+              let ir = linearize_one (make_alpha_module m [ "x__1"; "y__2" ]) in
+              check (list string) "locals" [ "x__1"; "y__2" ] ir.local_var_decls);
           test_case "module name" `Quick (fun () ->
               let m =
                 make_module "mymod"
                   [
-                    make_proc "foo"
-                      [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
@@ -472,8 +466,7 @@ let () =
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               match entry.guard with
-              | Some g ->
-                  check bool "guard" true (equal_expr (boollit true) g)
+              | Some g -> check bool "guard" true (equal_expr (boollit true) g)
               | None -> fail "expected guard");
         ] );
     ]

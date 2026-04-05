@@ -17,6 +17,7 @@ type tla_expr =
   | TConj of layout * tla_expr list
   | TDisj of layout * tla_expr list
   | TExists of string * tla_expr * tla_expr
+  | TForall of string * tla_expr * tla_expr
   | TCase of (tla_expr * tla_expr) list
   | TUnchanged of tla_expr list
   | TFuncMap of string * tla_expr * tla_expr

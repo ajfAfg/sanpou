@@ -89,6 +89,7 @@ let print_item = function
       ^ rp ^ ")" ^ lb ^ "{" ^ print_body body ^ rb ^ "}"
   | Process
       {
+        fair_t;
         process_t;
         name_t;
         name;
@@ -101,8 +102,10 @@ let print_item = function
         hi;
         semi_t;
       } ->
-      process_t ^ "process" ^ name_t ^ name ^ eq_t ^ "=" ^ proc_t ^ proc ^ in_t
-      ^ "in" ^ print_expr lo ^ dotdot_t ^ ".." ^ print_expr hi ^ semi_t ^ ";"
+      (match fair_t with Some fair_t -> fair_t ^ "fair" | None -> "")
+      ^ process_t ^ "process" ^ name_t ^ name ^ eq_t ^ "=" ^ proc_t ^ proc
+      ^ in_t ^ "in" ^ print_expr lo ^ dotdot_t ^ ".." ^ print_expr hi ^ semi_t
+      ^ ";"
 
 let print_module_def m =
   m.mod_t ^ "mod" ^ m.name_t ^ m.mod_name ^ m.lb ^ "{"
@@ -185,9 +188,11 @@ let pretty_item indent = function
       ^ ") {\n"
       ^ pretty_body (indent ^ "  ") body
       ^ indent ^ "}\n"
-  | Process { name; proc; lo; hi; _ } ->
-      indent ^ "process " ^ name ^ " = " ^ proc ^ " in " ^ pretty_expr lo ^ ".."
-      ^ pretty_expr hi ^ ";\n"
+  | Process { fair_t; name; proc; lo; hi; _ } ->
+      indent
+      ^ (match fair_t with Some _ -> "fair process " | None -> "process ")
+      ^ name ^ " = " ^ proc ^ " in " ^ pretty_expr lo ^ ".." ^ pretty_expr hi
+      ^ ";\n"
 
 let pretty_module_def m =
   "mod " ^ m.mod_name ^ " {\n"
