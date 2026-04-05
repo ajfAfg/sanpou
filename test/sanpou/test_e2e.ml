@@ -273,6 +273,23 @@ mod semaphore {
   in
   check_pass "semaphore" (snd (List.hd results))
 
+let test_fair_process () =
+  let results =
+    run_e2e
+      {|
+mod m {
+  let x = 0;
+  fn f() {
+    while (true) {
+      x = 1 - x;
+    }
+  }
+  fair process p = f in 1..1;
+}
+|}
+  in
+  check_pass "fair process" (snd (List.hd results))
+
 (* ===== Runner ===== *)
 
 let () =
@@ -299,5 +316,6 @@ let () =
           [
             test_case "lteq gteq and" `Slow test_lteq_gteq_and;
             test_case "semaphore" `Slow test_semaphore;
+            test_case "fair process" `Slow test_fair_process;
           ] );
       ]

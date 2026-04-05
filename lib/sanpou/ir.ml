@@ -33,7 +33,13 @@ type proc_ir = {
   entry_label : string;
 }
 
-type process_ir = { name : string; proc : string; lo : Cst.expr; hi : Cst.expr }
+type process_ir = {
+  name : string;
+  proc : string;
+  fair : bool;
+  lo : Cst.expr;
+  hi : Cst.expr;
+}
 
 type module_ir = {
   name : string;

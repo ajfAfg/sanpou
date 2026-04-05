@@ -11,6 +11,7 @@ let reservedWords = [
   ("let", fun t -> Parser.LET t);
   ("fn", fun t -> Parser.FN t);
   ("mod", fun t -> Parser.MOD t);
+    ("fair", fun t -> Parser.FAIR t);
   ("process", fun t -> Parser.PROCESS t);
   ("in", fun t -> Parser.IN t);
   ("while", fun t -> Parser.WHILE t);

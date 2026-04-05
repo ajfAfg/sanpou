@@ -127,6 +127,7 @@ type item =
       rb : trivia;
     }
   | Process of {
+      fair_t : trivia option;
       process_t : trivia;
       name_t : trivia;
       name : id;

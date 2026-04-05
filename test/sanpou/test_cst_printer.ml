@@ -47,6 +47,8 @@ let () =
               exact_roundtrip "mod m { def x = (1 + 2) * 3; }");
           test_case "process" `Quick (fun () ->
               exact_roundtrip "mod m { process ps = foo in 1..n; }");
+          test_case "fair process" `Quick (fun () ->
+              exact_roundtrip "mod m { fair process ps = foo in 1..n; }");
           test_case "call stmt" `Quick (fun () ->
               exact_roundtrip "mod m { fn foo() { bar(1, 2); } }");
           test_case "app expr" `Quick (fun () ->
@@ -99,5 +101,16 @@ let () =
                 "mod m {\n  def x = 1;\n  // between\n  let y = 2;\n}");
           test_case "comment before module" `Quick (fun () ->
               exact_roundtrip "// header\nmod m { def x = 1; }");
+        ] );
+      ( "pretty_print",
+        [
+          test_case "fair process" `Quick (fun () ->
+              let printed =
+                parse "mod m { fair process ps = foo in 1..n; }"
+                |> Sanpou.Cst_printer.print_pretty
+              in
+              Alcotest.(check string)
+                "pretty print" "mod m {\n  fair process ps = foo in 1..n;\n}\n"
+                printed);
         ] );
     ]

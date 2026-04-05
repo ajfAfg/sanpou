@@ -13,7 +13,7 @@ let loc_of_pos (pos : Lexing.position) : loc =
 %token <Cst.trivia * int> INTV
 %token <Cst.trivia * string> ID
 %token <Cst.trivia> TRUE FALSE
-%token <Cst.trivia> DEF LET FN MOD PROCESS IN
+%token <Cst.trivia> DEF LET FN MOD FAIR PROCESS IN
 %token <Cst.trivia> WHILE IF RETURN BREAK AWAIT
 %token <Cst.trivia> PLUS MINUS MULT LT LTEQ GTEQ EQ EQEQ ANDAND
 %token <Cst.trivia> LPAREN RPAREN LBRACE RBRACE
@@ -45,10 +45,10 @@ item:
       { let (name_t, name) = id in VarDecl { let_t; name_t; name; eq_t; value; semi_t } }
   | fn_t=FN id=ID lp=LPAREN params=param_list rp=RPAREN lb=LBRACE body=body rb=RBRACE
       { let (name_t, name) = id in ProcDef { fn_t; name_t; name; lp; params; rp; lb; body; rb } }
-  | process_t=PROCESS id=ID eq_t=EQ proc_id=ID in_t=IN lo=expr dotdot_t=DOTDOT hi=expr semi_t=SEMI
+    | fair_t=option(FAIR) process_t=PROCESS id=ID eq_t=EQ proc_id=ID in_t=IN lo=expr dotdot_t=DOTDOT hi=expr semi_t=SEMI
       { let (name_t, name) = id in
         let (proc_t, proc) = proc_id in
-        Process { process_t; name_t; name; eq_t; proc_t; proc; in_t; lo; dotdot_t; hi; semi_t } }
+      Process { fair_t; process_t; name_t; name; eq_t; proc_t; proc; in_t; lo; dotdot_t; hi; semi_t } }
 
 (* comma-separated parameter list: (trivia * id) comma_list *)
 param_list:

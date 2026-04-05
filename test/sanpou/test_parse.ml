@@ -63,9 +63,10 @@ let proc_def f ps body =
       rb = n;
     }
 
-let process_ nm pr lo hi =
+let process_ ?(fair = false) nm pr lo hi =
   Process
     {
+      fair_t = (if fair then Some n else None);
       process_t = n;
       name_t = n;
       name = nm;
@@ -365,6 +366,12 @@ let () =
               Alcotest.(check (list (testable pp_item equal_item)))
                 "parse"
                 [ process_ "ps" "foo" (intlit 1) (var "n") ]
+                actual);
+          Alcotest.test_case "fair" `Quick (fun () ->
+              let actual = parse_items "fair process ps = foo in 1..n;" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ process_ ~fair:true "ps" "foo" (intlit 1) (var "n") ]
                 actual);
         ] );
       ( "full_example",

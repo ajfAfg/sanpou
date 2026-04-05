@@ -112,6 +112,43 @@ let () =
               has "x = 0";
               has "Spec == Init /\\ [][Next]_vars";
               has "====");
+          Alcotest.test_case "fair process adds weak fairness" `Quick (fun () ->
+              let cst =
+                parse
+                  "mod foo {\n\
+                   let x = 0;\n\
+                   fn foo() { x = 1 - x; }\n\
+                   fair process ps = foo in 1..2;\n\
+                   }\n"
+              in
+              let modules = compile cst in
+              let tla = Tla.Tla_printer.render (List.hd modules) in
+              let has s = has_in s tla in
+              has
+                "Spec == Init /\\ [][Next]_vars /\\ \\A self \\in 1..2: \
+                 WF_vars(foo(self))";
+              has "====");
+          Alcotest.test_case "plain process omits weak fairness" `Quick
+            (fun () ->
+              let cst =
+                parse
+                  "mod foo {\n\
+                   let x = 0;\n\
+                   fn foo() { x = 1 - x; }\n\
+                   process ps = foo in 1..2;\n\
+                   }\n"
+              in
+              let modules = compile cst in
+              let tla = Tla.Tla_printer.render (List.hd modules) in
+              let has_not s =
+                Alcotest.(check bool)
+                  s false
+                  (try
+                     let _ = Str.search_forward (Str.regexp_string s) tla 0 in
+                     true
+                   with Not_found -> false)
+              in
+              has_not "WF_vars(foo(self))");
           Alcotest.test_case "full example compiles" `Quick (fun () ->
               let cst = parse full_example in
               let modules = compile cst in
