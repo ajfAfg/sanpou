@@ -1,6 +1,7 @@
 type t =
   | String of string
   | Int of int
+  | Bool of bool
   | Array of t list
   | Object of (string * t) list
 
@@ -23,6 +24,7 @@ let escape_string s =
 let rec to_string_indent indent = function
   | String s -> "\"" ^ escape_string s ^ "\""
   | Int i -> string_of_int i
+  | Bool b -> if b then "true" else "false"
   | Object fields ->
       let parts =
         List.map
@@ -91,6 +93,8 @@ let rec parse_value s pos =
   if p >= len then failwith "Json.parse: unexpected end of input"
   else
     match s.[p] with
+    | 't' when p + 3 < len && String.sub s p 4 = "true" -> (Bool true, p + 4)
+    | 'f' when p + 4 < len && String.sub s p 5 = "false" -> (Bool false, p + 5)
     | '"' ->
         let v, next = parse_string_value s p in
         (String v, next)
@@ -151,8 +155,11 @@ let to_string_value = function
   | _ -> failwith "Json: expected string"
 
 let to_int = function Int i -> i | _ -> failwith "Json: expected int"
+let to_bool = function Bool b -> b | _ -> failwith "Json: expected bool"
 
 let field key obj =
   match List.assoc_opt key (to_object obj) with
   | Some v -> v
   | None -> failwith ("Json: missing field " ^ key)
+
+let field_opt key obj = List.assoc_opt key (to_object obj)

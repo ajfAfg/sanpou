@@ -1,5 +1,6 @@
 open Tla.Tla_ast
 open Ir
+open Config
 
 (* ===== CST expression → TLA+ expression ===== *)
 
@@ -154,7 +155,7 @@ let proc_to_decls proc_entry_labels local_vars (ir : module_ir) (proc : proc_ir)
   in
   action_decls @ [ disj ]
 
-let generate_module (ir : module_ir) : tla_module =
+let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
   let proc_entry_labels =
     List.map (fun (p : proc_ir) -> (p.proc_name, p.entry_label)) ir.procs
   in
@@ -288,6 +289,33 @@ let generate_module (ir : module_ir) : tla_module =
                   TRange (cst_to_tla_global range.lo, cst_to_tla_global range.hi),
                   TApp (p.proc_name, [ TId "self" ]) ))))
       process_procs;
+  if config.checks.termination then add_next (TId "Terminating");
+  if config.checks.termination then (
+    add
+      (DOpDef
+         ( "Terminating",
+           [],
+           TConj
+             ( Block,
+               [
+                 TForall
+                   ( "self",
+                     TId "ProcSet",
+                     TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr "Done")
+                   );
+                 TUnchangedExpr (TId "vars");
+               ] ) ));
+    add_sep ();
+    add
+      (DOpDef
+         ( "Termination",
+           [],
+           TFinally
+             (TForall
+                ( "self",
+                  TId "ProcSet",
+                  TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr "Done") )) ));
+    add_sep ());
   add (DOpDef ("Next", [], TDisj (Block, !next_disj)));
   add_sep ();
   let fairness_conjuncts =

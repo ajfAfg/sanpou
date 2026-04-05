@@ -9,29 +9,51 @@ let read_all path =
   close_in ic;
   Buffer.contents buf
 
+let write_all path content =
+  let oc = open_out path in
+  output_string oc content;
+  close_out oc
+
+let sidecar_config_path file =
+  if Filename.check_suffix file ".snp" then
+    Filename.chop_suffix file ".snp" ^ ".json"
+  else file ^ ".json"
+
+let load_compile_config file =
+  let config_path = sidecar_config_path file in
+  if Sys.file_exists config_path then (
+    try Some (Sanpou.Config.from_string (read_all config_path))
+    with Failure msg ->
+      Printf.eprintf "Error: invalid sanpou config '%s': %s\n" config_path msg;
+      exit 1)
+  else None
+
 let cmd_compile file outdir =
-  let ic = open_in file in
-  let lexbuf = Lexing.from_channel ic in
+  let input = read_all file in
+  let lexbuf = Lexing.from_string input in
+  let config_opt = load_compile_config file in
+  let config = Option.value ~default:Sanpou.Config.default config_opt in
   let cst = Sanpou.Parser.program Sanpou.Lexer.main lexbuf in
   Sanpou.Typing.check cst;
   let irs = Sanpou.Alpha_convert.transform cst |> Sanpou.Linearize.linearize in
   if not (Sys.file_exists outdir) then Sys.mkdir outdir 0o755;
   List.iter
     (fun (ir : Sanpou.Ir.module_ir) ->
-      let tla_module = Sanpou.Emit_tla.generate_module ir in
+      let tla_module = Sanpou.Emit_tla.generate_module ~config ir in
       let tla_path = Filename.concat outdir (tla_module.name ^ ".tla") in
-      let oc = open_out tla_path in
-      output_string oc (Tla.Tla_printer.render tla_module);
-      close_out oc;
+      write_all tla_path (Tla.Tla_printer.render tla_module);
+      (match config_opt with
+      | Some config ->
+          let cfg_path = Filename.concat outdir (tla_module.name ^ ".cfg") in
+          write_all cfg_path (Sanpou.Config.to_cfg_string config)
+      | None -> ());
       let smap = Sanpou.Source_map.extract ir in
       let json_path =
         Filename.concat outdir (tla_module.name ^ ".sourcemap.json")
       in
-      let oc = open_out json_path in
-      output_string oc (Sanpou.Source_map.to_json smap);
-      close_out oc)
+      write_all json_path (Sanpou.Source_map.to_json smap))
     irs;
-  close_in ic
+  ()
 
 let cmd_trace file outdir =
   if not (Sys.file_exists outdir) then (
@@ -62,6 +84,7 @@ let () =
   let usage =
     "Usage: sanpou <compile|trace> <file> [-o outdir]\n\
     \  compile <file.snp>  Compile sanpou source to .tla and .sourcemap.json\n\
+    \                      If <file>.json exists, also generate .cfg\n\
     \  trace <file.out>    Annotate TLC output with source info"
   in
   let speclist = [ ("-o", Arg.Set_string outdir, "Output directory") ] in
