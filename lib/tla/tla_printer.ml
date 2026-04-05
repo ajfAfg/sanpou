@@ -54,6 +54,7 @@ let rec render_expr = function
                  rest))
   | TUnchanged vars ->
       "UNCHANGED << " ^ String.concat ", " (List.map render_expr vars) ^ " >>"
+  | TUnchangedExpr expr -> "UNCHANGED " ^ render_expr expr
   | TFuncMap (x, set, body) ->
       "[" ^ x ^ " \\in " ^ render_expr set ^ " |-> " ^ render_expr body ^ "]"
   | TSubscript (f, idx) -> render_expr f ^ "[" ^ render_expr idx ^ "]"

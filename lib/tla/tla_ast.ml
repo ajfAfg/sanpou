@@ -20,6 +20,7 @@ type tla_expr =
   | TForall of string * tla_expr * tla_expr
   | TCase of (tla_expr * tla_expr) list
   | TUnchanged of tla_expr list
+  | TUnchangedExpr of tla_expr
   | TFuncMap of string * tla_expr * tla_expr
   | TSubscript of tla_expr * tla_expr
   | TConcat of tla_expr * tla_expr

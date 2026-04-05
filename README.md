@@ -43,6 +43,8 @@ This adds the `sanpou` command to your PATH.
 ### compile: sanpou → TLA+
 
 Reads sanpou source from a file and outputs TLA+ files and source maps (`.sourcemap.json`).
+If a sidecar config file named `<file>.json` exists next to `<file>.snp`, `compile`
+also emits a TLC config file (`.cfg`).
 
 ```sh
 sanpou compile example/rwlock.snp -o dist
@@ -51,7 +53,28 @@ sanpou compile example/rwlock.snp -o dist
 Output:
 
 - `dist/rwlock.tla` — TLA+ specification
+- `dist/rwlock.cfg` — TLC configuration generated from `example/rwlock.json` when present
 - `dist/rwlock.sourcemap.json` — mapping between labels and sanpou source lines
+
+### Sidecar config
+
+Place `<file>.json` next to `<file>.snp` to control TLC-oriented outputs.
+
+Example:
+
+```json
+{
+  "checks": {
+    "deadlock": false,
+    "termination": true
+  },
+  "properties": ["convergence"]
+}
+```
+
+- `checks.deadlock` controls `CHECK_DEADLOCK` in the generated `.cfg`.
+- `checks.termination` adds `Terminating` and `Termination` to the generated TLA+ and automatically includes `Termination` in the generated `.cfg` properties.
+- `properties` lists additional TLC properties to place in the generated `.cfg`.
 
 ### trace: Annotate TLC output
 
@@ -70,6 +93,7 @@ sanpou trace dist/rwlock.out -o dist
 sanpou compile example/rwlock.snp -o dist
 
 # 2. Run TLC model checker (separately)
+#    Use dist/rwlock.cfg when a sidecar config exists
 #    Save output to dist/rwlock.out
 
 # 3. Display TLC trace annotated with sanpou source info
@@ -78,7 +102,7 @@ sanpou trace dist/rwlock.out -o dist
 
 ## Language overview
 
-```
+```sanpou
 mod rwlock {
   def readerNum = 2;       // constant definition
   def foo(x) = x + 1;     // function definition
@@ -108,7 +132,7 @@ mod rwlock {
 
 ## Project structure
 
-```
+```text
 bin/           CLI entry point
 lib/
   sanpou/      Compiler core
@@ -116,7 +140,10 @@ lib/
     parser.mly     Parser (Menhir)
     cst.ml         Concrete Syntax Tree (CST)
     cst_printer.ml CST pretty printer
-    compile.ml     CST → Action IR → TLA+ AST
+    alpha_convert.ml  Alpha conversion pass
+    linearize.ml      CST → action IR lowering
+    emit_tla.ml       Action IR → TLA+ AST
+    config.ml         Sidecar config parser and TLC .cfg generator
     source_map.ml  Label ↔ source line mapping
     trace_reader.ml  TLC output parser
     trace_printer.ml Trace annotation renderer
