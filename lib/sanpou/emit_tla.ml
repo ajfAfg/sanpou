@@ -43,6 +43,60 @@ let rec cst_to_tla local_vars = function
 (* Module-level expressions have no local vars *)
 let cst_to_tla_global = cst_to_tla []
 
+type process_wrapper = { process : process_ir; proc : proc_ir }
+
+let wrapper_proc_name (process : process_ir) =
+  "__process_" ^ process.name ^ "_wrapper__"
+
+let wrapper_entry_label (process : process_ir) =
+  "__w_" ^ process.name ^ "_entry__"
+
+let wrapper_discard_label (process : process_ir) =
+  "__w_" ^ process.name ^ "_discard__"
+
+let make_wrapper_source proc_name description =
+  { proc_name; description; line = 0; col = 0 }
+
+let wrapper_of_process (process : process_ir) : process_wrapper =
+  let proc_name = wrapper_proc_name process in
+  let entry_label = wrapper_entry_label process in
+  let discard_label = wrapper_discard_label process in
+  let entry_action =
+    {
+      label = entry_label;
+      guard = None;
+      assignments = [];
+      pc_dest = PcNext "__call__";
+      stack_op = StackPush (process.proc, discard_label);
+      source =
+        make_wrapper_source proc_name
+          ("[wrapper call " ^ process.proc ^ " for process " ^ process.name
+         ^ "]");
+    }
+  in
+  let discard_action =
+    {
+      label = discard_label;
+      guard = None;
+      assignments = [];
+      pc_dest = PcNext "Done";
+      stack_op = StackDiscard;
+      source =
+        make_wrapper_source proc_name
+          ("[wrapper discard return for process " ^ process.name ^ "]");
+    }
+  in
+  {
+    process;
+    proc =
+      {
+        proc_name;
+        params = [];
+        actions = [ entry_action; discard_action ];
+        entry_label;
+      };
+  }
+
 (* ===== UNCHANGED computation ===== *)
 
 let compute_unchanged (ir : module_ir) (action : action) : string list =
@@ -155,9 +209,22 @@ let proc_to_decls proc_entry_labels local_vars (ir : module_ir) (proc : proc_ir)
   in
   action_decls @ [ disj ]
 
+let add_process_next add_next process proc_name =
+  add_next
+    (TParens
+       (TExists
+          ( "self",
+            TRange (cst_to_tla_global process.lo, cst_to_tla_global process.hi),
+            TApp (proc_name, [ TId "self" ]) )))
+
 let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
+  let process_wrappers = List.map wrapper_of_process ir.processes in
+  let wrapper_procs = List.map (fun wrapper -> wrapper.proc) process_wrappers in
+  let all_runtime_procs = ir.procs @ wrapper_procs in
   let proc_entry_labels =
-    List.map (fun (p : proc_ir) -> (p.proc_name, p.entry_label)) ir.procs
+    List.map
+      (fun (p : proc_ir) -> (p.proc_name, p.entry_label))
+      all_runtime_procs
   in
   let decls = ref [] in
   let add d = decls := !decls @ [ d ] in
@@ -202,25 +269,31 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
     ir.local_var_decls;
   (match ir.processes with
   | [ single ] ->
-      let proc =
-        List.find (fun (p : proc_ir) -> p.proc_name = single.proc) ir.procs
+      let wrapper =
+        List.find
+          (fun (wrapper : process_wrapper) ->
+            wrapper.process.name = single.name)
+          process_wrappers
       in
       add_init
         (TBinOp
            ( "=",
              TId "pc",
-             TFuncMap ("self", TId "ProcSet", TStr proc.entry_label) ))
+             TFuncMap ("self", TId "ProcSet", TStr wrapper.proc.entry_label) ))
   | _ ->
       let cases =
         List.map
           (fun (p : process_ir) ->
-            let proc =
-              List.find (fun (pr : proc_ir) -> pr.proc_name = p.proc) ir.procs
+            let wrapper =
+              List.find
+                (fun (candidate : process_wrapper) ->
+                  candidate.process.name = p.name)
+                process_wrappers
             in
             ( TIn
                 ( TId "self",
                   TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi) ),
-              TStr proc.entry_label ))
+              TStr wrapper.proc.entry_label ))
           ir.processes
       in
       add_init
@@ -231,64 +304,23 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
     (fun proc ->
       List.iter add (proc_to_decls proc_entry_labels ir.local_var_decls ir proc);
       add_sep ())
-    ir.procs;
-  let procedure_procs =
-    List.filter
-      (fun (p : proc_ir) ->
-        not
-          (List.exists
-             (fun (proc : process_ir) -> proc.proc = p.proc_name)
-             ir.processes))
-      ir.procs
-  in
-  let process_procs =
-    List.filter
-      (fun (p : proc_ir) ->
-        List.exists
-          (fun (proc : process_ir) -> proc.proc = p.proc_name)
-          ir.processes)
-      ir.procs
-  in
+    all_runtime_procs;
+  let procedure_procs = ir.procs in
   let next_disj = ref [] in
   let add_next d = next_disj := !next_disj @ [ d ] in
-  if procedure_procs <> [] then (
-    let proc_disj =
-      TDisj
-        ( Inline,
-          List.map
-            (fun (p : proc_ir) -> TApp (p.proc_name, [ TId "self" ]))
-            procedure_procs )
-    in
-    add_next (TParens (TExists ("self", TId "ProcSet", proc_disj)));
-    List.iter
-      (fun (p : proc_ir) ->
-        let range =
-          List.find
-            (fun (pr : process_ir) -> pr.proc = p.proc_name)
-            ir.processes
-        in
-        add_next
-          (TParens
-             (TExists
-                ( "self",
-                  TRange (cst_to_tla_global range.lo, cst_to_tla_global range.hi),
-                  TApp (p.proc_name, [ TId "self" ]) ))))
-      process_procs)
-  else
-    List.iter
-      (fun (p : proc_ir) ->
-        let range =
-          List.find
-            (fun (pr : process_ir) -> pr.proc = p.proc_name)
-            ir.processes
-        in
-        add_next
-          (TParens
-             (TExists
-                ( "self",
-                  TRange (cst_to_tla_global range.lo, cst_to_tla_global range.hi),
-                  TApp (p.proc_name, [ TId "self" ]) ))))
-      process_procs;
+  (if procedure_procs <> [] then
+     let proc_disj =
+       TDisj
+         ( Inline,
+           List.map
+             (fun (p : proc_ir) -> TApp (p.proc_name, [ TId "self" ]))
+             procedure_procs )
+     in
+     add_next (TParens (TExists ("self", TId "ProcSet", proc_disj))));
+  List.iter
+    (fun (wrapper : process_wrapper) ->
+      add_process_next add_next wrapper.process wrapper.proc.proc_name)
+    process_wrappers;
   if config.checks.termination then add_next (TId "Terminating");
   if config.checks.termination then (
     add
@@ -314,21 +346,37 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
              (TForall
                 ( "self",
                   TId "ProcSet",
-                  TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr "Done") )) ));
+                  TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr "Done")
+                )) ));
     add_sep ());
   add (DOpDef ("Next", [], TDisj (Block, !next_disj)));
   add_sep ();
   let fairness_conjuncts =
-    List.filter_map
-      (fun (p : process_ir) ->
-        if p.fair then
-          Some
-            (TForall
-               ( "self",
-                 TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi),
-                 TApp ("WF_vars", [ TApp (p.proc, [ TId "self" ]) ]) ))
-        else None)
-      ir.processes
+    List.concat_map
+      (fun (wrapper : process_wrapper) ->
+        if wrapper.process.fair then
+          [
+            TParens
+              (TForall
+                 ( "self",
+                   TRange
+                     ( cst_to_tla_global wrapper.process.lo,
+                       cst_to_tla_global wrapper.process.hi ),
+                   TApp
+                     ( "WF_vars",
+                       [ TApp (wrapper.proc.proc_name, [ TId "self" ]) ] ) ));
+            TParens
+              (TForall
+                 ( "self",
+                   TRange
+                     ( cst_to_tla_global wrapper.process.lo,
+                       cst_to_tla_global wrapper.process.hi ),
+                   TApp
+                     ("WF_vars", [ TApp (wrapper.process.proc, [ TId "self" ]) ])
+                 ));
+          ]
+        else [])
+      process_wrappers
   in
   add
     (DOpDef

@@ -109,9 +109,25 @@ let () =
               has "---- MODULE foo ----";
               has "EXTENDS TLC, Sequences, Integers";
               has "VARIABLES pc, x, stack";
+              has "__process_ps_wrapper__(self) ==";
               has "x = 0";
               has "Spec == Init /\\ [][Next]_vars";
               has "====");
+          Alcotest.test_case "top-level return uses process wrapper" `Quick
+            (fun () ->
+              let cst =
+                parse
+                  "mod foo {\n\
+                   fn foo() { return (); }\n\
+                   process ps = foo in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "__process_ps_wrapper__(self) ==";
+              has "__w_ps_entry__(self) ==";
+              has "__w_ps_discard__(self) ==";
+              has "pc = [self \\in ProcSet |-> \"__w_ps_entry__\"]");
           Alcotest.test_case "fair process adds weak fairness" `Quick (fun () ->
               let cst =
                 parse
@@ -124,9 +140,8 @@ let () =
               let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
-              has
-                "Spec == Init /\\ [][Next]_vars /\\ \\A self \\in 1..2: \
-                 WF_vars(foo(self))";
+              has "WF_vars(__process_ps_wrapper__(self))";
+              has "WF_vars(foo(self))";
               has "====");
           Alcotest.test_case "plain process omits weak fairness" `Quick
             (fun () ->
@@ -161,6 +176,7 @@ let () =
               has "VARIABLES pc, rcnt, wcnt, lock, stack";
               has "ProcSet ==";
               has "lockAcquire(self) ==";
+              has "__process_readers_wrapper__(self) ==";
               has "reader(self) ==";
               has "writer(self) ==";
               has "Spec == Init /\\ [][Next]_vars";

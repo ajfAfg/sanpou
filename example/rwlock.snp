@@ -55,6 +55,7 @@ mod rwlock {
       ;
       rwlockReadRelease();
     }
+    return ();
   }
 
   fn writer() {
@@ -63,6 +64,7 @@ mod rwlock {
       ;
       rwlockWriteRelease();
     }
+    return ();
   }
 
   process readers = reader in 1..readerNum;
