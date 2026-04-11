@@ -15,6 +15,7 @@ mod semaphore {
             }
             cnt = cnt - 1;
         }
+        return ();
     }
 
     fair process processes = semaphore in 1..threadsNum;

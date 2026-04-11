@@ -2,8 +2,27 @@
 
 (* ===== TLC environment ===== *)
 
-let java_path = Sys.getenv_opt "SANPOU_JAVA"
-let tla2tools_path = Sys.getenv_opt "SANPOU_TLA2TOOLS_JAR"
+let first_existing_path candidates = List.find_opt Sys.file_exists candidates
+
+let java_path =
+  match Sys.getenv_opt "SANPOU_JAVA" with
+  | Some path -> Some path
+  | None ->
+      first_existing_path
+        [
+          "/Users/ajfafg/Library/Caches/Coursier/arc/https/cdn.azul.com/zulu/bin/zulu21.42.19-ca-jdk21.0.7-macosx_aarch64.tar.gz/zulu21.42.19-ca-jdk21.0.7-macosx_aarch64/bin/java";
+          "/opt/homebrew/bin/java";
+          "/usr/bin/java";
+        ]
+
+let tla2tools_path =
+  match Sys.getenv_opt "SANPOU_TLA2TOOLS_JAR" with
+  | Some path -> Some path
+  | None ->
+      first_existing_path
+        [
+          "/Users/ajfafg/.vscode/extensions/tlaplus.vscode-ide-2026.4.90150/tools/tla2tools.jar";
+        ]
 
 let tlc_available =
   match (java_path, tla2tools_path) with Some _, Some _ -> true | _ -> false
@@ -53,7 +72,9 @@ let run_tlc ~dir ~module_name ~cfg =
   if not (Sys.file_exists states_dir) then Sys.mkdir states_dir 0o755;
   write_file cfg_path cfg;
   let cmd =
-    Printf.sprintf "%s -cp %s tlc2.TLC -config %s -metadir %s %s 2>&1"
+    Printf.sprintf
+      "%s -cp %s -XX:+UseParallelGC -DTLA-Library= tlc2.TLC -config %s \
+       -metadir %s -workers 1 -coverage 1 %s 2>&1"
       (Filename.quote java) (Filename.quote jar) (Filename.quote cfg_path)
       (Filename.quote states_dir)
       (Filename.quote tla_path)
@@ -176,6 +197,36 @@ mod m {
 |}
   in
   check_pass "nested while" (snd (List.hd results))
+
+let test_top_level_return () =
+  let cfg = "SPECIFICATION Spec\nCHECK_DEADLOCK FALSE\n" in
+  let results =
+    run_e2e ~cfg
+      {|
+mod m {
+  fn f() {
+    return ();
+  }
+  process p = f in 1..1;
+}
+|}
+  in
+  check_pass "top level return" (snd (List.hd results))
+
+let test_top_level_non_unit_return () =
+  let cfg = "SPECIFICATION Spec\nCHECK_DEADLOCK FALSE\n" in
+  let results =
+    run_e2e ~cfg
+      {|
+mod m {
+  fn f() {
+    return (1, 2);
+  }
+  process p = f in 1..1;
+}
+|}
+  in
+  check_pass "top level non-unit return" (snd (List.hd results))
 
 (* --- deadlock: processes that block forever --- *)
 
@@ -306,6 +357,9 @@ let () =
             test_case "multiple processes" `Slow test_multiple_processes_loop;
             test_case "procedure call in loop" `Slow test_procedure_call_in_loop;
             test_case "nested while" `Slow test_nested_while;
+            test_case "top level return" `Slow test_top_level_return;
+            test_case "top level non-unit return" `Slow
+              test_top_level_non_unit_return;
           ] );
         ( "deadlock",
           [

@@ -21,7 +21,9 @@ let check_not_has needle haystack =
 let check_before first second haystack =
   let first_pos = Str.search_forward (Str.regexp_string first) haystack 0 in
   let second_pos = Str.search_forward (Str.regexp_string second) haystack 0 in
-  Alcotest.(check bool) (first ^ " before " ^ second) true (first_pos < second_pos)
+  Alcotest.(check bool)
+    (first ^ " before " ^ second)
+    true (first_pos < second_pos)
 
 let () =
   let open Alcotest in
@@ -128,9 +130,7 @@ let () =
                 tla;
               check_has "\\/ Terminating" tla;
               check_before "Terminating ==" "Next ==" tla;
-              check_has
-                "Spec == Init /\\ [][Next]_vars /\\ \\A self \\in 1..1: \
-                 WF_vars(f(self))"
-                tla);
+              check_has "WF_vars(__process_p_wrapper__(self))" tla;
+              check_has "WF_vars(f(self))" tla);
         ] );
     ]
