@@ -8,7 +8,7 @@ let flush_trivia () =
 
 let reservedWords = [
   ("def", fun t -> Parser.DEF t);
-  ("let", fun t -> Parser.LET t);
+    ("var", fun t -> Parser.VAR t);
   ("fn", fun t -> Parser.FN t);
   ("mod", fun t -> Parser.MOD t);
     ("fair", fun t -> Parser.FAIR t);

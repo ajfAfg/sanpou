@@ -4,9 +4,9 @@ mod rwlock {
 
   def foo(x) = x + 1;
 
-  let rcnt = 0;
-  let wcnt = 0;
-  let lock = false;
+  var rcnt = 0;
+  var wcnt = 0;
+  var lock = false;
 
   fn lockAcquire() {
     await lock == false,

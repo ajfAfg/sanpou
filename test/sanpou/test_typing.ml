@@ -30,29 +30,29 @@ let () =
               check_ok "mod m { def x = 1 == 2; }");
           test_case "inequality" `Quick (fun () ->
               check_ok "mod m { def x = 1 != 2; }");
-            test_case "unary minus literal" `Quick (fun () ->
+          test_case "unary minus literal" `Quick (fun () ->
               check_ok "mod m { def x = -1; }");
-            test_case "unary minus paren expr" `Quick (fun () ->
+          test_case "unary minus paren expr" `Quick (fun () ->
               check_ok "mod m { def x = -(1 + 2); }");
           test_case "function def" `Quick (fun () ->
               check_ok "mod m { def f(x) = x + 1; }");
           test_case "function app in const" `Quick (fun () ->
               check_ok "mod m { def f(x) = x + 1; def y = f(3); }");
           test_case "var decl int" `Quick (fun () ->
-              check_ok "mod m { let x = 0; }");
+              check_ok "mod m { var x = 0; }");
           test_case "var decl bool" `Quick (fun () ->
-              check_ok "mod m { let x = false; }");
+              check_ok "mod m { var x = false; }");
           test_case "simple proc" `Quick (fun () ->
               check_ok
                 "mod m {\n\
-                \  let x = 0;\n\
+                \  var x = 0;\n\
                 \  fn foo() { x = 1; return (); }\n\
                 \  process ps = foo in 1..2;\n\
                 \  }");
           test_case "proc with await" `Quick (fun () ->
               check_ok
                 "mod m {\n\
-                \  let lock = false;\n\
+                \  var lock = false;\n\
                 \  fn foo() {\n\
                 \    await lock == false, lock = true;\n\
                 \    return ();\n\
@@ -62,7 +62,7 @@ let () =
           test_case "proc with while and break" `Quick (fun () ->
               check_ok
                 "mod m {\n\
-                \  let x = 0;\n\
+                \  var x = 0;\n\
                 \  fn foo() {\n\
                 \    while (true) {\n\
                 \      x = x + 1;\n\
@@ -75,7 +75,7 @@ let () =
           test_case "proc with call" `Quick (fun () ->
               check_ok
                 "mod m {\n\
-                \  let lock = false;\n\
+                \  var lock = false;\n\
                 \  fn acquire() {\n\
                 \    await lock == false, lock = true;\n\
                 \    return ();\n\
@@ -86,12 +86,12 @@ let () =
                 \  }\n\
                 \  process ps = main in 1..2;\n\
                 \  }");
-          test_case "local let" `Quick (fun () ->
+          test_case "local var" `Quick (fun () ->
               check_ok
                 "mod m {\n\
-                \  let g = 0;\n\
+                \  var g = 0;\n\
                 \  fn foo() {\n\
-                \    let x = 5;\n\
+                \    var x = 5;\n\
                 \    g = x;\n\
                 \    return ();\n\
                 \  }\n\
@@ -114,7 +114,7 @@ let () =
           test_case "while wait" `Quick (fun () ->
               check_ok
                 "mod m {\n\
-                \  let x = 0;\n\
+                \  var x = 0;\n\
                 \  fn foo() {\n\
                 \    while (0 < x) {}\n\
                 \    return ();\n\
@@ -133,9 +133,9 @@ let () =
   def readerNum = 2;
   def writerNum = 2;
   def foo(x) = x + 1;
-  let rcnt = 0;
-  let wcnt = 0;
-  let lock = false;
+  var rcnt = 0;
+  var wcnt = 0;
+  var lock = false;
   fn lockAcquire() {
     await lock == false, lock = true;
     return ();
@@ -197,7 +197,7 @@ let () =
           test_case "assign type mismatch" `Quick (fun () ->
               check_fails
                 "mod m {\n\
-                \  let x = 0;\n\
+                \  var x = 0;\n\
                 \  fn foo() { x = true; return (); }\n\
                 \  process ps = foo in 1..2;\n\
                 \  }");
@@ -232,7 +232,7 @@ let () =
                 \  fn foo() { while (42) { ; } return (); }\n\
                 \  process ps = foo in 1..2;\n\
                 \  }");
-            test_case "unary minus bool" `Quick (fun () ->
+          test_case "unary minus bool" `Quick (fun () ->
               check_fails "mod m { def x = -true; }");
           test_case "inequality mismatch" `Quick (fun () ->
               check_fails "mod m { def x = 1 != true; }");

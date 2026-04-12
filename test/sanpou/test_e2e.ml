@@ -124,7 +124,7 @@ let test_single_process_loop () =
     run_e2e
       {|
 mod m {
-  let x = 0;
+  var x = 0;
   fn f() {
     while (true) {
       x = 1 - x;
@@ -141,8 +141,8 @@ let test_multiple_processes_loop () =
     run_e2e
       {|
 mod m {
-  let x = 0;
-  let y = 0;
+  var x = 0;
+  var y = 0;
   fn f() {
     while (true) {
       x = 1 - x;
@@ -165,7 +165,7 @@ let test_procedure_call_in_loop () =
     run_e2e
       {|
 mod m {
-  let x = 0;
+  var x = 0;
   fn toggle() { x = 1 - x; return (); }
   fn f() {
     while (true) {
@@ -183,7 +183,7 @@ let test_nested_while () =
     run_e2e
       {|
 mod m {
-  let x = 0;
+  var x = 0;
   fn f() {
     while (true) {
       while (x < 3) {
@@ -235,8 +235,8 @@ let test_mutual_deadlock () =
     run_e2e
       {|
 mod m {
-  let a = false;
-  let b = false;
+  var a = false;
+  var b = false;
   fn fa() {
     while (true) {
       await b == true,
@@ -261,7 +261,7 @@ let test_single_await_deadlock () =
     run_e2e
       {|
 mod m {
-  let x = 0;
+  var x = 0;
   fn f() {
     while (true) {
       await x == 1,
@@ -281,7 +281,7 @@ let test_lteq_gteq_and () =
     run_e2e
       {|
 mod m {
-  let x = 0;
+  var x = 0;
   fn f() {
     while (true) {
       if (x <= 2 && x >= 0) {
@@ -306,7 +306,7 @@ let test_semaphore () =
 mod semaphore {
   def num = 2;
   def threadsNum = 2;
-  let cnt = 0;
+  var cnt = 0;
   def convergence = globally(0 <= cnt) && globally(finally(cnt <= num));
   fn semaphore() {
     while (true) {
@@ -329,7 +329,7 @@ let test_fair_process () =
     run_e2e
       {|
 mod m {
-  let x = 0;
+  var x = 0;
   fn f() {
     while (true) {
       x = 1 - x;

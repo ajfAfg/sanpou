@@ -79,7 +79,7 @@ let rec alpha_step st env = function
   | SimpleStep r -> SimpleStep { r with stmts = alpha_comma_list env r.stmts }
   | EmptyStep _ as s -> s
   | BlockStep r -> BlockStep { r with stmt = alpha_block_stmt st env r.stmt }
-  | LetStep _ -> failwith "LetStep should be handled in alpha_body"
+  | VarStep _ -> failwith "VarStep should be handled in alpha_body"
 
 and alpha_block_stmt st env = function
   | While r ->
@@ -92,12 +92,12 @@ and alpha_block_stmt st env = function
 and alpha_body st env steps =
   match steps with
   | [] -> []
-  | LetStep r :: rest ->
+  | VarStep r :: rest ->
       let tla_name = fresh_var_name st r.name in
       collect_local_var st tla_name;
       let alpha_value = alpha_expr env r.value in
       let new_env = (r.name, tla_name) :: env in
-      LetStep { r with name = tla_name; value = alpha_value }
+      VarStep { r with name = tla_name; value = alpha_value }
       :: alpha_body st new_env rest
   | step :: rest -> alpha_step st env step :: alpha_body st env rest
 

@@ -359,7 +359,7 @@ and check_step (ctx : proc_ctx) (step : step) : subst * proc_ctx =
       let ctx' = apply_subst_ctx s12 ctx in
       let s3 = check_body ctx' body in
       (compose_subst s3 s12, ctx)
-  | LetStep { name; value; _ } ->
+  | VarStep { name; value; _ } ->
       let s1, val_ty = infer_expr ctx.fresh_tyvar ctx.env value in
       let env' = subst_env s1 ctx.env in
       let tysc = generalize env' (subst_ty s1 val_ty) in

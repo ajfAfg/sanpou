@@ -96,7 +96,7 @@ let () =
               let cst =
                 parse
                   "mod m {\n\
-                   let x = 0;\n\
+                   var x = 0;\n\
                    fn f() { x = 1 - x; }\n\
                    fair process p = f in 1..1;\n\
                    }\n"
@@ -110,7 +110,7 @@ let () =
               let cst =
                 parse
                   "mod m {\n\
-                   let x = 0;\n\
+                   var x = 0;\n\
                    fn f() { x = 1 - x; }\n\
                    fair process p = f in 1..1;\n\
                    }\n"
