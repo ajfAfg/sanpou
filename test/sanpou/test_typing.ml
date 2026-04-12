@@ -28,6 +28,12 @@ let () =
               check_ok "mod m { def x = 1 < 2; }");
           test_case "equality" `Quick (fun () ->
               check_ok "mod m { def x = 1 == 2; }");
+          test_case "inequality" `Quick (fun () ->
+              check_ok "mod m { def x = 1 != 2; }");
+            test_case "unary minus literal" `Quick (fun () ->
+              check_ok "mod m { def x = -1; }");
+            test_case "unary minus paren expr" `Quick (fun () ->
+              check_ok "mod m { def x = -(1 + 2); }");
           test_case "function def" `Quick (fun () ->
               check_ok "mod m { def f(x) = x + 1; }");
           test_case "function app in const" `Quick (fun () ->
@@ -97,6 +103,14 @@ let () =
                 \  fn foo() { return (1, 2); }\n\
                 \  process ps = foo in 1..2;\n\
                 \  }");
+          test_case "sequence literal" `Quick (fun () ->
+              check_ok "mod m { def xs = [1, 2, 3]; }");
+          test_case "sequence builtins" `Quick (fun () ->
+              check_ok
+                "mod m { def xs = [1, 2]; def y = head(xs); def zs = tail(xs); \
+                 def ws = concat(xs, append([], 3)); }");
+          test_case "tuple remains heterogeneous" `Quick (fun () ->
+              check_ok "mod m { def x = (1, true); }");
           test_case "while wait" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -218,7 +232,15 @@ let () =
                 \  fn foo() { while (42) { ; } return (); }\n\
                 \  process ps = foo in 1..2;\n\
                 \  }");
+            test_case "unary minus bool" `Quick (fun () ->
+              check_fails "mod m { def x = -true; }");
+          test_case "inequality mismatch" `Quick (fun () ->
+              check_fails "mod m { def x = 1 != true; }");
           test_case "fn arity mismatch" `Quick (fun () ->
               check_fails "mod m { def f(x) = x + 1; def y = f(1, 2); }");
+          test_case "heterogeneous sequence" `Quick (fun () ->
+              check_fails "mod m { def x = [1, true]; }");
+          test_case "head on tuple" `Quick (fun () ->
+              check_fails "mod m { def x = head((1, 2)); }");
         ] );
     ]

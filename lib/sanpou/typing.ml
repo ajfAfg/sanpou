@@ -9,6 +9,7 @@ type ty =
   | TyBool
   | TyUnit
   | TyTuple of ty list
+  | TySeq of ty
   | TyVar of tyvar
   | TyFun of ty list * ty
 
@@ -36,6 +37,7 @@ let rec freevar_ty = function
   | TyInt | TyBool | TyUnit -> []
   | TyVar v -> [ v ]
   | TyTuple tys -> List.concat_map freevar_ty tys
+  | TySeq ty -> freevar_ty ty
   | TyFun (params, ret) -> List.concat_map freevar_ty params @ freevar_ty ret
 
 let freevar_ty_set ty = List.sort_uniq compare (freevar_ty ty)
@@ -58,6 +60,7 @@ let rec subst_ty (s : subst) = function
   | TyVar v -> (
       match List.assoc_opt v s with Some t -> subst_ty s t | None -> TyVar v)
   | TyTuple tys -> TyTuple (List.map (subst_ty s) tys)
+  | TySeq ty -> TySeq (subst_ty s ty)
   | TyFun (params, ret) -> TyFun (List.map (subst_ty s) params, subst_ty s ret)
 
 let compose_subst (s1 : subst) (s2 : subst) : subst =
@@ -94,6 +97,7 @@ let rec unify loc (eqs : (ty * ty) list) : subst =
       if List.length ts1 <> List.length ts2 then
         type_error (Type_clash (TyTuple ts1, TyTuple ts2)) loc;
       unify loc (List.combine ts1 ts2 @ rest)
+  | (TySeq ty1, TySeq ty2) :: rest -> unify loc ((ty1, ty2) :: rest)
   | (t1, t2) :: _ -> type_error (Type_clash (t1, t2)) loc
 
 (* ===== Generalization / Instantiation ===== *)
@@ -121,11 +125,25 @@ let ty_prim fresh_tyvar _loc op ty1 ty2 =
   | Plus | Minus | Mult -> ([ (ty1, TyInt); (ty2, TyInt) ], TyInt)
   | Lt | LtEq | GtEq -> ([ (ty1, TyInt); (ty2, TyInt) ], TyBool)
   | And -> ([ (ty1, TyBool); (ty2, TyBool) ], TyBool)
-  | Eq ->
+  | Eq | Neq ->
       let tv = fresh_tyvar () in
       ([ (ty1, tv); (ty2, tv) ], TyBool)
 
-let rec infer_expr fresh_tyvar (env : tyenv) (e : expr) : subst * ty =
+let rec infer_sequence_literal fresh_tyvar env elems =
+  let elem_ty = fresh_tyvar () in
+  let s_acc = ref [] in
+  List.iter
+    (fun elem ->
+      let env' = subst_env !s_acc env in
+      let s_elem, ty_elem = infer_expr fresh_tyvar env' elem in
+      let s_combined = compose_subst s_elem !s_acc in
+      let elem_ty' = subst_ty s_combined elem_ty in
+      let s_unify = unify { line = 0; col = 0 } [ (elem_ty', ty_elem) ] in
+      s_acc := compose_subst s_unify s_combined)
+    elems;
+  (!s_acc, TySeq (subst_ty !s_acc elem_ty))
+
+and infer_expr fresh_tyvar (env : tyenv) (e : expr) : subst * ty =
   match e with
   | IntLit _ -> ([], TyInt)
   | BoolLit _ -> ([], TyBool)
@@ -133,6 +151,10 @@ let rec infer_expr fresh_tyvar (env : tyenv) (e : expr) : subst * ty =
       match List.assoc_opt name env with
       | Some tysc -> ([], instantiate fresh_tyvar tysc)
       | None -> type_error (Unbound_variable name) { line = 0; col = 0 })
+  | UnOp { op = Neg; rhs; _ } ->
+      let s, ty = infer_expr fresh_tyvar env rhs in
+      let s2 = unify { line = 0; col = 0 } [ (ty, TyInt) ] in
+      (compose_subst s2 s, TyInt)
   | BinOp { op; lhs; rhs; _ } ->
       let s1, ty1 = infer_expr fresh_tyvar env lhs in
       let env' = subst_env s1 env in
@@ -152,6 +174,62 @@ let rec infer_expr fresh_tyvar (env : tyenv) (e : expr) : subst * ty =
       | _ ->
           type_error
             (Arity_mismatch ("globally/finally", 1, List.length args.items))
+            { line = 0; col = 0 })
+  | App { name = "head"; args; _ } -> (
+      match args.items with
+      | [ seq ] ->
+          let s, seq_ty = infer_expr fresh_tyvar env seq in
+          let elem_ty = fresh_tyvar () in
+          let s2 = unify { line = 0; col = 0 } [ (seq_ty, TySeq elem_ty) ] in
+          (compose_subst s2 s, subst_ty s2 elem_ty)
+      | _ ->
+          type_error
+            (Arity_mismatch ("head", 1, List.length args.items))
+            { line = 0; col = 0 })
+  | App { name = "tail"; args; _ } -> (
+      match args.items with
+      | [ seq ] ->
+          let s, seq_ty = infer_expr fresh_tyvar env seq in
+          let elem_ty = fresh_tyvar () in
+          let s2 = unify { line = 0; col = 0 } [ (seq_ty, TySeq elem_ty) ] in
+          (compose_subst s2 s, TySeq (subst_ty s2 elem_ty))
+      | _ ->
+          type_error
+            (Arity_mismatch ("tail", 1, List.length args.items))
+            { line = 0; col = 0 })
+  | App { name = "append"; args; _ } -> (
+      match args.items with
+      | [ seq; elem ] ->
+          let s1, seq_ty = infer_expr fresh_tyvar env seq in
+          let env' = subst_env s1 env in
+          let s2, elem_ty = infer_expr fresh_tyvar env' elem in
+          let s12 = compose_subst s2 s1 in
+          let seq_ty' = subst_ty s2 seq_ty in
+          let s3 = unify { line = 0; col = 0 } [ (seq_ty', TySeq elem_ty) ] in
+          let s123 = compose_subst s3 s12 in
+          (s123, TySeq (subst_ty s123 elem_ty))
+      | _ ->
+          type_error
+            (Arity_mismatch ("append", 2, List.length args.items))
+            { line = 0; col = 0 })
+  | App { name = "concat"; args; _ } -> (
+      match args.items with
+      | [ lhs; rhs ] ->
+          let s1, lhs_ty = infer_expr fresh_tyvar env lhs in
+          let env' = subst_env s1 env in
+          let s2, rhs_ty = infer_expr fresh_tyvar env' rhs in
+          let s12 = compose_subst s2 s1 in
+          let elem_ty = fresh_tyvar () in
+          let lhs_ty' = subst_ty s2 lhs_ty in
+          let s3 =
+            unify { line = 0; col = 0 }
+              [ (lhs_ty', TySeq elem_ty); (rhs_ty, TySeq elem_ty) ]
+          in
+          let s123 = compose_subst s3 s12 in
+          (s123, TySeq (subst_ty s123 elem_ty))
+      | _ ->
+          type_error
+            (Arity_mismatch ("concat", 2, List.length args.items))
             { line = 0; col = 0 })
   | App { name; args; _ } -> (
       match List.assoc_opt name env with
@@ -183,6 +261,7 @@ let rec infer_expr fresh_tyvar (env : tyenv) (e : expr) : subst * ty =
             ([], []) elems.items
         in
         (s_acc, TyTuple tys)
+  | Sequence { elems; _ } -> infer_sequence_literal fresh_tyvar env elems.items
   | Paren { inner; _ } -> infer_expr fresh_tyvar env inner
 
 (* ===== Check procedure bodies ===== *)
@@ -402,6 +481,7 @@ let rec string_of_ty = function
       let c = Char.chr (Char.code 'a' + (v mod 26)) in
       Printf.sprintf "'%c" c
   | TyTuple tys -> "(" ^ String.concat ", " (List.map string_of_ty tys) ^ ")"
+  | TySeq ty -> "[" ^ string_of_ty ty ^ "]"
   | TyFun (params, ret) ->
       let params_s =
         match params with

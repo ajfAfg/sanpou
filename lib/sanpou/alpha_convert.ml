@@ -29,6 +29,7 @@ let rec alpha_expr env = function
   | IntLit _ as e -> e
   | BoolLit _ as e -> e
   | Var r -> Var { r with name = resolve env r.name }
+  | UnOp r -> UnOp { r with rhs = alpha_expr env r.rhs }
   | BinOp r ->
       BinOp { r with lhs = alpha_expr env r.lhs; rhs = alpha_expr env r.rhs }
   | App r ->
@@ -39,6 +40,13 @@ let rec alpha_expr env = function
         }
   | Tuple r ->
       Tuple
+        {
+          r with
+          elems =
+            { r.elems with items = List.map (alpha_expr env) r.elems.items };
+        }
+  | Sequence r ->
+      Sequence
         {
           r with
           elems =
