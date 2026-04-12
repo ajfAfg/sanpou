@@ -13,7 +13,7 @@ let loc_of_pos (pos : Lexing.position) : loc =
 %token <Cst.trivia * int> INTV
 %token <Cst.trivia * string> ID
 %token <Cst.trivia> TRUE FALSE
-%token <Cst.trivia> DEF LET FN MOD FAIR PROCESS IN
+%token <Cst.trivia> DEF VAR FN MOD FAIR PROCESS IN
 %token <Cst.trivia> WHILE IF RETURN BREAK AWAIT
 %token <Cst.trivia> PLUS MINUS MULT LT LTEQ GTEQ EQ EQEQ NEQ ANDAND
 %token <Cst.trivia> LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
@@ -41,8 +41,8 @@ item:
       { let (name_t, name) = id in ConstDef { def_t; name_t; name; eq_t; value; semi_t } }
   | def_t=DEF id=ID lp=LPAREN params=param_list rp=RPAREN eq_t=EQ body_expr=expr semi_t=SEMI
       { let (name_t, name) = id in FunDef { def_t; name_t; name; lp; params; rp; eq_t; body_expr; semi_t } }
-  | let_t=LET id=ID eq_t=EQ value=expr semi_t=SEMI
-      { let (name_t, name) = id in VarDecl { let_t; name_t; name; eq_t; value; semi_t } }
+    | var_t=VAR id=ID eq_t=EQ value=expr semi_t=SEMI
+      { let (name_t, name) = id in VarDecl { var_t; name_t; name; eq_t; value; semi_t } }
   | fn_t=FN id=ID lp=LPAREN params=param_list rp=RPAREN lb=LBRACE body=body rb=RBRACE
       { let (name_t, name) = id in ProcDef { fn_t; name_t; name; lp; params; rp; lb; body; rb } }
     | fair_t=option(FAIR) process_t=PROCESS id=ID eq_t=EQ proc_id=ID in_t=IN lo=expr dotdot_t=DOTDOT hi=expr semi_t=SEMI
@@ -69,8 +69,8 @@ step:
   | stmts=atomic_stmts_nonempty semi_t=SEMI { SimpleStep { loc = loc_of_pos $startpos; stmts; semi_t } }
   | semi_t=SEMI { EmptyStep { loc = loc_of_pos $startpos; semi_t } }
   | stmt=block_stmt { BlockStep { loc = loc_of_pos $startpos; stmt } }
-  | let_t=LET id=ID eq_t=EQ value=expr semi_t=SEMI
-      { let (name_t, name) = id in LetStep { loc = loc_of_pos $startpos; let_t; name_t; name; eq_t; value; semi_t } }
+    | var_t=VAR id=ID eq_t=EQ value=expr semi_t=SEMI
+      { let (name_t, name) = id in VarStep { loc = loc_of_pos $startpos; var_t; name_t; name; eq_t; value; semi_t } }
 
 (* comma-separated nonempty simple_stmt list *)
 atomic_stmts_nonempty:

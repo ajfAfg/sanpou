@@ -9,9 +9,9 @@ mod rwlock {
 
   def foo(x) = x + 1;
 
-  let rcnt = 0;
-  let wcnt = 0;
-  let lock = false;
+  var rcnt = 0;
+  var wcnt = 0;
+  var lock = false;
 
   fn lockAcquire() {
     await lock == false,
@@ -98,7 +98,7 @@ let () =
               let cst =
                 parse
                   "mod foo {\n\
-                   let x = 0;\n\
+                   var x = 0;\n\
                    fn foo() { x = 1; return (); }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
@@ -132,7 +132,7 @@ let () =
               let cst =
                 parse
                   "mod foo {\n\
-                   let x = 0;\n\
+                   var x = 0;\n\
                    fn foo() { x = 1 - x; }\n\
                    fair process ps = foo in 1..2;\n\
                    }\n"
@@ -148,7 +148,7 @@ let () =
               let cst =
                 parse
                   "mod foo {\n\
-                   let x = 0;\n\
+                   var x = 0;\n\
                    fn foo() { x = 1 - x; }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
@@ -231,12 +231,12 @@ let () =
               let cst =
                 parse
                   "mod a {\n\
-                   let x = 0;\n\
+                   var x = 0;\n\
                    fn f() { x = 1; return (); }\n\
                    process ps = f in 1..2;\n\
                    }\n\
                    mod b {\n\
-                   let y = 0;\n\
+                   var y = 0;\n\
                    fn g() { y = 2; return (); }\n\
                    process qs = g in 1..3;\n\
                    }\n"
@@ -253,8 +253,8 @@ let () =
               let cst =
                 parse
                   "mod m {\n\
-                   let g = 0;\n\
-                   fn foo() { let x = 5; g = x; return (); }\n\
+                   var g = 0;\n\
+                   fn foo() { var x = 5; g = x; return (); }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
               in
@@ -268,8 +268,8 @@ let () =
               let cst =
                 parse
                   "mod m {\n\
-                   let x = 0;\n\
-                   fn foo() { let x = 42; return (); }\n\
+                   var x = 0;\n\
+                   fn foo() { var x = 42; return (); }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
               in
@@ -282,11 +282,11 @@ let () =
               let cst =
                 parse
                   "mod m {\n\
-                   let g = 0;\n\
+                   var g = 0;\n\
                    fn foo() {\n\
-                   let x = 1;\n\
+                   var x = 1;\n\
                    while (true) {\n\
-                   let x = 2;\n\
+                   var x = 2;\n\
                    g = x;\n\
                    break;\n\
                    }\n\

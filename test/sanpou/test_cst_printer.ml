@@ -19,7 +19,7 @@ let () =
           test_case "fun_def" `Quick (fun () ->
               exact_roundtrip "mod m { def foo(x, y) = x + y; }");
           test_case "var_decl" `Quick (fun () ->
-              exact_roundtrip "mod m { let x = 0; }");
+              exact_roundtrip "mod m { var x = 0; }");
           test_case "proc simple" `Quick (fun () ->
               exact_roundtrip "mod m { fn foo() { return (); } }");
           test_case "proc assign" `Quick (fun () ->
@@ -69,18 +69,18 @@ let () =
               exact_roundtrip "mod m { fn foo() { bar(1, 2); } }");
           test_case "app expr" `Quick (fun () ->
               exact_roundtrip "mod m { def x = foo(1, 2); }");
-          test_case "let step" `Quick (fun () ->
-              exact_roundtrip "mod m { fn foo() { let x = 5; } }");
-          test_case "let step expr" `Quick (fun () ->
-              exact_roundtrip "mod m { fn foo() { let y = 1 + 2; return (); } }");
+          test_case "var step" `Quick (fun () ->
+              exact_roundtrip "mod m { fn foo() { var x = 5; } }");
+          test_case "var step expr" `Quick (fun () ->
+              exact_roundtrip "mod m { fn foo() { var y = 1 + 2; return (); } }");
           test_case "multiple modules" `Quick (fun () ->
-              exact_roundtrip "mod a { let x = 0; }\nmod b { let y = 1; }");
+              exact_roundtrip "mod a { var x = 0; }\nmod b { var y = 1; }");
           test_case "full module" `Quick (fun () ->
               exact_roundtrip
                 {|mod rwlock {
   def readerNum = 2;
-  let rcnt = 0;
-  let lock = false;
+    var rcnt = 0;
+    var lock = false;
   fn lockAcquire() {
     await lock == false, lock = true;
     return ();
@@ -106,7 +106,7 @@ let () =
           test_case "newlines" `Quick (fun () ->
               exact_roundtrip "mod m {\n  def x = 1;\n}");
           test_case "multiple blank lines" `Quick (fun () ->
-              exact_roundtrip "mod m {\n\n  def x = 1;\n\n  let y = 2;\n\n}");
+              exact_roundtrip "mod m {\n\n  def x = 1;\n\n  var y = 2;\n\n}");
         ] );
       ( "comment_preservation",
         [
@@ -114,7 +114,7 @@ let () =
               exact_roundtrip "mod m {\n// a comment\ndef x = 1; }");
           test_case "comment between items" `Quick (fun () ->
               exact_roundtrip
-                "mod m {\n  def x = 1;\n  // between\n  let y = 2;\n}");
+                "mod m {\n  def x = 1;\n  // between\n  var y = 2;\n}");
           test_case "comment before module" `Quick (fun () ->
               exact_roundtrip "// header\nmod m { def x = 1; }");
         ] );

@@ -65,8 +65,8 @@ let rec print_step = function
       print_comma_list print_simple_stmt stmts ^ semi_t ^ ";"
   | EmptyStep { semi_t; _ } -> semi_t ^ ";"
   | BlockStep { stmt; _ } -> print_block_stmt stmt
-  | LetStep { let_t; name_t; name; eq_t; value; semi_t; _ } ->
-      let_t ^ "let" ^ name_t ^ name ^ eq_t ^ "=" ^ print_expr value ^ semi_t
+  | VarStep { var_t; name_t; name; eq_t; value; semi_t; _ } ->
+      var_t ^ "var" ^ name_t ^ name ^ eq_t ^ "=" ^ print_expr value ^ semi_t
       ^ ";"
 
 and print_block_stmt = function
@@ -89,8 +89,8 @@ let print_item = function
       def_t ^ "def" ^ name_t ^ name ^ lp ^ "("
       ^ print_comma_list print_param params
       ^ rp ^ ")" ^ eq_t ^ "=" ^ print_expr body_expr ^ semi_t ^ ";"
-  | VarDecl { let_t; name_t; name; eq_t; value; semi_t } ->
-      let_t ^ "let" ^ name_t ^ name ^ eq_t ^ "=" ^ print_expr value ^ semi_t
+  | VarDecl { var_t; name_t; name; eq_t; value; semi_t } ->
+      var_t ^ "var" ^ name_t ^ name ^ eq_t ^ "=" ^ print_expr value ^ semi_t
       ^ ";"
   | ProcDef { fn_t; name_t; name; lp; params; rp; lb; body; rb } ->
       fn_t ^ "fn" ^ name_t ^ name ^ lp ^ "("
@@ -170,8 +170,8 @@ let rec pretty_step indent = function
       ^ ";\n"
   | EmptyStep _ -> indent ^ ";\n"
   | BlockStep { stmt; _ } -> pretty_block_stmt indent stmt
-  | LetStep { name; value; _ } ->
-      indent ^ "let " ^ name ^ " = " ^ pretty_expr value ^ ";\n"
+  | VarStep { name; value; _ } ->
+      indent ^ "var " ^ name ^ " = " ^ pretty_expr value ^ ";\n"
 
 and pretty_block_stmt indent = function
   | While { cond; body; _ } ->
@@ -194,7 +194,7 @@ let pretty_item indent = function
       ^ String.concat ", " (List.map snd params.items)
       ^ ") = " ^ pretty_expr body_expr ^ ";\n"
   | VarDecl { name; value; _ } ->
-      indent ^ "let " ^ name ^ " = " ^ pretty_expr value ^ ";\n"
+      indent ^ "var " ^ name ^ " = " ^ pretty_expr value ^ ";\n"
   | ProcDef { name; params; body; _ } ->
       indent ^ "fn " ^ name ^ "("
       ^ String.concat ", " (List.map snd params.items)

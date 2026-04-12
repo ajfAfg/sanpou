@@ -175,7 +175,7 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
       linearize_while ctx cond body next_label loc
   | BlockStep { stmt = If { cond; body; _ }; loc } ->
       linearize_if ctx cond body next_label loc
-  | LetStep _ -> failwith "LetStep should be handled in linearize_body"
+  | VarStep _ -> failwith "VarStep should be handled in linearize_body"
 
 and linearize_while ctx cond body after_loop_label loc =
   let check_label = fresh_label ctx.label_counter in
@@ -243,7 +243,7 @@ and linearize_body ctx (steps : Cst.body) (continuation : string) : compiled =
       (* Backward pass only — alpha conversion already handled variable scoping *)
       let linearize_one step next_lbl =
         match step with
-        | LetStep _ -> linearize_let_step ctx step next_lbl
+        | VarStep _ -> linearize_var_step ctx step next_lbl
         | _ -> linearize_step ctx step next_lbl
       in
       let rev_steps = List.rev steps in
@@ -260,13 +260,13 @@ and linearize_body ctx (steps : Cst.body) (continuation : string) : compiled =
           })
         compiled rest
 
-and linearize_let_step ctx step next_label =
+and linearize_var_step ctx step next_label =
   let label = fresh_label ctx.label_counter in
   match step with
-  | LetStep { name; value; loc; _ } ->
+  | VarStep { name; value; loc; _ } ->
       let source =
         make_source ~proc_name:ctx.proc_name
-          ~description:("let " ^ name ^ " = " ^ Cst_printer.pretty_expr value)
+          ~description:("var " ^ name ^ " = " ^ Cst_printer.pretty_expr value)
           ~loc
       in
       let a =
@@ -280,7 +280,7 @@ and linearize_let_step ctx step next_label =
         }
       in
       { actions = [ a ]; entry = label; exit_label = next_label }
-  | _ -> failwith "linearize_let_step called on non-LetStep"
+  | _ -> failwith "linearize_var_step called on non-VarStep"
 
 (* ===== Resolve call targets ===== *)
 

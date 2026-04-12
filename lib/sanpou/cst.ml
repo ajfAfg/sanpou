@@ -84,9 +84,9 @@ and step =
   | SimpleStep of { loc : loc; stmts : simple_stmt comma_list; semi_t : trivia }
   | EmptyStep of { loc : loc; semi_t : trivia }
   | BlockStep of { loc : loc; stmt : block_stmt }
-  | LetStep of {
+  | VarStep of {
       loc : loc;
-      let_t : trivia;
+      var_t : trivia;
       name_t : trivia;
       name : id;
       eq_t : trivia;
@@ -117,7 +117,7 @@ type item =
       semi_t : trivia;
     }
   | VarDecl of {
-      let_t : trivia;
+      var_t : trivia;
       name_t : trivia;
       name : id;
       eq_t : trivia;

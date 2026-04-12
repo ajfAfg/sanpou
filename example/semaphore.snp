@@ -2,7 +2,7 @@ mod semaphore {
     def num = 2;
     def threadsNum = 2;
 
-    let cnt = 0;
+    var cnt = 0;
 
     def convergence = globally(0 <= cnt) && globally(finally(cnt <= num));
 

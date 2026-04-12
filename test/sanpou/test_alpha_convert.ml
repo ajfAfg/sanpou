@@ -11,19 +11,17 @@ let binop op l r = BinOp { lhs = l; op_t = n; op; rhs = r }
 let assign x e = Assign { name_t = n; name = x; eq_t = n; value = e }
 let return_ e = Return { t = n; value = e }
 let await_ e = Await { t = n; cond = e }
-
 let simple_step stmts = SimpleStep { loc = loc0; stmts; semi_t = n }
 
-let let_step name value =
-  LetStep
-    { loc = loc0; let_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
+let var_step name value =
+  VarStep
+    { loc = loc0; var_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
 
 let while_block cond body =
   BlockStep
     {
       loc = loc0;
-      stmt =
-        While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n };
+      stmt = While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n };
     }
 
 let if_block cond body =
@@ -77,13 +75,13 @@ let extract_assign_value = function
   | Assign { value; _ } -> value
   | _ -> failwith "expected Assign"
 
-let extract_let_name = function
-  | LetStep { name; _ } -> name
-  | _ -> failwith "expected LetStep"
+let extract_var_step_name = function
+  | VarStep { name; _ } -> name
+  | _ -> failwith "expected VarStep"
 
-let extract_let_value = function
-  | LetStep { value; _ } -> value
-  | _ -> failwith "expected LetStep"
+let extract_var_step_value = function
+  | VarStep { value; _ } -> value
+  | _ -> failwith "expected VarStep"
 
 let extract_simple_stmts = function
   | SimpleStep { stmts; _ } -> stmts.items
@@ -95,27 +93,29 @@ let () =
     [
       ( "rename",
         [
-          test_case "let step renamed" `Quick (fun () ->
-              let prog =
-                make_program
-                  [ make_module [ make_proc "foo" [ let_step "x" (intlit 5) ] ] ]
-              in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
-              check string "renamed" "x__1" (extract_let_name (List.hd body)));
-          test_case "let value unchanged" `Quick (fun () ->
+          test_case "var step renamed" `Quick (fun () ->
               let prog =
                 make_program
                   [
-                    make_module
-                      [ make_proc "foo" [ let_step "x" (intlit 42) ] ];
+                    make_module [ make_proc "foo" [ var_step "x" (intlit 5) ] ];
+                  ]
+              in
+              let am = transform_one prog in
+              let body = get_proc_body am "foo" in
+              check string "renamed" "x__1"
+                (extract_var_step_name (List.hd body)));
+          test_case "var value unchanged" `Quick (fun () ->
+              let prog =
+                make_program
+                  [
+                    make_module [ make_proc "foo" [ var_step "x" (intlit 42) ] ];
                   ]
               in
               let am = transform_one prog in
               let body = get_proc_body am "foo" in
               check bool "value" true
-                (equal_expr (intlit 42) (extract_let_value (List.hd body))));
-          test_case "usage after let uses new name" `Quick (fun () ->
+                (equal_expr (intlit 42) (extract_var_step_value (List.hd body))));
+          test_case "usage after var uses new name" `Quick (fun () ->
               let prog =
                 make_program
                   [
@@ -123,7 +123,7 @@ let () =
                       [
                         make_proc "foo"
                           [
-                            let_step "x" (intlit 1);
+                            var_step "x" (intlit 1);
                             simple_step (cl1 (assign "g" (var "x")));
                           ];
                       ];
@@ -134,23 +134,23 @@ let () =
               let stmts = extract_simple_stmts (List.nth body 1) in
               let value = extract_assign_value (List.hd stmts) in
               check string "var renamed" "x__1" (extract_var_name value));
-          test_case "multiple lets get different names" `Quick (fun () ->
+          test_case "multiple vars get different names" `Quick (fun () ->
               let prog =
                 make_program
                   [
                     make_module
                       [
                         make_proc "foo"
-                          [
-                            let_step "x" (intlit 1); let_step "y" (intlit 2);
-                          ];
+                          [ var_step "x" (intlit 1); var_step "y" (intlit 2) ];
                       ];
                   ]
               in
               let am = transform_one prog in
               let body = get_proc_body am "foo" in
-              check string "first" "x__1" (extract_let_name (List.nth body 0));
-              check string "second" "y__2" (extract_let_name (List.nth body 1)));
+              check string "first" "x__1"
+                (extract_var_step_name (List.nth body 0));
+              check string "second" "y__2"
+                (extract_var_step_name (List.nth body 1)));
           test_case "same name shadowed in while" `Quick (fun () ->
               let prog =
                 make_program
@@ -159,20 +159,21 @@ let () =
                       [
                         make_proc "foo"
                           [
-                            let_step "x" (intlit 1);
+                            var_step "x" (intlit 1);
                             while_block (boollit true)
-                              [ let_step "x" (intlit 2) ];
+                              [ var_step "x" (intlit 2) ];
                           ];
                       ];
                   ]
               in
               let am = transform_one prog in
               let body = get_proc_body am "foo" in
-              check string "outer" "x__1" (extract_let_name (List.nth body 0));
+              check string "outer" "x__1"
+                (extract_var_step_name (List.nth body 0));
               match List.nth body 1 with
               | BlockStep { stmt = While { body = while_body; _ }; _ } ->
                   check string "inner" "x__2"
-                    (extract_let_name (List.hd while_body))
+                    (extract_var_step_name (List.hd while_body))
               | _ -> fail "expected while");
         ] );
       ( "local_vars",
@@ -184,15 +185,13 @@ let () =
                     make_module
                       [
                         make_proc "foo"
-                          [
-                            let_step "x" (intlit 1); let_step "y" (intlit 2);
-                          ];
+                          [ var_step "x" (intlit 1); var_step "y" (intlit 2) ];
                       ];
                   ]
               in
               let am = transform_one prog in
               check (list string) "locals" [ "x__1"; "y__2" ] am.local_vars);
-          test_case "no let steps no locals" `Quick (fun () ->
+          test_case "no var steps no locals" `Quick (fun () ->
               let prog =
                 make_program
                   [
@@ -205,7 +204,7 @@ let () =
               in
               let am = transform_one prog in
               check (list string) "empty" [] am.local_vars);
-          test_case "nested let in while collected" `Quick (fun () ->
+          test_case "nested var in while collected" `Quick (fun () ->
               let prog =
                 make_program
                   [
@@ -213,16 +212,16 @@ let () =
                       [
                         make_proc "foo"
                           [
-                            let_step "x" (intlit 1);
+                            var_step "x" (intlit 1);
                             while_block (boollit true)
-                              [ let_step "y" (intlit 2) ];
+                              [ var_step "y" (intlit 2) ];
                           ];
                       ];
                   ]
               in
               let am = transform_one prog in
               check (list string) "locals" [ "x__1"; "y__2" ] am.local_vars);
-          test_case "nested let in if collected" `Quick (fun () ->
+          test_case "nested var in if collected" `Quick (fun () ->
               let prog =
                 make_program
                   [
@@ -230,8 +229,7 @@ let () =
                       [
                         make_proc "foo"
                           [
-                            if_block (boollit true)
-                              [ let_step "z" (intlit 3) ];
+                            if_block (boollit true) [ var_step "z" (intlit 3) ];
                           ];
                       ];
                   ]
@@ -259,23 +257,21 @@ let () =
                 (extract_assign_name (List.hd stmts));
               check string "var ref" "g"
                 (extract_var_name (extract_assign_value (List.hd stmts))));
-          test_case "let value references earlier let" `Quick (fun () ->
+          test_case "var value references earlier var" `Quick (fun () ->
               let prog =
                 make_program
                   [
                     make_module
                       [
                         make_proc "foo"
-                          [
-                            let_step "x" (intlit 1); let_step "y" (var "x");
-                          ];
+                          [ var_step "x" (intlit 1); var_step "y" (var "x") ];
                       ];
                   ]
               in
               let am = transform_one prog in
               let body = get_proc_body am "foo" in
               check string "y value uses x__1" "x__1"
-                (extract_var_name (extract_let_value (List.nth body 1))));
+                (extract_var_name (extract_var_step_value (List.nth body 1))));
           test_case "binop subexprs renamed" `Quick (fun () ->
               let prog =
                 make_program
@@ -284,11 +280,10 @@ let () =
                       [
                         make_proc "foo"
                           [
-                            let_step "x" (intlit 1);
+                            var_step "x" (intlit 1);
                             simple_step
                               (cl1
-                                 (assign "g"
-                                    (binop Plus (var "x") (intlit 2))));
+                                 (assign "g" (binop Plus (var "x") (intlit 2))));
                           ];
                       ];
                   ]
@@ -309,7 +304,7 @@ let () =
                       [
                         make_proc "foo"
                           [
-                            let_step "x" (intlit 1);
+                            var_step "x" (intlit 1);
                             simple_step (cl1 (await_ (var "x")));
                           ];
                       ];
@@ -348,7 +343,7 @@ let () =
               let vd =
                 VarDecl
                   {
-                    let_t = n;
+                    var_t = n;
                     name_t = n;
                     name = "v";
                     eq_t = n;
@@ -368,10 +363,8 @@ let () =
               let prog =
                 make_program
                   [
-                    make_module
-                      [ make_proc "foo" [ let_step "x" (intlit 1) ] ];
-                    make_module
-                      [ make_proc "bar" [ let_step "x" (intlit 2) ] ];
+                    make_module [ make_proc "foo" [ var_step "x" (intlit 1) ] ];
+                    make_module [ make_proc "bar" [ var_step "x" (intlit 2) ] ];
                   ]
               in
               let result = Sanpou.Alpha_convert.transform prog in
@@ -379,7 +372,7 @@ let () =
               let am2 = List.nth result 1 in
               let body1 = get_proc_body am1 "foo" in
               let body2 = get_proc_body am2 "bar" in
-              check string "mod1" "x__1" (extract_let_name (List.hd body1));
-              check string "mod2" "x__1" (extract_let_name (List.hd body2)));
+              check string "mod1" "x__1" (extract_var_step_name (List.hd body1));
+              check string "mod2" "x__1" (extract_var_step_name (List.hd body2)));
         ] );
     ]

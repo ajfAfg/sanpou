@@ -49,7 +49,7 @@ let fun_def f ps e =
     }
 
 let var_decl x e =
-  VarDecl { let_t = n; name_t = n; name = x; eq_t = n; value = e; semi_t = n }
+  VarDecl { var_t = n; name_t = n; name = x; eq_t = n; value = e; semi_t = n }
 
 let proc_def f ps body =
   ProcDef
@@ -84,11 +84,11 @@ let process_ ?(fair = false) nm pr lo hi =
 
 let param s = (n, s)
 
-let let_step x e =
-  LetStep
+let var_step x e =
+  VarStep
     {
       loc = { line = 0; col = 0 };
-      let_t = n;
+      var_t = n;
       name_t = n;
       name = x;
       eq_t = n;
@@ -112,9 +112,9 @@ mod rwlock {
 
   def foo(x) = x + 1;
 
-  let rcnt = 0;
-  let wcnt = 0;
-  let lock = false;
+  var rcnt = 0;
+  var wcnt = 0;
+  var lock = false;
 
   fn lockAcquire() {
     await lock == false,
@@ -212,7 +212,10 @@ let () =
               let actual = parse_items "def x = -(1 + 2);" in
               Alcotest.(check (list (testable pp_item equal_item)))
                 "parse"
-                [ const_def "x" (unop Neg (paren (binop Plus (intlit 1) (intlit 2)))) ]
+                [
+                  const_def "x"
+                    (unop Neg (paren (binop Plus (intlit 1) (intlit 2))));
+                ]
                 actual);
           Alcotest.test_case "subtract negative" `Quick (fun () ->
               let actual = parse_items "def x = y - -1;" in
@@ -237,13 +240,13 @@ let () =
       ( "var_decl",
         [
           Alcotest.test_case "int" `Quick (fun () ->
-              let actual = parse_items "let x = 0;" in
+              let actual = parse_items "var x = 0;" in
               Alcotest.(check (list (testable pp_item equal_item)))
                 "parse"
                 [ var_decl "x" (intlit 0) ]
                 actual);
           Alcotest.test_case "bool" `Quick (fun () ->
-              let actual = parse_items "let b = false;" in
+              let actual = parse_items "var b = false;" in
               Alcotest.(check (list (testable pp_item equal_item)))
                 "parse"
                 [ var_decl "b" (boollit false) ]
@@ -433,33 +436,38 @@ let () =
               let _ast = parse full_example in
               ());
         ] );
-      ( "let_step",
+      ( "var_step",
         [
           Alcotest.test_case "simple" `Quick (fun () ->
-              let actual = parse_items "fn foo() { let x = 5; return (); }" in
+              let actual = parse_items "fn foo() { var x = 5; return (); }" in
               Alcotest.(check (list (testable pp_item equal_item)))
                 "parse"
                 [
                   proc_def "foo" cl0
                     [
-                      let_step "x" (intlit 5);
+                      var_step "x" (intlit 5);
                       simple_step (cl1 (return_ (tuple cl0 None)));
                     ];
                 ]
                 actual);
           Alcotest.test_case "with expression" `Quick (fun () ->
               let actual =
-                parse_items "fn foo() { let y = 1 + 2; return (); }"
+                parse_items "fn foo() { var y = 1 + 2; return (); }"
               in
               Alcotest.(check (list (testable pp_item equal_item)))
                 "parse"
                 [
                   proc_def "foo" cl0
                     [
-                      let_step "y" (binop Plus (intlit 1) (intlit 2));
+                      var_step "y" (binop Plus (intlit 1) (intlit 2));
                       simple_step (cl1 (return_ (tuple cl0 None)));
                     ];
                 ]
                 actual);
+          Alcotest.test_case "let is rejected" `Quick (fun () ->
+              try
+                let _ = parse_items "let x = 0;" in
+                Alcotest.fail "Expected parse error"
+              with _ -> ());
         ] );
     ]

@@ -17,9 +17,9 @@ let tuple0 = Tuple { lp = n; elems = cl0; trailing_comma = None; rp = n }
 let simple_step stmts = SimpleStep { loc = loc0; stmts; semi_t = n }
 let empty_step = EmptyStep { loc = loc0; semi_t = n }
 
-let let_step name value =
-  LetStep
-    { loc = loc0; let_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
+let var_step name value =
+  VarStep
+    { loc = loc0; var_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
 
 let while_block cond body =
   BlockStep
@@ -50,7 +50,7 @@ let make_proc name body =
     }
 
 let make_var name value =
-  VarDecl { let_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
+  VarDecl { var_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
 
 let make_const name value =
   ConstDef { def_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
@@ -309,15 +309,15 @@ let () =
               | PcNext l -> check string "resolved" bar.entry_label l
               | _ -> fail "expected PcNext");
         ] );
-      ( "let_step",
+      ( "var_step",
         [
-          test_case "let becomes assignment action" `Quick (fun () ->
+          test_case "var becomes assignment action" `Quick (fun () ->
               let m =
                 make_module "m"
                   [
                     make_proc "foo"
                       [
-                        let_step "x" (intlit 42);
+                        var_step "x" (intlit 42);
                         simple_step (cl1 (return_ tuple0));
                       ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);

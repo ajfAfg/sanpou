@@ -109,8 +109,8 @@ mod rwlock {
   def pair = (1, true);   // tuple value
   def queue = [1, 2, 3];  // sequence value
 
-  let rcnt = 0;            // variable declaration
-  let lock = false;
+  var rcnt = 0;            // mutable variable declaration
+  var lock = false;
 
   fn lockAcquire() {       // procedure definition
     await lock == false,    //   await (guard condition)
