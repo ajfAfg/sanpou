@@ -1,0 +1,7 @@
+{
+  "checks": {
+    "deadlock": true,
+    "termination": true
+  },
+  "properties": ["lossless"]
+}

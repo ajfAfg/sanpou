@@ -13,13 +13,14 @@ let loc_of_pos (pos : Lexing.position) : loc =
 %token <Cst.trivia * int> INTV
 %token <Cst.trivia * string> ID
 %token <Cst.trivia> TRUE FALSE
-%token <Cst.trivia> DEF VAR FN MOD FAIR PROCESS IN
-%token <Cst.trivia> WHILE IF RETURN BREAK AWAIT
-%token <Cst.trivia> PLUS MINUS MULT LT LTEQ GTEQ EQ EQEQ NEQ ANDAND
+%token <Cst.trivia> DEF VAR FN MOD FAIR PROCESS IN SELF
+%token <Cst.trivia> WHILE IF ELSE RETURN BREAK CONTINUE AWAIT
+%token <Cst.trivia> PLUS MINUS MULT LT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token <Cst.trivia> LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
-%token <Cst.trivia> SEMI COMMA DOTDOT
+%token <Cst.trivia> SEMI COMMA COLON DOTDOT
 %token <Cst.trivia> EOF
 
+%left OROR
 %left ANDAND
 %left EQEQ NEQ
 %left LT LTEQ GTEQ
@@ -79,22 +80,34 @@ atomic_stmts_nonempty:
       { cons_comma_list c s rest }
 
 simple_stmt:
-  | id=ID eq_t=EQ value=expr
-      { let (name_t, name) = id in Assign { name_t; name; eq_t; value } }
+  | target=assign_target eq_t=EQ value=expr
+    { Assign { target; eq_t; value } }
   | id=ID lp=LPAREN args=expr_list rp=RPAREN
       { let (name_t, name) = id in Call { name_t; name; lp; args; rp } }
   | t=RETURN value=expr
       { Return { t; value } }
   | t=BREAK
       { Break { t } }
+  | t=CONTINUE
+    { Continue { t } }
   | t=AWAIT cond=expr
       { Await { t; cond } }
+
+assign_target:
+  | id=ID
+    { let (name_t, name) = id in VarTarget { name_t; name } }
+  | id=ID lb_t=LBRACKET index=expr rb_t=RBRACKET
+    { let (name_t, name) = id in
+    SubscriptTarget { name_t; name; lb_t; index; rb_t } }
 
 block_stmt:
   | while_t=WHILE lp=LPAREN cond=expr rp=RPAREN lb=LBRACE body=body rb=RBRACE
       { While { while_t; lp; cond; rp; lb; body; rb } }
-  | if_t=IF lp=LPAREN cond=expr rp=RPAREN lb=LBRACE body=body rb=RBRACE
-      { If { if_t; lp; cond; rp; lb; body; rb } }
+  | if_t=IF lp=LPAREN cond=expr rp=RPAREN lb=LBRACE body=body rb=RBRACE else_branch=option(else_clause)
+      { If { if_t; lp; cond; rp; lb; body; rb; else_branch } }
+
+else_clause:
+  | else_t=ELSE lb=LBRACE body=body rb=RBRACE { (else_t, lb, body, rb) }
 
 (* comma-separated expr list (possibly empty) *)
 expr_list:
@@ -109,25 +122,60 @@ expr_list_nonempty:
       { cons_comma_list c e rest }
 
 expr:
-  | e=expr_ { e }
-  | e1=expr op_t=PLUS e2=expr { BinOp { lhs = e1; op_t; op = Plus; rhs = e2 } }
-  | e1=expr op_t=MINUS e2=expr { BinOp { lhs = e1; op_t; op = Minus; rhs = e2 } }
-  | e1=expr op_t=MULT e2=expr { BinOp { lhs = e1; op_t; op = Mult; rhs = e2 } }
-  | e1=expr op_t=LT e2=expr { BinOp { lhs = e1; op_t; op = Lt; rhs = e2 } }
-  | e1=expr op_t=EQEQ e2=expr { BinOp { lhs = e1; op_t; op = Eq; rhs = e2 } }
-  | e1=expr op_t=NEQ e2=expr { BinOp { lhs = e1; op_t; op = Neq; rhs = e2 } }
-  | e1=expr op_t=LTEQ e2=expr { BinOp { lhs = e1; op_t; op = LtEq; rhs = e2 } }
-  | e1=expr op_t=GTEQ e2=expr { BinOp { lhs = e1; op_t; op = GtEq; rhs = e2 } }
-  | e1=expr op_t=ANDAND e2=expr { BinOp { lhs = e1; op_t; op = And; rhs = e2 } }
+  | e=or_expr { e }
 
-expr_:
-  | op_t=MINUS rhs=expr_ { UnOp { op_t; op = Neg; rhs } }
+or_expr:
+  | e=and_expr { e }
+  | e1=or_expr op_t=OROR e2=and_expr
+      { BinOp { lhs = e1; op_t; op = Or; rhs = e2 } }
+
+and_expr:
+  | e=comparison_expr { e }
+  | e1=and_expr op_t=ANDAND e2=comparison_expr
+      { BinOp { lhs = e1; op_t; op = And; rhs = e2 } }
+
+comparison_expr:
+  | e=add_expr { e }
+  | e1=comparison_expr op_t=LT e2=add_expr
+      { BinOp { lhs = e1; op_t; op = Lt; rhs = e2 } }
+  | e1=comparison_expr op_t=EQEQ e2=add_expr
+      { BinOp { lhs = e1; op_t; op = Eq; rhs = e2 } }
+  | e1=comparison_expr op_t=NEQ e2=add_expr
+      { BinOp { lhs = e1; op_t; op = Neq; rhs = e2 } }
+  | e1=comparison_expr op_t=LTEQ e2=add_expr
+      { BinOp { lhs = e1; op_t; op = LtEq; rhs = e2 } }
+  | e1=comparison_expr op_t=GTEQ e2=add_expr
+      { BinOp { lhs = e1; op_t; op = GtEq; rhs = e2 } }
+
+add_expr:
+  | e=mult_expr { e }
+  | e1=add_expr op_t=PLUS e2=mult_expr
+      { BinOp { lhs = e1; op_t; op = Plus; rhs = e2 } }
+  | e1=add_expr op_t=MINUS e2=mult_expr
+      { BinOp { lhs = e1; op_t; op = Minus; rhs = e2 } }
+
+mult_expr:
+  | e=postfix_expr { e }
+  | e1=mult_expr op_t=MULT e2=postfix_expr
+      { BinOp { lhs = e1; op_t; op = Mult; rhs = e2 } }
+
+postfix_expr:
+  | e=primary_expr { e }
+  | lhs=postfix_expr lb_t=LBRACKET index=expr rb_t=RBRACKET
+      { Subscript { lhs; lb_t; index; rb_t } }
+
+primary_expr:
+  | op_t=MINUS rhs=primary_expr { UnOp { op_t; op = Neg; rhs } }
   | i=INTV { let (t, value) = i in IntLit { t; value } }
   | t=TRUE { BoolLit { t; value = true } }
   | t=FALSE { BoolLit { t; value = false } }
+  | t=SELF { Self { t } }
   | id=ID lp=LPAREN args=expr_list rp=RPAREN
       { let (name_t, name) = id in App { name_t; name; lp; args; rp } }
   | id=ID { let (t, name) = id in Var { t; name } }
+  | lb=LBRACE id=ID in_t=IN lo=expr dotdot_t=DOTDOT hi=expr colon_t=COLON value=expr trailing_semi_t=option(SEMI) rb=RBRACE
+      { let (binder_t, binder) = id in
+        MapInit { lb; binder_t; binder; in_t; lo; dotdot_t; hi; colon_t; value; trailing_semi_t; rb } }
   | lp=LPAREN rp=RPAREN
       { Tuple { lp; elems = empty_comma_list; trailing_comma = None; rp } }
   | lp=LPAREN e=expr c=COMMA rp=RPAREN

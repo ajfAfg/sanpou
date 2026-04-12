@@ -1,0 +1,37 @@
+mod conditional_variable {
+  def null = -1;
+  def data = [1, 2, 3, 4, 5, null];
+
+  var channel = [];
+  var producerState = data;
+  var consumerState = [];
+
+  def lossless = globally(finally(concat(producerState, consumerState) == data));
+
+  fn producer() {
+    while (producerState != []) {
+      var tmp = head(producerState);
+      producerState = tail(producerState);
+      channel = append(channel, tmp);
+    }
+
+    return ();
+  }
+
+  fn consumer() {
+    while (true) {
+      await channel != [];
+      var tmp = head(channel);
+      consumerState = append(consumerState, tmp);
+      channel = tail(channel);
+      if (tmp == null) {
+        break;
+      }
+    }
+
+    return ();
+  }
+
+  fair process p = producer in 1..1;
+  fair process w = consumer in 2..2;
+}

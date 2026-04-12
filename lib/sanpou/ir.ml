@@ -11,16 +11,21 @@ type source_info = {
 
 type stack_op =
   | StackNone
-  | StackPush of string * string (* procedure name, return label *)
+  | StackPush of string * string * Cst.expr list
+    (* procedure name, return label, arguments *)
   | StackReturn of Cst.expr (* return value *)
   | StackDiscard (* pop return value after call *)
 
 type pc_dest = PcNext of string | PcBranch of Cst.expr * string * string
 
+type assignment =
+  | AssignVar of string * Cst.expr
+  | AssignIndex of string * Cst.expr * Cst.expr
+
 type action = {
   label : string;
   guard : Cst.expr option;
-  assignments : (string * Cst.expr) list;
+  assignments : assignment list;
   pc_dest : pc_dest;
   stack_op : stack_op;
   source : source_info;

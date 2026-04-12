@@ -14,6 +14,7 @@ let binop_to_tla = function
   | Cst.Eq -> "="
   | Cst.Neq -> "/="
   | Cst.And -> "/\\"
+  | Cst.Or -> "\\/"
 
 let rec cst_to_tla local_vars = function
   | Cst.IntLit { value; _ } -> TInt value
@@ -21,6 +22,7 @@ let rec cst_to_tla local_vars = function
   | Cst.Var { name; _ } ->
       if List.mem name local_vars then TSubscript (TId name, TId "self")
       else TId name
+  | Cst.Self _ -> TId "self"
   | Cst.UnOp { op = Neg; rhs; _ } -> (
       match rhs with
       | Cst.IntLit { value; _ } -> TInt (-value)
@@ -61,6 +63,13 @@ let rec cst_to_tla local_vars = function
       | _ -> failwith "concat takes exactly two arguments")
   | Cst.App { name; args; _ } ->
       TApp (name, List.map (cst_to_tla local_vars) args.items)
+  | Cst.Subscript { lhs; index; _ } ->
+      TSubscript (cst_to_tla local_vars lhs, cst_to_tla local_vars index)
+  | Cst.MapInit { binder; lo; hi; value; _ } ->
+      TFuncMap
+        ( binder,
+          TRange (cst_to_tla local_vars lo, cst_to_tla local_vars hi),
+          cst_to_tla local_vars value )
   | Cst.Tuple { elems; _ } ->
       TSeqLit (List.map (cst_to_tla local_vars) elems.items)
   | Cst.Sequence { elems; _ } ->
@@ -94,7 +103,7 @@ let wrapper_of_process (process : process_ir) : process_wrapper =
       guard = None;
       assignments = [];
       pc_dest = PcNext "__call__";
-      stack_op = StackPush (process.proc, discard_label);
+      stack_op = StackPush (process.proc, discard_label, []);
       source =
         make_wrapper_source proc_name
           ("[wrapper call " ^ process.proc ^ " for process " ^ process.name
@@ -129,7 +138,12 @@ let wrapper_of_process (process : process_ir) : process_wrapper =
 let compute_unchanged (ir : module_ir) (action : action) : string list =
   let global_vars = List.map fst ir.var_decls in
   let all_vars = global_vars @ ir.local_var_decls in
-  let assigned = List.map fst action.assignments in
+  let assigned =
+    List.map
+      (function
+        | AssignVar (name, _) -> name | AssignIndex (name, _, _) -> name)
+      action.assignments
+  in
   let unchanged = List.filter (fun v -> not (List.mem v assigned)) all_vars in
   match action.stack_op with
   | StackNone -> "stack" :: unchanged
@@ -146,14 +160,31 @@ let action_to_decl proc_entry_labels local_vars (ir : module_ir)
   add (TBinOp ("=", TSubscript (TId "pc", self), TStr action.label));
   (match action.guard with Some g -> add (to_tla g) | None -> ());
   List.iter
-    (fun (var, expr) ->
-      if List.mem var local_vars then
-        add
-          (TBinOp ("=", TPrimed (TId var), TExcept (TId var, self, to_tla expr)))
-      else add (TBinOp ("=", TPrimed (TId var), to_tla expr)))
+    (function
+      | AssignVar (var, expr) ->
+          if List.mem var local_vars then
+            add
+              (TBinOp
+                 ("=", TPrimed (TId var), TExcept (TId var, self, to_tla expr)))
+          else add (TBinOp ("=", TPrimed (TId var), to_tla expr))
+      | AssignIndex (var, index, expr) ->
+          if List.mem var local_vars then
+            let local_collection = TSubscript (TId var, self) in
+            let updated_local =
+              TExcept (local_collection, to_tla index, to_tla expr)
+            in
+            add
+              (TBinOp
+                 ("=", TPrimed (TId var), TExcept (TId var, self, updated_local)))
+          else
+            add
+              (TBinOp
+                 ( "=",
+                   TPrimed (TId var),
+                   TExcept (TId var, to_tla index, to_tla expr) )))
     action.assignments;
   (match action.stack_op with
-  | StackPush (proc_name, return_label) ->
+  | StackPush (proc_name, return_label, _) ->
       let entry = List.assoc proc_name proc_entry_labels in
       add
         (TBinOp
@@ -168,7 +199,7 @@ let action_to_decl proc_entry_labels local_vars (ir : module_ir)
                          TRecord
                            [
                              ("procedure", TStr proc_name);
-                             ("pc", TStr return_label);
+                             ("return_pc", TStr return_label);
                            ];
                        ],
                      TSubscript (TId "stack", self) ) ) ));
@@ -182,7 +213,7 @@ let action_to_decl proc_entry_labels local_vars (ir : module_ir)
              TExcept
                ( TId "pc",
                  self,
-                 TDot (THead (TSubscript (TId "stack", self)), "pc") ) ));
+                 TDot (THead (TSubscript (TId "stack", self)), "return_pc") ) ));
       add
         (TBinOp
            ( "=",
@@ -382,26 +413,22 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
     List.concat_map
       (fun (wrapper : process_wrapper) ->
         if wrapper.process.fair then
-          [
+          let process_range =
+            TRange
+              ( cst_to_tla_global wrapper.process.lo,
+                cst_to_tla_global wrapper.process.hi )
+          in
+          let fairness_for proc_name =
             TParens
               (TForall
                  ( "self",
-                   TRange
-                     ( cst_to_tla_global wrapper.process.lo,
-                       cst_to_tla_global wrapper.process.hi ),
-                   TApp
-                     ( "WF_vars",
-                       [ TApp (wrapper.proc.proc_name, [ TId "self" ]) ] ) ));
-            TParens
-              (TForall
-                 ( "self",
-                   TRange
-                     ( cst_to_tla_global wrapper.process.lo,
-                       cst_to_tla_global wrapper.process.hi ),
-                   TApp
-                     ("WF_vars", [ TApp (wrapper.process.proc, [ TId "self" ]) ])
-                 ));
-          ]
+                   process_range,
+                   TApp ("WF_vars", [ TApp (proc_name, [ TId "self" ]) ]) ))
+          in
+          fairness_for wrapper.proc.proc_name
+          :: List.map
+               (fun (proc : proc_ir) -> fairness_for proc.proc_name)
+               ir.procs
         else [])
       process_wrappers
   in

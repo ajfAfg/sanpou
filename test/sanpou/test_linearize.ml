@@ -8,7 +8,10 @@ let cl1 x = { items = [ x ]; commas = [] }
 let intlit v = IntLit { t = n; value = v }
 let boollit v = BoolLit { t = n; value = v }
 let var s = Var { t = n; name = s }
-let assign x e = Assign { name_t = n; name = x; eq_t = n; value = e }
+
+let assign x e =
+  Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }
+
 let call_ f = Call { name_t = n; name = f; lp = n; args = cl0; rp = n }
 let return_ e = Return { t = n; value = e }
 let break_ = Break { t = n }
@@ -32,7 +35,18 @@ let if_block cond body =
   BlockStep
     {
       loc = loc0;
-      stmt = If { if_t = n; lp = n; cond; rp = n; lb = n; body; rb = n };
+      stmt =
+        If
+          {
+            if_t = n;
+            lp = n;
+            cond;
+            rp = n;
+            lb = n;
+            body;
+            rb = n;
+            else_branch = None;
+          };
     }
 
 let make_proc name body =
@@ -146,7 +160,11 @@ let () =
               check int "two actions" 2 (List.length proc.actions);
               let entry = find_action ir proc.entry_label in
               check int "one assignment" 1 (List.length entry.assignments);
-              let name, _ = List.hd entry.assignments in
+              let name =
+                match List.hd entry.assignments with
+                | AssignVar (name, _) -> name
+                | AssignIndex (name, _, _) -> name
+              in
               check string "assign x" "x" name);
           test_case "empty step" `Quick (fun () ->
               let m =
@@ -273,7 +291,7 @@ let () =
                   foo.actions
               in
               (match push_action.stack_op with
-              | StackPush ("bar", _) -> ()
+              | StackPush ("bar", _, []) -> ()
               | _ -> fail "expected StackPush bar");
               let pop_action =
                 List.find
@@ -327,7 +345,11 @@ let () =
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               check int "one assignment" 1 (List.length entry.assignments);
-              let name, value = List.hd entry.assignments in
+              let name, value =
+                match List.hd entry.assignments with
+                | AssignVar (name, value) -> (name, value)
+                | AssignIndex _ -> failwith "expected AssignVar"
+              in
               check string "name" "x" name;
               check bool "value" true (equal_expr (intlit 42) value));
         ] );

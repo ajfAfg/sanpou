@@ -12,6 +12,7 @@ let binop_str = function
   | Eq -> "=="
   | Neq -> "!="
   | And -> "&&"
+  | Or -> "||"
 
 let unop_str = function Neg -> "-"
 
@@ -34,11 +35,32 @@ let rec print_expr = function
   | IntLit { t; value } -> t ^ string_of_int value
   | BoolLit { t; value } -> t ^ if value then "true" else "false"
   | Var { t; name } -> t ^ name
+  | Self { t } -> t ^ "self"
   | UnOp { op_t; op; rhs } -> op_t ^ unop_str op ^ print_expr rhs
   | BinOp { lhs; op_t; op; rhs } ->
       print_expr lhs ^ op_t ^ binop_str op ^ print_expr rhs
   | App { name_t; name; lp; args; rp } ->
       name_t ^ name ^ lp ^ "(" ^ print_comma_list print_expr args ^ rp ^ ")"
+  | Subscript { lhs; lb_t; index; rb_t } ->
+      print_expr lhs ^ lb_t ^ "[" ^ print_expr index ^ rb_t ^ "]"
+  | MapInit
+      {
+        lb;
+        binder_t;
+        binder;
+        in_t;
+        lo;
+        dotdot_t;
+        hi;
+        colon_t;
+        value;
+        trailing_semi_t;
+        rb;
+      } ->
+      lb ^ "{" ^ binder_t ^ binder ^ in_t ^ "in" ^ print_expr lo ^ dotdot_t
+      ^ ".." ^ print_expr hi ^ colon_t ^ ":" ^ print_expr value
+      ^ (match trailing_semi_t with Some semi_t -> semi_t ^ ";" | None -> "")
+      ^ rb ^ "}"
   | Tuple { lp; elems; trailing_comma; rp } ->
       lp ^ "("
       ^ print_comma_list print_expr elems
@@ -51,13 +73,19 @@ let rec print_expr = function
       ^ rb ^ "]"
   | Paren { lp; inner; rp } -> lp ^ "(" ^ print_expr inner ^ rp ^ ")"
 
+let print_assign_target = function
+  | VarTarget { name_t; name } -> name_t ^ name
+  | SubscriptTarget { name_t; name; lb_t; index; rb_t } ->
+      name_t ^ name ^ lb_t ^ "[" ^ print_expr index ^ rb_t ^ "]"
+
 let print_simple_stmt = function
-  | Assign { name_t; name; eq_t; value } ->
-      name_t ^ name ^ eq_t ^ "=" ^ print_expr value
+  | Assign { target; eq_t; value } ->
+      print_assign_target target ^ eq_t ^ "=" ^ print_expr value
   | Call { name_t; name; lp; args; rp } ->
       name_t ^ name ^ lp ^ "(" ^ print_comma_list print_expr args ^ rp ^ ")"
   | Return { t; value } -> t ^ "return" ^ print_expr value
   | Break { t } -> t ^ "break"
+  | Continue { t } -> t ^ "continue"
   | Await { t; cond } -> t ^ "await" ^ print_expr cond
 
 let rec print_step = function
@@ -73,9 +101,14 @@ and print_block_stmt = function
   | While { while_t; lp; cond; rp; lb; body; rb } ->
       while_t ^ "while" ^ lp ^ "(" ^ print_expr cond ^ rp ^ ")" ^ lb ^ "{"
       ^ print_body body ^ rb ^ "}"
-  | If { if_t; lp; cond; rp; lb; body; rb } ->
+  | If { if_t; lp; cond; rp; lb; body; rb; else_branch } -> (
       if_t ^ "if" ^ lp ^ "(" ^ print_expr cond ^ rp ^ ")" ^ lb ^ "{"
       ^ print_body body ^ rb ^ "}"
+      ^
+      match else_branch with
+      | Some (else_t, else_lb, else_body, else_rb) ->
+          else_t ^ "else" ^ else_lb ^ "{" ^ print_body else_body ^ else_rb ^ "}"
+      | None -> "")
 
 and print_body steps = String.concat "" (List.map print_step steps)
 
@@ -136,16 +169,25 @@ let pretty_binop = function
   | Eq -> " == "
   | Neq -> " != "
   | And -> " && "
+  | Or -> " || "
 
 let rec pretty_expr = function
   | IntLit { value; _ } -> string_of_int value
   | BoolLit { value; _ } -> if value then "true" else "false"
   | Var { name; _ } -> name
+  | Self _ -> "self"
   | UnOp { op; rhs; _ } -> unop_str op ^ pretty_expr rhs
   | BinOp { lhs; op; rhs; _ } ->
       pretty_expr lhs ^ pretty_binop op ^ pretty_expr rhs
   | App { name; args; _ } ->
       name ^ "(" ^ String.concat ", " (List.map pretty_expr args.items) ^ ")"
+  | Subscript { lhs; index; _ } ->
+      pretty_expr lhs ^ "[" ^ pretty_expr index ^ "]"
+  | MapInit { binder; lo; hi; value; trailing_semi_t; _ } ->
+      "{ " ^ binder ^ " in " ^ pretty_expr lo ^ ".." ^ pretty_expr hi ^ ": "
+      ^ pretty_expr value
+      ^ (match trailing_semi_t with Some _ -> ";" | None -> "")
+      ^ " }"
   | Tuple { elems; _ } -> (
       match elems.items with
       | [] -> "()"
@@ -155,12 +197,18 @@ let rec pretty_expr = function
       "[" ^ String.concat ", " (List.map pretty_expr elems.items) ^ "]"
   | Paren { inner; _ } -> "(" ^ pretty_expr inner ^ ")"
 
+let pretty_assign_target = function
+  | VarTarget { name; _ } -> name
+  | SubscriptTarget { name; index; _ } -> name ^ "[" ^ pretty_expr index ^ "]"
+
 let pretty_simple_stmt = function
-  | Assign { name; value; _ } -> name ^ " = " ^ pretty_expr value
+  | Assign { target; value; _ } ->
+      pretty_assign_target target ^ " = " ^ pretty_expr value
   | Call { name; args; _ } ->
       name ^ "(" ^ String.concat ", " (List.map pretty_expr args.items) ^ ")"
   | Return { value; _ } -> "return " ^ pretty_expr value
   | Break _ -> "break"
+  | Continue _ -> "continue"
   | Await { cond; _ } -> "await " ^ pretty_expr cond
 
 let rec pretty_step indent = function
@@ -178,10 +226,15 @@ and pretty_block_stmt indent = function
       indent ^ "while (" ^ pretty_expr cond ^ ") {\n"
       ^ pretty_body (indent ^ "  ") body
       ^ indent ^ "}\n"
-  | If { cond; body; _ } ->
+  | If { cond; body; else_branch; _ } -> (
       indent ^ "if (" ^ pretty_expr cond ^ ") {\n"
       ^ pretty_body (indent ^ "  ") body
-      ^ indent ^ "}\n"
+      ^ indent ^ "}"
+      ^
+      match else_branch with
+      | Some (_, _, else_body, _) ->
+          " else {\n" ^ pretty_body (indent ^ "  ") else_body ^ indent ^ "}\n"
+      | None -> "\n")
 
 and pretty_body indent steps =
   String.concat "" (List.map (pretty_step indent) steps)

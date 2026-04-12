@@ -1,0 +1,81 @@
+mod bakery_algorithm {
+  def null = -1;
+  def numThreads = 2;
+  def numLoop = 3;
+
+  var count = 0;
+  var entering = {
+    x in 1..numThreads: false;
+  };
+  var tickets = {
+    x in 1..numThreads: null;
+  };
+
+  def lossless = finally(count == numThreads * numLoop);
+
+  fn lockAcquire(idx) {
+    entering[idx] = true;
+
+    var max = 0;
+    var i = 1;
+    while (i <= numThreads) {
+      if (max < tickets[i]) {
+        max = tickets[i];
+      }
+      i = i + 1;
+    }
+
+    var ticket = max + 1;
+    tickets[idx] = ticket;
+    entering[idx] = false;
+
+    var i = 1;
+    while (i <= numThreads) {
+      if (i == idx) {
+        i = i + 1;
+        continue;
+      } else {
+        while (entering[i]) {}
+
+        while (true) {
+          var tmp = tickets[i];
+          if (tmp != null) {
+            // スレッド i のチケット番号より自分の番号の方が若いか、
+            // チケット番号が同じでかつ、自分の方がスレッド番号が若い場合に待機終了
+            if ((ticket < tmp) || (ticket == tmp && idx < i)) {
+              break;
+            }
+          } else {
+            // スレッド i が処理中でない場合は待機終了
+            break;
+          }
+        }
+      }
+      i = i + 1;
+    }
+
+    return ();
+  }
+
+  fn lockRelease(idx) {
+    tickets[idx] = null;
+    return ();
+  }
+
+  fn thread() {
+    var i = 1;
+    while (i <= numLoop) {
+      lockAcquire(self);
+      var tmp = count;
+      tmp = tmp + 1;
+      count = tmp;
+      lockRelease(self);
+
+      i = i + 1;
+    }
+
+    return ();
+  }
+
+  fair process t = thread in 1..numThreads;
+}

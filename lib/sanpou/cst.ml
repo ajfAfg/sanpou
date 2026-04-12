@@ -9,7 +9,7 @@ let equal_loc _ _ = true
 
 type id = string [@@deriving show, eq]
 
-type binop = Plus | Minus | Mult | Lt | LtEq | GtEq | Eq | Neq | And
+type binop = Plus | Minus | Mult | Lt | LtEq | GtEq | Eq | Neq | And | Or
 [@@deriving show, eq]
 
 type unop = Neg [@@deriving show, eq]
@@ -18,10 +18,21 @@ type unop = Neg [@@deriving show, eq]
 type 'a comma_list = { items : 'a list; commas : trivia list }
 [@@deriving show, eq]
 
-type expr =
+type assign_target =
+  | VarTarget of { name_t : trivia; name : id }
+  | SubscriptTarget of {
+      name_t : trivia;
+      name : id;
+      lb_t : trivia;
+      index : expr;
+      rb_t : trivia;
+    }
+
+and expr =
   | IntLit of { t : trivia; value : int }
   | BoolLit of { t : trivia; value : bool }
   | Var of { t : trivia; name : id }
+  | Self of { t : trivia }
   | UnOp of { op_t : trivia; op : unop; rhs : expr }
   | BinOp of { lhs : expr; op_t : trivia; op : binop; rhs : expr }
   | App of {
@@ -30,6 +41,20 @@ type expr =
       lp : trivia;
       args : expr comma_list;
       rp : trivia;
+    }
+  | Subscript of { lhs : expr; lb_t : trivia; index : expr; rb_t : trivia }
+  | MapInit of {
+      lb : trivia;
+      binder_t : trivia;
+      binder : id;
+      in_t : trivia;
+      lo : expr;
+      dotdot_t : trivia;
+      hi : expr;
+      colon_t : trivia;
+      value : expr;
+      trailing_semi_t : trivia option;
+      rb : trivia;
     }
   | Tuple of {
       lp : trivia;
@@ -47,7 +72,7 @@ type expr =
 [@@deriving show, eq]
 
 type simple_stmt =
-  | Assign of { name_t : trivia; name : id; eq_t : trivia; value : expr }
+  | Assign of { target : assign_target; eq_t : trivia; value : expr }
   | Call of {
       name_t : trivia;
       name : id;
@@ -57,6 +82,7 @@ type simple_stmt =
     }
   | Return of { t : trivia; value : expr }
   | Break of { t : trivia }
+  | Continue of { t : trivia }
   | Await of { t : trivia; cond : expr }
 [@@deriving show, eq]
 
@@ -78,6 +104,7 @@ type block_stmt =
       lb : trivia;
       body : body;
       rb : trivia;
+      else_branch : (trivia * trivia * body * trivia) option;
     }
 
 and step =

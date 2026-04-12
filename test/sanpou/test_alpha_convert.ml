@@ -8,7 +8,10 @@ let intlit v = IntLit { t = n; value = v }
 let boollit v = BoolLit { t = n; value = v }
 let var s = Var { t = n; name = s }
 let binop op l r = BinOp { lhs = l; op_t = n; op; rhs = r }
-let assign x e = Assign { name_t = n; name = x; eq_t = n; value = e }
+
+let assign x e =
+  Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }
+
 let return_ e = Return { t = n; value = e }
 let await_ e = Await { t = n; cond = e }
 let simple_step stmts = SimpleStep { loc = loc0; stmts; semi_t = n }
@@ -28,7 +31,18 @@ let if_block cond body =
   BlockStep
     {
       loc = loc0;
-      stmt = If { if_t = n; lp = n; cond; rp = n; lb = n; body; rb = n };
+      stmt =
+        If
+          {
+            if_t = n;
+            lp = n;
+            cond;
+            rp = n;
+            lb = n;
+            body;
+            rb = n;
+            else_branch = None;
+          };
     }
 
 let make_proc name body =
@@ -68,7 +82,8 @@ let extract_var_name = function
   | _ -> failwith "expected Var"
 
 let extract_assign_name = function
-  | Assign { name; _ } -> name
+  | Assign { target = VarTarget { name; _ }; _ } -> name
+  | Assign { target = SubscriptTarget { name; _ }; _ } -> name
   | _ -> failwith "expected Assign"
 
 let extract_assign_value = function

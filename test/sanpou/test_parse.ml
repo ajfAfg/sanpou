@@ -8,16 +8,48 @@ let cl3 x y z = { items = [ x; y; z ]; commas = [ n; n ] }
 let intlit v = IntLit { t = n; value = v }
 let boollit v = BoolLit { t = n; value = v }
 let var s = Var { t = n; name = s }
+let self_ = Self { t = n }
 let unop op r = UnOp { op_t = n; op; rhs = r }
 let binop op l r = BinOp { lhs = l; op_t = n; op; rhs = r }
 let app f args = App { name_t = n; name = f; lp = n; args; rp = n }
+let subscript lhs index = Subscript { lhs; lb_t = n; index; rb_t = n }
+
+let map_init binder lo hi value =
+  MapInit
+    {
+      lb = n;
+      binder_t = n;
+      binder;
+      in_t = n;
+      lo;
+      dotdot_t = n;
+      hi;
+      colon_t = n;
+      value;
+      trailing_semi_t = Some n;
+      rb = n;
+    }
+
 let tuple elems tc = Tuple { lp = n; elems; trailing_comma = tc; rp = n }
 let sequence elems tc = Sequence { lb = n; elems; trailing_comma = tc; rb = n }
 let paren e = Paren { lp = n; inner = e; rp = n }
-let assign x e = Assign { name_t = n; name = x; eq_t = n; value = e }
+
+let assign x e =
+  Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }
+
+let index_assign x index e =
+  Assign
+    {
+      target =
+        SubscriptTarget { name_t = n; name = x; lb_t = n; index; rb_t = n };
+      eq_t = n;
+      value = e;
+    }
+
 let call f args = Call { name_t = n; name = f; lp = n; args; rp = n }
 let return_ e = Return { t = n; value = e }
 let break_ = Break { t = n }
+let continue_ = Continue { t = n }
 let await_ e = Await { t = n; cond = e }
 
 let simple_step stmts =
@@ -29,7 +61,22 @@ let block_step s = BlockStep { loc = { line = 0; col = 0 }; stmt = s }
 let while_ cond body =
   While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n }
 
-let if_ cond body = If { if_t = n; lp = n; cond; rp = n; lb = n; body; rb = n }
+let if_ cond body =
+  If
+    { if_t = n; lp = n; cond; rp = n; lb = n; body; rb = n; else_branch = None }
+
+let if_else cond body else_body =
+  If
+    {
+      if_t = n;
+      lp = n;
+      cond;
+      rp = n;
+      lb = n;
+      body;
+      rb = n;
+      else_branch = Some (n, n, else_body, n);
+    }
 
 let const_def x e =
   ConstDef { def_t = n; name_t = n; name = x; eq_t = n; value = e; semi_t = n }
@@ -202,6 +249,12 @@ let () =
                 "parse"
                 [ const_def "x" (binop Neq (intlit 1) (intlit 2)) ]
                 actual);
+          Alcotest.test_case "or expr" `Quick (fun () ->
+              let actual = parse_items "def x = true || false;" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (binop Or (boollit true) (boollit false)) ]
+                actual);
           Alcotest.test_case "unary minus literal" `Quick (fun () ->
               let actual = parse_items "def x = -1;" in
               Alcotest.(check (list (testable pp_item equal_item)))
@@ -251,6 +304,15 @@ let () =
                 "parse"
                 [ var_decl "b" (boollit false) ]
                 actual);
+          Alcotest.test_case "map init" `Quick (fun () ->
+              let actual = parse_items "var xs = { x in 1..2: false; };" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [
+                  var_decl "xs"
+                    (map_init "x" (intlit 1) (intlit 2) (boollit false));
+                ]
+                actual);
         ] );
       ( "proc_def",
         [
@@ -298,6 +360,38 @@ let () =
                     [
                       simple_step
                         (cl1 (return_ (tuple (cl2 (intlit 1) (intlit 2)) None)));
+                    ];
+                ]
+                actual);
+          Alcotest.test_case "continue and indexed assign" `Quick (fun () ->
+              let actual =
+                parse_items "fn foo() { xs[1] = self; continue; return (); }"
+              in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [
+                  proc_def "foo" cl0
+                    [
+                      simple_step (cl1 (index_assign "xs" (intlit 1) self_));
+                      simple_step (cl1 continue_);
+                      simple_step (cl1 (return_ (tuple cl0 None)));
+                    ];
+                ]
+                actual);
+          Alcotest.test_case "if else" `Quick (fun () ->
+              let actual =
+                parse_items
+                  "fn foo() { if (true) { break; } else { continue; } }"
+              in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [
+                  proc_def "foo" cl0
+                    [
+                      block_step
+                        (if_else (boollit true)
+                           [ simple_step (cl1 break_) ]
+                           [ simple_step (cl1 continue_) ]);
                     ];
                 ]
                 actual);
