@@ -88,6 +88,14 @@ let has_in s tla =
        true
      with Not_found -> false)
 
+let has_not_in s tla =
+  Alcotest.(check bool)
+    s false
+    (try
+       let _ = Str.search_forward (Str.regexp_string s) tla 0 in
+       true
+     with Not_found -> false)
+
 let () =
   let open Alcotest in
   run "Codegen"
@@ -143,6 +151,23 @@ let () =
               has "WF_vars(__process_ps_wrapper__(self))";
               has "WF_vars(foo(self))";
               has "====");
+          Alcotest.test_case "fair process covers helper procedures" `Quick
+            (fun () ->
+              let cst =
+                parse
+                  "mod foo {\n\
+                   var x = 0;\n\
+                   fn helper() { x = 1; return (); }\n\
+                   fn main() { helper(); return (); }\n\
+                   fair process ps = main in 1..2;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "WF_vars(__process_ps_wrapper__(self))";
+              has "WF_vars(main(self))";
+              has "WF_vars(helper(self))";
+              has "return_pc |->");
           Alcotest.test_case "plain process omits weak fairness" `Quick
             (fun () ->
               let cst =
@@ -214,6 +239,30 @@ let () =
               in
               let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
               has_in "differs == (<< 1 >> /= << 2 >>)" tla);
+          Alcotest.test_case "or compiles to tla disjunction" `Quick (fun () ->
+              let cst =
+                parse
+                  "mod ormod {\n\
+                   def either = true || false;\n\
+                   fn main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              has_in "either == (TRUE \\/ FALSE)" tla);
+          Alcotest.test_case "map init and indexed update compile" `Quick
+            (fun () ->
+              let cst =
+                parse
+                  "mod maps {\n\
+                   var xs = { i in 1..2: 0; };\n\
+                   fn main() { xs[1] = self; return (); }\n\
+                   process ps = main in 1..2;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              has_in "xs = [i \\in 1..2 |-> 0]" tla;
+              has_in "xs' = [xs EXCEPT ![1] = self]" tla);
           Alcotest.test_case "unary minus compiles" `Quick (fun () ->
               let cst =
                 parse
@@ -302,5 +351,25 @@ let () =
               has "VARIABLES pc, g, x__1, x__2, stack";
               has "x__1' = [x__1 EXCEPT ![self] = 1]";
               has "x__2' = [x__2 EXCEPT ![self] = 2]");
+          Alcotest.test_case "procedure parameters become local state" `Quick
+            (fun () ->
+              let cst =
+                parse
+                  "mod params {\n\
+                   fn callee(idx) {\n\
+                   var seen = idx;\n\
+                   return ();\n\
+                   }\n\
+                   fn caller() { callee(self); return (); }\n\
+                   process ps = caller in 1..2;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "VARIABLES pc, idx__1, seen__2, stack";
+              has "idx__1 = [self \\in ProcSet |-> 0]";
+              has "idx__1' = [idx__1 EXCEPT ![self] = self]";
+              has "seen__2' = [seen__2 EXCEPT ![self] = idx__1[self]]";
+              has_not_in "![idx]" tla);
         ] );
     ]

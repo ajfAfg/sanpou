@@ -12,6 +12,7 @@ let fresh_label counter =
 type ctx = {
   proc_name : string;
   break_label : string option;
+  continue_label : string option;
   label_counter : int ref;
 }
 
@@ -30,11 +31,17 @@ let describe_simple_stmts (stmts : simple_stmt comma_list) =
 let linearize_simple_stmt ctx (stmt : simple_stmt) ~guard ~assignments
     ~stack_op_ref ~actual_next ~extra_actions ~next_label ~source =
   match stmt with
-  | Assign { name; value; _ } -> assignments := !assignments @ [ (name, value) ]
+  | Assign { target; value; _ } ->
+      let assignment =
+        match target with
+        | VarTarget { name; _ } -> AssignVar (name, value)
+        | SubscriptTarget { name; index; _ } -> AssignIndex (name, index, value)
+      in
+      assignments := !assignments @ [ assignment ]
   | Await { cond; _ } -> guard := Some cond
-  | Call { name; _ } ->
+  | Call { name; args; _ } ->
       let pop_label = fresh_label ctx.label_counter in
-      stack_op_ref := StackPush (name, pop_label);
+      stack_op_ref := StackPush (name, pop_label, args.items);
       actual_next := "__call__";
       let pop_source =
         { source with description = "[return from " ^ name ^ "]" }
@@ -60,6 +67,13 @@ let linearize_simple_stmt ctx (stmt : simple_stmt) ~guard ~assignments
         | None -> failwith "break outside of loop"
       in
       actual_next := break_target
+  | Continue _ ->
+      let continue_target =
+        match ctx.continue_label with
+        | Some l -> l
+        | None -> failwith "continue outside of loop"
+      in
+      actual_next := continue_target
 
 (* ===== Step linearization ===== *)
 
@@ -115,7 +129,24 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
             }
           in
           { actions = [ a ]; entry = label; exit_label = next_label }
-      | [ Call { name; _ } ] ->
+      | [ Continue _ ] ->
+          let continue_target =
+            match ctx.continue_label with
+            | Some l -> l
+            | None -> failwith "continue outside of loop"
+          in
+          let a =
+            {
+              label;
+              guard = None;
+              assignments = [];
+              pc_dest = PcNext continue_target;
+              stack_op = StackNone;
+              source;
+            }
+          in
+          { actions = [ a ]; entry = label; exit_label = next_label }
+      | [ Call { name; args; _ } ] ->
           let pop_label = fresh_label ctx.label_counter in
           let call_action =
             {
@@ -123,7 +154,7 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
               guard = None;
               assignments = [];
               pc_dest = PcNext "__call__";
-              stack_op = StackPush (name, pop_label);
+              stack_op = StackPush (name, pop_label, args.items);
               source;
             }
           in
@@ -173,13 +204,19 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
           })
   | BlockStep { stmt = While { cond; body; _ }; loc } ->
       linearize_while ctx cond body next_label loc
-  | BlockStep { stmt = If { cond; body; _ }; loc } ->
-      linearize_if ctx cond body next_label loc
+  | BlockStep { stmt = If { cond; body; else_branch; _ }; loc } ->
+      linearize_if ctx cond body next_label loc else_branch
   | VarStep _ -> failwith "VarStep should be handled in linearize_body"
 
 and linearize_while ctx cond body after_loop_label loc =
   let check_label = fresh_label ctx.label_counter in
-  let body_ctx = { ctx with break_label = Some after_loop_label } in
+  let body_ctx =
+    {
+      ctx with
+      break_label = Some after_loop_label;
+      continue_label = Some check_label;
+    }
+  in
   let body_compiled = linearize_body body_ctx body check_label in
   let desc = "while (" ^ Cst_printer.pretty_expr cond ^ ") [check]" in
   let source = make_source ~proc_name:ctx.proc_name ~description:desc ~loc in
@@ -199,9 +236,16 @@ and linearize_while ctx cond body after_loop_label loc =
     exit_label = after_loop_label;
   }
 
-and linearize_if ctx cond body next_label loc =
+and linearize_if ctx cond body next_label loc else_branch =
   let check_label = fresh_label ctx.label_counter in
   let body_compiled = linearize_body ctx body next_label in
+  let else_entry, else_actions =
+    match else_branch with
+    | Some (_, _, else_body, _) ->
+        let compiled = linearize_body ctx else_body next_label in
+        (compiled.entry, compiled.actions)
+    | None -> (next_label, [])
+  in
   let desc = "if (" ^ Cst_printer.pretty_expr cond ^ ") [check]" in
   let source = make_source ~proc_name:ctx.proc_name ~description:desc ~loc in
   let check_action =
@@ -209,13 +253,13 @@ and linearize_if ctx cond body next_label loc =
       label = check_label;
       guard = None;
       assignments = [];
-      pc_dest = PcBranch (cond, body_compiled.entry, next_label);
+      pc_dest = PcBranch (cond, body_compiled.entry, else_entry);
       stack_op = StackNone;
       source;
     }
   in
   {
-    actions = [ check_action ] @ body_compiled.actions;
+    actions = [ check_action ] @ body_compiled.actions @ else_actions;
     entry = check_label;
     exit_label = next_label;
   }
@@ -273,7 +317,7 @@ and linearize_var_step ctx step next_label =
         {
           label;
           guard = None;
-          assignments = [ (name, value) ];
+          assignments = [ AssignVar (name, value) ];
           pc_dest = PcNext next_label;
           stack_op = StackNone;
           source;
@@ -286,11 +330,21 @@ and linearize_var_step ctx step next_label =
 
 let resolve_call_target procs action =
   match action.stack_op with
-  | StackPush (proc_name, _) ->
+  | StackPush (proc_name, _, args) ->
       let target_proc =
         List.find (fun (p : proc_ir) -> p.proc_name = proc_name) procs
       in
-      { action with pc_dest = PcNext target_proc.entry_label }
+      let params = target_proc.params in
+      let param_bindings =
+        try List.map2 (fun param arg -> AssignVar (param, arg)) params args
+        with Invalid_argument _ ->
+          failwith ("arity mismatch when calling procedure " ^ proc_name)
+      in
+      {
+        action with
+        assignments = action.assignments @ param_bindings;
+        pc_dest = PcNext target_proc.entry_label;
+      }
   | _ -> action
 
 (* ===== Module linearization ===== *)
@@ -314,7 +368,14 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
       | VarDecl { name; value; _ } ->
           var_decls := !var_decls @ [ (name, value) ]
       | ProcDef { name; params; body; _ } ->
-          let ctx = { proc_name = name; break_label = None; label_counter } in
+          let ctx =
+            {
+              proc_name = name;
+              break_label = None;
+              continue_label = None;
+              label_counter;
+            }
+          in
           let done_label = "Done" in
           let compiled = linearize_body ctx body done_label in
           let proc =

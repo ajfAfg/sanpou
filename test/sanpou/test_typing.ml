@@ -30,6 +30,8 @@ let () =
               check_ok "mod m { def x = 1 == 2; }");
           test_case "inequality" `Quick (fun () ->
               check_ok "mod m { def x = 1 != 2; }");
+          test_case "or" `Quick (fun () ->
+              check_ok "mod m { def x = true || false; }");
           test_case "unary minus literal" `Quick (fun () ->
               check_ok "mod m { def x = -1; }");
           test_case "unary minus paren expr" `Quick (fun () ->
@@ -105,6 +107,17 @@ let () =
                 \  }");
           test_case "sequence literal" `Quick (fun () ->
               check_ok "mod m { def xs = [1, 2, 3]; }");
+          test_case "map init and subscript" `Quick (fun () ->
+              check_ok "mod m { var xs = { x in 1..3: 0; }; def y = xs[1]; }");
+          test_case "self and continue" `Quick (fun () ->
+              check_ok
+                "mod m { var xs = { x in 1..2: 0; }; fn foo() { while (true) { \
+                 xs[self] = 1; continue; } return (); } process ps = foo in \
+                 1..2; }");
+          test_case "if else" `Quick (fun () ->
+              check_ok
+                "mod m { fn foo() { if (true) { ; } else { ; } return (); } \
+                 process ps = foo in 1..1; }");
           test_case "sequence builtins" `Quick (fun () ->
               check_ok
                 "mod m { def xs = [1, 2]; def y = head(xs); def zs = tail(xs); \
@@ -242,5 +255,11 @@ let () =
               check_fails "mod m { def x = [1, true]; }");
           test_case "head on tuple" `Quick (fun () ->
               check_fails "mod m { def x = head((1, 2)); }");
+          test_case "head on map" `Quick (fun () ->
+              check_fails "mod m { def x = head({ i in 1..2: 0; }); }");
+          test_case "continue outside loop" `Quick (fun () ->
+              check_fails
+                "mod m { fn foo() { continue; return (); } process ps = foo in \
+                 1..1; }");
         ] );
     ]

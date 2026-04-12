@@ -16,9 +16,12 @@ let reservedWords = [
   ("in", fun t -> Parser.IN t);
   ("while", fun t -> Parser.WHILE t);
   ("if", fun t -> Parser.IF t);
+    ("else", fun t -> Parser.ELSE t);
   ("return", fun t -> Parser.RETURN t);
   ("break", fun t -> Parser.BREAK t);
+    ("continue", fun t -> Parser.CONTINUE t);
   ("await", fun t -> Parser.AWAIT t);
+    ("self", fun t -> Parser.SELF t);
   ("true", fun t -> Parser.TRUE t);
   ("false", fun t -> Parser.FALSE t);
 ]
@@ -42,6 +45,8 @@ rule main = parse
     { Parser.NEQ (flush_trivia ()) }
 | ".."
     { Parser.DOTDOT (flush_trivia ()) }
+| ":"
+    { Parser.COLON (flush_trivia ()) }
 | "("
     { Parser.LPAREN (flush_trivia ()) }
 | ")"
@@ -70,6 +75,8 @@ rule main = parse
     { Parser.GTEQ (flush_trivia ()) }
 | "&&"
     { Parser.ANDAND (flush_trivia ()) }
+| "||"
+    { Parser.OROR (flush_trivia ()) }
 | "<"
     { Parser.LT (flush_trivia ()) }
 | "="
