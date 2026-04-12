@@ -38,12 +38,18 @@ rule main = parse
       Parser.INTV (t, int_of_string (Lexing.lexeme lexbuf)) }
 | "=="
     { Parser.EQEQ (flush_trivia ()) }
+| "!="
+    { Parser.NEQ (flush_trivia ()) }
 | ".."
     { Parser.DOTDOT (flush_trivia ()) }
 | "("
     { Parser.LPAREN (flush_trivia ()) }
 | ")"
     { Parser.RPAREN (flush_trivia ()) }
+| "["
+    { Parser.LBRACKET (flush_trivia ()) }
+| "]"
+    { Parser.RBRACKET (flush_trivia ()) }
 | "{"
     { Parser.LBRACE (flush_trivia ()) }
 | "}"

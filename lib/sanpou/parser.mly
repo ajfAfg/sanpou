@@ -15,13 +15,13 @@ let loc_of_pos (pos : Lexing.position) : loc =
 %token <Cst.trivia> TRUE FALSE
 %token <Cst.trivia> DEF LET FN MOD FAIR PROCESS IN
 %token <Cst.trivia> WHILE IF RETURN BREAK AWAIT
-%token <Cst.trivia> PLUS MINUS MULT LT LTEQ GTEQ EQ EQEQ ANDAND
-%token <Cst.trivia> LPAREN RPAREN LBRACE RBRACE
+%token <Cst.trivia> PLUS MINUS MULT LT LTEQ GTEQ EQ EQEQ NEQ ANDAND
+%token <Cst.trivia> LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token <Cst.trivia> SEMI COMMA DOTDOT
 %token <Cst.trivia> EOF
 
 %left ANDAND
-%left EQEQ
+%left EQEQ NEQ
 %left LT LTEQ GTEQ
 %left PLUS MINUS
 %left MULT
@@ -115,11 +115,13 @@ expr:
   | e1=expr op_t=MULT e2=expr { BinOp { lhs = e1; op_t; op = Mult; rhs = e2 } }
   | e1=expr op_t=LT e2=expr { BinOp { lhs = e1; op_t; op = Lt; rhs = e2 } }
   | e1=expr op_t=EQEQ e2=expr { BinOp { lhs = e1; op_t; op = Eq; rhs = e2 } }
+  | e1=expr op_t=NEQ e2=expr { BinOp { lhs = e1; op_t; op = Neq; rhs = e2 } }
   | e1=expr op_t=LTEQ e2=expr { BinOp { lhs = e1; op_t; op = LtEq; rhs = e2 } }
   | e1=expr op_t=GTEQ e2=expr { BinOp { lhs = e1; op_t; op = GtEq; rhs = e2 } }
   | e1=expr op_t=ANDAND e2=expr { BinOp { lhs = e1; op_t; op = And; rhs = e2 } }
 
 expr_:
+  | op_t=MINUS rhs=expr_ { UnOp { op_t; op = Neg; rhs } }
   | i=INTV { let (t, value) = i in IntLit { t; value } }
   | t=TRUE { BoolLit { t; value = true } }
   | t=FALSE { BoolLit { t; value = false } }
@@ -132,4 +134,12 @@ expr_:
       { Tuple { lp; elems = singleton_comma_list e; trailing_comma = Some c; rp } }
   | lp=LPAREN e1=expr c=COMMA rest=expr_list_nonempty rp=RPAREN
       { Tuple { lp; elems = cons_comma_list c e1 rest; trailing_comma = None; rp } }
+  | lb=LBRACKET rb=RBRACKET
+      { Sequence { lb; elems = empty_comma_list; trailing_comma = None; rb } }
+  | lb=LBRACKET e=expr c=COMMA rb=RBRACKET
+      { Sequence { lb; elems = singleton_comma_list e; trailing_comma = Some c; rb } }
+  | lb=LBRACKET e1=expr c=COMMA rest=expr_list_nonempty rb=RBRACKET
+      { Sequence { lb; elems = cons_comma_list c e1 rest; trailing_comma = None; rb } }
+  | lb=LBRACKET e=expr rb=RBRACKET
+      { Sequence { lb; elems = singleton_comma_list e; trailing_comma = None; rb } }
   | lp=LPAREN inner=expr rp=RPAREN { Paren { lp; inner; rp } }

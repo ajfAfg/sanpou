@@ -10,7 +10,10 @@ let binop_str = function
   | LtEq -> "<="
   | GtEq -> ">="
   | Eq -> "=="
+  | Neq -> "!="
   | And -> "&&"
+
+let unop_str = function Neg -> "-"
 
 let print_comma_list f (cl : _ comma_list) =
   match cl.items with
@@ -31,6 +34,7 @@ let rec print_expr = function
   | IntLit { t; value } -> t ^ string_of_int value
   | BoolLit { t; value } -> t ^ if value then "true" else "false"
   | Var { t; name } -> t ^ name
+  | UnOp { op_t; op; rhs } -> op_t ^ unop_str op ^ print_expr rhs
   | BinOp { lhs; op_t; op; rhs } ->
       print_expr lhs ^ op_t ^ binop_str op ^ print_expr rhs
   | App { name_t; name; lp; args; rp } ->
@@ -40,6 +44,11 @@ let rec print_expr = function
       ^ print_comma_list print_expr elems
       ^ (match trailing_comma with Some t -> t ^ "," | None -> "")
       ^ rp ^ ")"
+  | Sequence { lb; elems; trailing_comma; rb } ->
+      lb ^ "["
+      ^ print_comma_list print_expr elems
+      ^ (match trailing_comma with Some t -> t ^ "," | None -> "")
+      ^ rb ^ "]"
   | Paren { lp; inner; rp } -> lp ^ "(" ^ print_expr inner ^ rp ^ ")"
 
 let print_simple_stmt = function
@@ -125,12 +134,14 @@ let pretty_binop = function
   | LtEq -> " <= "
   | GtEq -> " >= "
   | Eq -> " == "
+  | Neq -> " != "
   | And -> " && "
 
 let rec pretty_expr = function
   | IntLit { value; _ } -> string_of_int value
   | BoolLit { value; _ } -> if value then "true" else "false"
   | Var { name; _ } -> name
+  | UnOp { op; rhs; _ } -> unop_str op ^ pretty_expr rhs
   | BinOp { lhs; op; rhs; _ } ->
       pretty_expr lhs ^ pretty_binop op ^ pretty_expr rhs
   | App { name; args; _ } ->
@@ -140,6 +151,8 @@ let rec pretty_expr = function
       | [] -> "()"
       | [ e ] -> "(" ^ pretty_expr e ^ ",)"
       | es -> "(" ^ String.concat ", " (List.map pretty_expr es) ^ ")")
+  | Sequence { elems; _ } ->
+      "[" ^ String.concat ", " (List.map pretty_expr elems.items) ^ "]"
   | Paren { inner; _ } -> "(" ^ pretty_expr inner ^ ")"
 
 let pretty_simple_stmt = function

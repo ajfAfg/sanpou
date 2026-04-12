@@ -9,8 +9,10 @@ let equal_loc _ _ = true
 
 type id = string [@@deriving show, eq]
 
-type binop = Plus | Minus | Mult | Lt | LtEq | GtEq | Eq | And
+type binop = Plus | Minus | Mult | Lt | LtEq | GtEq | Eq | Neq | And
 [@@deriving show, eq]
+
+type unop = Neg [@@deriving show, eq]
 
 (* A comma-separated list preserving trivia before each comma *)
 type 'a comma_list = { items : 'a list; commas : trivia list }
@@ -20,6 +22,7 @@ type expr =
   | IntLit of { t : trivia; value : int }
   | BoolLit of { t : trivia; value : bool }
   | Var of { t : trivia; name : id }
+  | UnOp of { op_t : trivia; op : unop; rhs : expr }
   | BinOp of { lhs : expr; op_t : trivia; op : binop; rhs : expr }
   | App of {
       name_t : trivia;
@@ -33,6 +36,12 @@ type expr =
       elems : expr comma_list;
       trailing_comma : trivia option;
       rp : trivia;
+    }
+  | Sequence of {
+      lb : trivia;
+      elems : expr comma_list;
+      trailing_comma : trivia option;
+      rb : trivia;
     }
   | Paren of { lp : trivia; inner : expr; rp : trivia }
 [@@deriving show, eq]

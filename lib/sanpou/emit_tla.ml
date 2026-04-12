@@ -12,6 +12,7 @@ let binop_to_tla = function
   | Cst.LtEq -> "<="
   | Cst.GtEq -> ">="
   | Cst.Eq -> "="
+  | Cst.Neq -> "/="
   | Cst.And -> "/\\"
 
 let rec cst_to_tla local_vars = function
@@ -20,6 +21,10 @@ let rec cst_to_tla local_vars = function
   | Cst.Var { name; _ } ->
       if List.mem name local_vars then TSubscript (TId name, TId "self")
       else TId name
+  | Cst.UnOp { op = Neg; rhs; _ } -> (
+      match rhs with
+      | Cst.IntLit { value; _ } -> TInt (-value)
+      | _ -> TParens (TBinOp ("-", TInt 0, cst_to_tla local_vars rhs)))
   | Cst.BinOp { op; lhs; rhs; _ } ->
       TParens
         (TBinOp
@@ -34,9 +39,31 @@ let rec cst_to_tla local_vars = function
       match args.items with
       | [ e ] -> TFinally (cst_to_tla local_vars e)
       | _ -> failwith "finally takes exactly one argument")
+  | Cst.App { name = "head"; args; _ } -> (
+      match args.items with
+      | [ e ] -> THead (cst_to_tla local_vars e)
+      | _ -> failwith "head takes exactly one argument")
+  | Cst.App { name = "tail"; args; _ } -> (
+      match args.items with
+      | [ e ] -> TTail (cst_to_tla local_vars e)
+      | _ -> failwith "tail takes exactly one argument")
+  | Cst.App { name = "append"; args; _ } -> (
+      match args.items with
+      | [ seq; value ] ->
+          TApp
+            ( "Append",
+              [ cst_to_tla local_vars seq; cst_to_tla local_vars value ] )
+      | _ -> failwith "append takes exactly two arguments")
+  | Cst.App { name = "concat"; args; _ } -> (
+      match args.items with
+      | [ lhs; rhs ] ->
+          TConcat (cst_to_tla local_vars lhs, cst_to_tla local_vars rhs)
+      | _ -> failwith "concat takes exactly two arguments")
   | Cst.App { name; args; _ } ->
       TApp (name, List.map (cst_to_tla local_vars) args.items)
   | Cst.Tuple { elems; _ } ->
+      TSeqLit (List.map (cst_to_tla local_vars) elems.items)
+  | Cst.Sequence { elems; _ } ->
       TSeqLit (List.map (cst_to_tla local_vars) elems.items)
   | Cst.Paren { inner; _ } -> cst_to_tla local_vars inner
 

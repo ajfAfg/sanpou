@@ -106,6 +106,8 @@ sanpou trace dist/rwlock.out -o dist
 mod rwlock {
   def readerNum = 2;       // constant definition
   def foo(x) = x + 1;     // function definition
+  def pair = (1, true);   // tuple value
+  def queue = [1, 2, 3];  // sequence value
 
   let rcnt = 0;            // variable declaration
   let lock = false;
@@ -129,6 +131,9 @@ mod rwlock {
   process readers = reader in 1..readerNum;  // process definition
 }
 ```
+
+Tuples use `(a, b)` syntax and may contain values of different types.
+Sequences use `[a, b, c]` syntax and are intended for homogeneous collections.
 
 ## Project structure
 

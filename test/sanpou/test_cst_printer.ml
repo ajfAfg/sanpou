@@ -35,6 +35,14 @@ let () =
               exact_roundtrip "mod m { fn foo() { while (0 < x){} } }");
           test_case "if" `Quick (fun () ->
               exact_roundtrip "mod m { fn foo() { if (x == 0) { break; } } }");
+          test_case "inequality" `Quick (fun () ->
+              exact_roundtrip "mod m { def x = 1 != 2; }");
+          test_case "unary minus literal" `Quick (fun () ->
+              exact_roundtrip "mod m { def x = -1; }");
+          test_case "unary minus paren expr" `Quick (fun () ->
+              exact_roundtrip "mod m { def x = -(1 + 2); }");
+          test_case "subtract negative" `Quick (fun () ->
+              exact_roundtrip "mod m { def x = y - -1; }");
           test_case "tuple empty" `Quick (fun () ->
               exact_roundtrip "mod m { def x = (); }");
           test_case "tuple single" `Quick (fun () ->
@@ -43,6 +51,14 @@ let () =
               exact_roundtrip "mod m { def x = (1, 2); }");
           test_case "tuple nested" `Quick (fun () ->
               exact_roundtrip "mod m { def x = ((1, 2), 3); }");
+          test_case "sequence empty" `Quick (fun () ->
+              exact_roundtrip "mod m { def x = []; }");
+          test_case "sequence single" `Quick (fun () ->
+              exact_roundtrip "mod m { def x = [1]; }");
+          test_case "sequence single trailing comma" `Quick (fun () ->
+              exact_roundtrip "mod m { def x = [1,]; }");
+          test_case "sequence pair" `Quick (fun () ->
+              exact_roundtrip "mod m { def x = [1, 2]; }");
           test_case "paren expr" `Quick (fun () ->
               exact_roundtrip "mod m { def x = (1 + 2) * 3; }");
           test_case "process" `Quick (fun () ->

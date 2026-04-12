@@ -181,6 +181,52 @@ let () =
               has "writer(self) ==";
               has "Spec == Init /\\ [][Next]_vars";
               has "====");
+          Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
+            (fun () ->
+              let cst =
+                parse
+                  "mod seqs {\n\
+                   def xs = [1, 2];\n\
+                   def y = head(xs);\n\
+                   def ys = tail(xs);\n\
+                   def zs = append(xs, 3);\n\
+                   def ws = concat(xs, [4, 5]);\n\
+                   fn main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "xs == << 1, 2 >>";
+              has "y == Head(xs)";
+              has "ys == Tail(xs)";
+              has "zs == Append(xs, 3)";
+              has "ws == xs \\o << 4, 5 >>");
+          Alcotest.test_case "inequality compiles to tla not-equals" `Quick
+            (fun () ->
+              let cst =
+                parse
+                  "mod neq {\n\
+                   def differs = [1] != [2];\n\
+                   fn main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              has_in "differs == (<< 1 >> /= << 2 >>)" tla);
+          Alcotest.test_case "unary minus compiles" `Quick (fun () ->
+              let cst =
+                parse
+                  "mod neg {\n\
+                   def literal = -1;\n\
+                   def expr = -(1 + 2);\n\
+                   fn main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              has_in "literal == -1" tla;
+              has_in "expr == (0 - (1 + 2))" tla);
           Alcotest.test_case "multiple modules" `Quick (fun () ->
               let cst =
                 parse

@@ -8,9 +8,11 @@ let cl3 x y z = { items = [ x; y; z ]; commas = [ n; n ] }
 let intlit v = IntLit { t = n; value = v }
 let boollit v = BoolLit { t = n; value = v }
 let var s = Var { t = n; name = s }
+let unop op r = UnOp { op_t = n; op; rhs = r }
 let binop op l r = BinOp { lhs = l; op_t = n; op; rhs = r }
 let app f args = App { name_t = n; name = f; lp = n; args; rp = n }
 let tuple elems tc = Tuple { lp = n; elems; trailing_comma = tc; rp = n }
+let sequence elems tc = Sequence { lb = n; elems; trailing_comma = tc; rb = n }
 let paren e = Paren { lp = n; inner = e; rp = n }
 let assign x e = Assign { name_t = n; name = x; eq_t = n; value = e }
 let call f args = Call { name_t = n; name = f; lp = n; args; rp = n }
@@ -194,6 +196,30 @@ let () =
                 "parse"
                 [ const_def "x" (binop Plus (intlit 1) (intlit 2)) ]
                 actual);
+          Alcotest.test_case "inequality expr" `Quick (fun () ->
+              let actual = parse_items "def x = 1 != 2;" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (binop Neq (intlit 1) (intlit 2)) ]
+                actual);
+          Alcotest.test_case "unary minus literal" `Quick (fun () ->
+              let actual = parse_items "def x = -1;" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (unop Neg (intlit 1)) ]
+                actual);
+          Alcotest.test_case "unary minus paren expr" `Quick (fun () ->
+              let actual = parse_items "def x = -(1 + 2);" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (unop Neg (paren (binop Plus (intlit 1) (intlit 2)))) ]
+                actual);
+          Alcotest.test_case "subtract negative" `Quick (fun () ->
+              let actual = parse_items "def x = y - -1;" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (binop Minus (var "y") (unop Neg (intlit 1))) ]
+                actual);
         ] );
       ( "fun_def",
         [
@@ -357,6 +383,33 @@ let () =
                        (cl2 (tuple (cl2 (intlit 1) (intlit 2)) None) (intlit 3))
                        None);
                 ]
+                actual);
+        ] );
+      ( "sequence",
+        [
+          Alcotest.test_case "empty" `Quick (fun () ->
+              let actual = parse_items "def x = [];" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (sequence cl0 None) ]
+                actual);
+          Alcotest.test_case "single" `Quick (fun () ->
+              let actual = parse_items "def x = [1];" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (sequence (cl1 (intlit 1)) None) ]
+                actual);
+          Alcotest.test_case "single trailing comma" `Quick (fun () ->
+              let actual = parse_items "def x = [1,];" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (sequence (cl1 (intlit 1)) (Some n)) ]
+                actual);
+          Alcotest.test_case "pair" `Quick (fun () ->
+              let actual = parse_items "def x = [1, 2];" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (sequence (cl2 (intlit 1) (intlit 2)) None) ]
                 actual);
         ] );
       ( "process",
