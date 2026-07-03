@@ -2,8 +2,9 @@ open Cst
 
 (* ===== Types ===== *)
 
-type tyvar = int
-
+(* Type variables are mutable cells: unification links a variable to a type
+   in place (union-find with path compression) instead of building and
+   composing substitutions. A type is read through [repr]. *)
 type ty =
   | TyInt
   | TyBool
@@ -11,10 +12,14 @@ type ty =
   | TyTuple of ty list
   | TySeq of ty
   | TyMap of ty * ty
-  | TyVar of tyvar
+  | TyVar of tyvar ref
   | TyFun of ty list * ty
 
-type tysc = TyScheme of tyvar list * ty
+and tyvar = Unbound of int | Link of ty
+
+(* A scheme quantifies the [Unbound] variables whose ids are listed;
+   [instantiate] copies the body replacing them with fresh variables. *)
+type tysc = TyScheme of int list * ty
 
 (* ===== Errors ===== *)
 
@@ -33,11 +38,24 @@ exception Type_error of type_error * loc
 
 let type_error err loc = raise (Type_error (err, loc))
 
+(* ===== Representative ===== *)
+
+(* Follow links to the type a chain of unifications produced, compressing
+   the path on the way. Never returns [TyVar { contents = Link _ }]. *)
+let rec repr = function
+  | TyVar ({ contents = Link ty } as r) ->
+      let t = repr ty in
+      r := Link t;
+      t
+  | ty -> ty
+
 (* ===== Free type variables ===== *)
 
-let rec freevar_ty = function
+let rec freevar_ty ty =
+  match repr ty with
   | TyInt | TyBool | TyUnit -> []
-  | TyVar v -> [ v ]
+  | TyVar { contents = Unbound v } -> [ v ]
+  | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
   | TyTuple tys -> List.concat_map freevar_ty tys
   | TySeq ty -> freevar_ty ty
   | TyMap (key_ty, value_ty) -> freevar_ty key_ty @ freevar_ty value_ty
@@ -52,71 +70,57 @@ let freevar_env env =
   List.concat_map (fun (_, tysc) -> freevar_tysc tysc) env
   |> List.sort_uniq compare
 
-(* ===== Substitution ===== *)
-
-type subst = (tyvar * ty) list
-
-let rec subst_ty (s : subst) = function
-  | TyInt -> TyInt
-  | TyBool -> TyBool
-  | TyUnit -> TyUnit
-  | TyVar v -> (
-      match List.assoc_opt v s with Some t -> subst_ty s t | None -> TyVar v)
-  | TyTuple tys -> TyTuple (List.map (subst_ty s) tys)
-  | TySeq ty -> TySeq (subst_ty s ty)
-  | TyMap (key_ty, value_ty) -> TyMap (subst_ty s key_ty, subst_ty s value_ty)
-  | TyFun (params, ret) -> TyFun (List.map (subst_ty s) params, subst_ty s ret)
-
-let compose_subst (s1 : subst) (s2 : subst) : subst =
-  let s2' = List.map (fun (v, t) -> (v, subst_ty s1 t)) s2 in
-  let s1_only = List.filter (fun (v, _) -> not (List.mem_assoc v s2)) s1 in
-  s2' @ s1_only
-
-let subst_env s env =
-  List.map
-    (fun (name, TyScheme (bound, ty)) ->
-      (name, TyScheme (bound, subst_ty s ty)))
-    env
-
-(* ===== Occurs check ===== *)
+(* ===== Unification ===== *)
 
 let occurs v ty = List.mem v (freevar_ty_set ty)
 
-(* ===== Unification ===== *)
-
-let rec unify loc (eqs : (ty * ty) list) : subst =
-  match eqs with
-  | [] -> []
-  | (t1, t2) :: rest when t1 = t2 -> unify loc rest
-  | (TyVar v, t) :: rest | (t, TyVar v) :: rest ->
-      if occurs v t then type_error Recursive_type loc;
-      let s = [ (v, t) ] in
-      let rest' = List.map (fun (a, b) -> (subst_ty s a, subst_ty s b)) rest in
-      compose_subst (unify loc rest') s
-  | (TyFun (ps1, r1), TyFun (ps2, r2)) :: rest ->
+let rec unify loc ty1 ty2 =
+  let ty1 = repr ty1 and ty2 = repr ty2 in
+  match (ty1, ty2) with
+  | TyVar r1, TyVar r2 when r1 == r2 -> ()
+  | TyVar ({ contents = Unbound v } as r), ty
+  | ty, TyVar ({ contents = Unbound v } as r) ->
+      if occurs v ty then type_error Recursive_type loc;
+      r := Link ty
+  | TyInt, TyInt | TyBool, TyBool | TyUnit, TyUnit -> ()
+  | TyFun (ps1, r1), TyFun (ps2, r2) ->
       if List.length ps1 <> List.length ps2 then
-        type_error (Type_clash (TyFun (ps1, r1), TyFun (ps2, r2))) loc;
-      unify loc (List.combine ps1 ps2 @ [ (r1, r2) ] @ rest)
-  | (TyTuple ts1, TyTuple ts2) :: rest ->
+        type_error (Type_clash (ty1, ty2)) loc;
+      List.iter2 (unify loc) ps1 ps2;
+      unify loc r1 r2
+  | TyTuple ts1, TyTuple ts2 ->
       if List.length ts1 <> List.length ts2 then
-        type_error (Type_clash (TyTuple ts1, TyTuple ts2)) loc;
-      unify loc (List.combine ts1 ts2 @ rest)
-  | (TySeq ty1, TySeq ty2) :: rest -> unify loc ((ty1, ty2) :: rest)
-  | (TyMap (k1, v1), TyMap (k2, v2)) :: rest ->
-      unify loc ((k1, k2) :: (v1, v2) :: rest)
-  | (t1, t2) :: _ -> type_error (Type_clash (t1, t2)) loc
+        type_error (Type_clash (ty1, ty2)) loc;
+      List.iter2 (unify loc) ts1 ts2
+  | TySeq t1, TySeq t2 -> unify loc t1 t2
+  | TyMap (k1, v1), TyMap (k2, v2) ->
+      unify loc k1 k2;
+      unify loc v1 v2
+  | t1, t2 -> type_error (Type_clash (t1, t2)) loc
 
 (* ===== Generalization / Instantiation ===== *)
 
 let generalize env ty =
-  let fv_ty = freevar_ty_set ty in
   let fv_env = freevar_env env in
-  let gen_vars = List.filter (fun v -> not (List.mem v fv_env)) fv_ty in
+  let gen_vars =
+    List.filter (fun v -> not (List.mem v fv_env)) (freevar_ty_set ty)
+  in
   TyScheme (gen_vars, ty)
 
 let instantiate fresh_tyvar (TyScheme (bound, ty)) =
-  let s = List.map (fun v -> (v, fresh_tyvar ())) bound in
-  subst_ty s ty
+  let mapping = List.map (fun v -> (v, fresh_tyvar ())) bound in
+  let rec copy ty =
+    match repr ty with
+    | TyVar { contents = Unbound v } as t -> (
+        match List.assoc_opt v mapping with Some fresh -> fresh | None -> t)
+    | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
+    | (TyInt | TyBool | TyUnit) as t -> t
+    | TyTuple tys -> TyTuple (List.map copy tys)
+    | TySeq ty -> TySeq (copy ty)
+    | TyMap (key_ty, value_ty) -> TyMap (copy key_ty, copy value_ty)
+    | TyFun (params, ret) -> TyFun (List.map copy params, copy ret)
+  in
+  copy ty
 
 (* ===== Type environment ===== *)
 
@@ -146,59 +150,51 @@ let builtin_signature fresh_tyvar = function
 
 (* ===== Infer expression type ===== *)
 
-let ty_prim fresh_tyvar _loc op ty1 ty2 =
+let ty_prim fresh_tyvar loc op ty1 ty2 =
   match op with
-  | Plus | Minus | Mult -> ([ (ty1, TyInt); (ty2, TyInt) ], TyInt)
-  | Lt | LtEq | GtEq -> ([ (ty1, TyInt); (ty2, TyInt) ], TyBool)
-  | And -> ([ (ty1, TyBool); (ty2, TyBool) ], TyBool)
-  | Or -> ([ (ty1, TyBool); (ty2, TyBool) ], TyBool)
+  | Plus | Minus | Mult ->
+      unify loc ty1 TyInt;
+      unify loc ty2 TyInt;
+      TyInt
+  | Lt | LtEq | GtEq ->
+      unify loc ty1 TyInt;
+      unify loc ty2 TyInt;
+      TyBool
+  | And | Or ->
+      unify loc ty1 TyBool;
+      unify loc ty2 TyBool;
+      TyBool
   | Eq | Neq ->
       let tv = fresh_tyvar () in
-      ([ (ty1, tv); (ty2, tv) ], TyBool)
+      unify loc ty1 tv;
+      unify loc ty2 tv;
+      TyBool
 
+(* Subscripting works on sequences and on int-keyed maps: pick by what is
+   already known about the collection, defaulting to a sequence. *)
 let infer_indexed_access fresh_tyvar loc collection_ty index_ty =
+  unify loc index_ty TyInt;
   let elem_ty = fresh_tyvar () in
-  try
-    let s = unify loc [ (index_ty, TyInt); (collection_ty, TySeq elem_ty) ] in
-    (s, subst_ty s elem_ty)
-  with Type_error _ ->
-    let s =
-      unify loc [ (index_ty, TyInt); (collection_ty, TyMap (TyInt, elem_ty)) ]
-    in
-    (s, subst_ty s elem_ty)
+  (match repr collection_ty with
+  | TyMap _ -> unify loc collection_ty (TyMap (TyInt, elem_ty))
+  | _ -> unify loc collection_ty (TySeq elem_ty));
+  elem_ty
 
 (* [loc] is the nearest enclosing step's location; expressions carry no
    locations of their own, so type errors point at their step. *)
 let rec infer_sequence_literal fresh_tyvar env loc elems =
   let elem_ty = fresh_tyvar () in
-  let s_acc =
-    List.fold_left
-      (fun s_acc elem ->
-        let env' = subst_env s_acc env in
-        let s_elem, ty_elem = infer_expr fresh_tyvar env' loc elem in
-        let s_combined = compose_subst s_elem s_acc in
-        let elem_ty' = subst_ty s_combined elem_ty in
-        let s_unify = unify loc [ (elem_ty', ty_elem) ] in
-        compose_subst s_unify s_combined)
-      [] elems
-  in
-  (s_acc, TySeq (subst_ty s_acc elem_ty))
+  List.iter
+    (fun elem -> unify loc elem_ty (infer_expr fresh_tyvar env loc elem))
+    elems;
+  TySeq elem_ty
 
 (* Infer the application of a value of type [fn_ty] to [args]. *)
-and infer_app fresh_tyvar env loc fn_ty args : subst * ty =
-  let s_acc, arg_tys =
-    List.fold_left
-      (fun (s_acc, tys) arg ->
-        let env' = subst_env s_acc env in
-        let s, ty = infer_expr fresh_tyvar env' loc arg in
-        (compose_subst s s_acc, tys @ [ ty ]))
-      ([], []) args
-  in
-  let ret_tv = fresh_tyvar () in
-  let expected_fn = TyFun (arg_tys, ret_tv) in
-  let fn_ty' = subst_ty s_acc fn_ty in
-  let s_u = unify loc [ (fn_ty', expected_fn) ] in
-  (compose_subst s_u s_acc, subst_ty s_u ret_tv)
+and infer_app fresh_tyvar env loc fn_ty args : ty =
+  let arg_tys = List.map (infer_expr fresh_tyvar env loc) args in
+  let ret_ty = fresh_tyvar () in
+  unify loc fn_ty (TyFun (arg_tys, ret_ty));
+  ret_ty
 
 (* Resolve [name] applied to [n_args] arguments: built-ins take precedence
    over the environment, and their arity is checked here so the error is an
@@ -214,64 +210,39 @@ and resolve_applied_name fresh_tyvar env loc name n_args : ty =
       | Some tysc -> instantiate fresh_tyvar tysc
       | None -> type_error (Unbound_variable name) loc)
 
-and infer_expr fresh_tyvar (env : tyenv) loc (e : expr) : subst * ty =
+and infer_expr fresh_tyvar (env : tyenv) loc (e : expr) : ty =
   match e with
-  | IntLit _ -> ([], TyInt)
-  | BoolLit _ -> ([], TyBool)
+  | IntLit _ -> TyInt
+  | BoolLit _ -> TyBool
   | Var { name; _ } -> (
       match List.assoc_opt name env with
-      | Some tysc -> ([], instantiate fresh_tyvar tysc)
+      | Some tysc -> instantiate fresh_tyvar tysc
       | None -> type_error (Unbound_variable name) loc)
-  | Self _ -> ([], TyInt)
+  | Self _ -> TyInt
   | UnOp { op = Neg; rhs; _ } ->
-      let s, ty = infer_expr fresh_tyvar env loc rhs in
-      let s2 = unify loc [ (ty, TyInt) ] in
-      (compose_subst s2 s, TyInt)
+      unify loc (infer_expr fresh_tyvar env loc rhs) TyInt;
+      TyInt
   | BinOp { op; lhs; rhs; _ } ->
-      let s1, ty1 = infer_expr fresh_tyvar env loc lhs in
-      let env' = subst_env s1 env in
-      let s2, ty2 = infer_expr fresh_tyvar env' loc rhs in
-      let ty1' = subst_ty s2 ty1 in
-      let eqs, result_ty = ty_prim fresh_tyvar loc op ty1' ty2 in
-      let s3 = unify loc eqs in
-      (compose_subst s3 (compose_subst s2 s1), subst_ty s3 result_ty)
+      let ty1 = infer_expr fresh_tyvar env loc lhs in
+      let ty2 = infer_expr fresh_tyvar env loc rhs in
+      ty_prim fresh_tyvar loc op ty1 ty2
   | App { name; args; _ } ->
       let fn_ty =
         resolve_applied_name fresh_tyvar env loc name (List.length args.items)
       in
       infer_app fresh_tyvar env loc fn_ty args.items
   | Subscript { lhs; index; _ } ->
-      let s1, lhs_ty = infer_expr fresh_tyvar env loc lhs in
-      let env' = subst_env s1 env in
-      let s2, index_ty = infer_expr fresh_tyvar env' loc index in
-      let lhs_ty' = subst_ty s2 lhs_ty in
-      let s3, result_ty =
-        infer_indexed_access fresh_tyvar loc lhs_ty' index_ty
-      in
-      (compose_subst s3 (compose_subst s2 s1), result_ty)
+      let lhs_ty = infer_expr fresh_tyvar env loc lhs in
+      let index_ty = infer_expr fresh_tyvar env loc index in
+      infer_indexed_access fresh_tyvar loc lhs_ty index_ty
   | MapInit { binder; lo; hi; value; _ } ->
-      let s1, lo_ty = infer_expr fresh_tyvar env loc lo in
-      let env' = subst_env s1 env in
-      let s2, hi_ty = infer_expr fresh_tyvar env' loc hi in
-      let s12 = compose_subst s2 s1 in
-      let s3 = unify loc [ (subst_ty s2 lo_ty, TyInt); (hi_ty, TyInt) ] in
-      let env'' = subst_env (compose_subst s3 s12) env in
-      let binder_env = (binder, tysc_of_ty TyInt) :: env'' in
-      let s4, value_ty = infer_expr fresh_tyvar binder_env loc value in
-      let s = compose_subst s4 (compose_subst s3 s12) in
-      (s, TyMap (TyInt, subst_ty s value_ty))
+      unify loc (infer_expr fresh_tyvar env loc lo) TyInt;
+      unify loc (infer_expr fresh_tyvar env loc hi) TyInt;
+      let binder_env = (binder, tysc_of_ty TyInt) :: env in
+      TyMap (TyInt, infer_expr fresh_tyvar binder_env loc value)
   | Tuple { elems; _ } ->
-      if elems.items = [] then ([], TyUnit)
-      else
-        let s_acc, tys =
-          List.fold_left
-            (fun (s_acc, tys) elem ->
-              let env' = subst_env s_acc env in
-              let s, ty = infer_expr fresh_tyvar env' loc elem in
-              (compose_subst s s_acc, tys @ [ ty ]))
-            ([], []) elems.items
-        in
-        (s_acc, TyTuple tys)
+      if elems.items = [] then TyUnit
+      else TyTuple (List.map (infer_expr fresh_tyvar env loc) elems.items)
   | Sequence { elems; _ } ->
       infer_sequence_literal fresh_tyvar env loc elems.items
   | Paren { inner; _ } -> infer_expr fresh_tyvar env loc inner
@@ -286,117 +257,71 @@ type proc_ctx = {
   fresh_tyvar : unit -> ty;
 }
 
-let check_simple_stmt (ctx : proc_ctx) loc (stmt : simple_stmt) : subst =
+let check_simple_stmt (ctx : proc_ctx) loc (stmt : simple_stmt) : unit =
   match stmt with
   | Assign { target; value; _ } -> (
       match target with
       | VarTarget { name; _ } -> (
           match List.assoc_opt name ctx.mutable_vars with
           | Some var_ty ->
-              let s1, val_ty = infer_expr ctx.fresh_tyvar ctx.env loc value in
-              let var_ty' = subst_ty s1 var_ty in
-              let s2 = unify loc [ (var_ty', val_ty) ] in
-              compose_subst s2 s1
+              unify loc var_ty (infer_expr ctx.fresh_tyvar ctx.env loc value)
           | None -> type_error (Assign_to_non_variable name) loc)
       | SubscriptTarget { name; index; _ } -> (
           match List.assoc_opt name ctx.mutable_vars with
           | Some container_ty ->
-              let s1, index_ty = infer_expr ctx.fresh_tyvar ctx.env loc index in
-              let env' = subst_env s1 ctx.env in
-              let s2, value_ty = infer_expr ctx.fresh_tyvar env' loc value in
-              let container_ty' = subst_ty (compose_subst s2 s1) container_ty in
-              let s3, elem_ty =
-                infer_indexed_access ctx.fresh_tyvar loc container_ty' index_ty
+              let index_ty = infer_expr ctx.fresh_tyvar ctx.env loc index in
+              let value_ty = infer_expr ctx.fresh_tyvar ctx.env loc value in
+              let elem_ty =
+                infer_indexed_access ctx.fresh_tyvar loc container_ty index_ty
               in
-              let value_ty' = subst_ty s3 value_ty in
-              let s4 = unify loc [ (subst_ty s3 elem_ty, value_ty') ] in
-              compose_subst s4 (compose_subst s3 (compose_subst s2 s1))
+              unify loc elem_ty value_ty
           | None -> type_error (Assign_to_non_variable name) loc))
   | Call { name; args; _ } -> (
       match List.assoc_opt name ctx.env with
       | None -> type_error (Unbound_variable name) loc
       | Some tysc ->
           let fn_ty = instantiate ctx.fresh_tyvar tysc in
-          let s, _ = infer_app ctx.fresh_tyvar ctx.env loc fn_ty args.items in
-          s)
+          let _ = infer_app ctx.fresh_tyvar ctx.env loc fn_ty args.items in
+          ())
   | Return { value; _ } ->
-      let s1, val_ty = infer_expr ctx.fresh_tyvar ctx.env loc value in
-      let ret_ty' = subst_ty s1 ctx.return_ty in
-      let s2 = unify loc [ (ret_ty', val_ty) ] in
-      compose_subst s2 s1
-  | Break _ ->
-      if not ctx.in_loop then type_error Break_outside_loop loc;
-      []
-  | Continue _ ->
-      if not ctx.in_loop then type_error Continue_outside_loop loc;
-      []
+      unify loc ctx.return_ty (infer_expr ctx.fresh_tyvar ctx.env loc value)
+  | Break _ -> if not ctx.in_loop then type_error Break_outside_loop loc
+  | Continue _ -> if not ctx.in_loop then type_error Continue_outside_loop loc
   | Await { cond; _ } ->
-      let s1, cond_ty = infer_expr ctx.fresh_tyvar ctx.env loc cond in
-      let s2 = unify loc [ (cond_ty, TyBool) ] in
-      compose_subst s2 s1
+      unify loc (infer_expr ctx.fresh_tyvar ctx.env loc cond) TyBool
 
-let apply_subst_ctx s ctx =
-  {
-    ctx with
-    env = subst_env s ctx.env;
-    mutable_vars = List.map (fun (n, t) -> (n, subst_ty s t)) ctx.mutable_vars;
-    return_ty = subst_ty s ctx.return_ty;
-  }
-
-let rec check_body (ctx : proc_ctx) (steps : body) : subst =
+let rec check_body (ctx : proc_ctx) (steps : body) : unit =
   match steps with
-  | [] -> []
-  | step :: rest ->
-      let s1, ctx' = check_step ctx step in
-      let ctx'' = apply_subst_ctx s1 ctx' in
-      let s2 = check_body ctx'' rest in
-      compose_subst s2 s1
+  | [] -> ()
+  | step :: rest -> check_body (check_step ctx step) rest
 
-and check_step (ctx : proc_ctx) (step : step) : subst * proc_ctx =
+(* Returns the context for the following steps: VarStep extends it, every
+   other step leaves it unchanged. *)
+and check_step (ctx : proc_ctx) (step : step) : proc_ctx =
   match step with
-  | EmptyStep _ -> ([], ctx)
+  | EmptyStep _ -> ctx
   | SimpleStep { stmts; loc; _ } ->
-      let s =
-        List.fold_left
-          (fun s_acc stmt ->
-            let ctx' = apply_subst_ctx s_acc ctx in
-            let s = check_simple_stmt ctx' loc stmt in
-            compose_subst s s_acc)
-          [] stmts.items
-      in
-      (s, ctx)
+      List.iter (check_simple_stmt ctx loc) stmts.items;
+      ctx
   | BlockStep { stmt = While { cond; body; _ }; loc } ->
-      let s1, cond_ty = infer_expr ctx.fresh_tyvar ctx.env loc cond in
-      let s2 = unify loc [ (cond_ty, TyBool) ] in
-      let s12 = compose_subst s2 s1 in
-      let ctx' = apply_subst_ctx s12 { ctx with in_loop = true } in
-      let s3 = check_body ctx' body in
-      (compose_subst s3 s12, ctx)
+      unify loc (infer_expr ctx.fresh_tyvar ctx.env loc cond) TyBool;
+      check_body { ctx with in_loop = true } body;
+      ctx
   | BlockStep { stmt = If { cond; body; else_branch; _ }; loc } ->
-      let s1, cond_ty = infer_expr ctx.fresh_tyvar ctx.env loc cond in
-      let s2 = unify loc [ (cond_ty, TyBool) ] in
-      let s12 = compose_subst s2 s1 in
-      let ctx' = apply_subst_ctx s12 ctx in
-      let s3 = check_body ctx' body in
-      let ctx'' = apply_subst_ctx s3 ctx' in
-      let s4 =
-        match else_branch with
-        | Some (_, _, else_body, _) -> check_body ctx'' else_body
-        | None -> []
-      in
-      (compose_subst s4 (compose_subst s3 s12), ctx)
+      unify loc (infer_expr ctx.fresh_tyvar ctx.env loc cond) TyBool;
+      check_body ctx body;
+      (match else_branch with
+      | Some (_, _, else_body, _) -> check_body ctx else_body
+      | None -> ());
+      ctx
   | VarStep { name; value; loc; _ } ->
-      let s1, val_ty = infer_expr ctx.fresh_tyvar ctx.env loc value in
-      let env' = subst_env s1 ctx.env in
-      let tysc = generalize env' (subst_ty s1 val_ty) in
-      let ctx' =
-        {
-          ctx with
-          env = (name, tysc) :: env';
-          mutable_vars = (name, subst_ty s1 val_ty) :: ctx.mutable_vars;
-        }
-      in
-      (s1, ctx')
+      let val_ty = infer_expr ctx.fresh_tyvar ctx.env loc value in
+      let tysc = generalize ctx.env val_ty in
+      {
+        ctx with
+        env = (name, tysc) :: ctx.env;
+        mutable_vars = (name, val_ty) :: ctx.mutable_vars;
+      }
 
 (* ===== Check a module ===== *)
 
@@ -408,17 +333,15 @@ let check_module (m : module_def) : unit =
   let fresh_tyvar () =
     let v = !tyvar_counter in
     incr tyvar_counter;
-    TyVar v
+    TyVar (ref (Unbound v))
   in
   let _env =
     List.fold_left
       (fun env (item : item) ->
         match item with
         | ConstDef { name; value; _ } ->
-            let s1, ty = infer_expr fresh_tyvar env module_level_loc value in
-            let env' = subst_env s1 env in
-            let tysc = generalize env' (subst_ty s1 ty) in
-            (name, tysc) :: env'
+            let ty = infer_expr fresh_tyvar env module_level_loc value in
+            (name, generalize env ty) :: env
         | FunDef { name; params; body_expr; _ } ->
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params.items in
             let param_env =
@@ -426,19 +349,15 @@ let check_module (m : module_def) : unit =
                 (fun (_, pname) pty -> (pname, tysc_of_ty pty))
                 params.items param_tys
             in
-            let fn_env = param_env @ env in
-            let s1, body_ty =
-              infer_expr fresh_tyvar fn_env module_level_loc body_expr
+            let body_ty =
+              infer_expr fresh_tyvar (param_env @ env) module_level_loc
+                body_expr
             in
-            let fn_ty = TyFun (List.map (subst_ty s1) param_tys, body_ty) in
-            let env' = subst_env s1 env in
-            let tysc = generalize env' (subst_ty s1 fn_ty) in
-            (name, tysc) :: env'
+            let fn_ty = TyFun (param_tys, body_ty) in
+            (name, generalize env fn_ty) :: env
         | VarDecl { name; value; _ } ->
-            let s1, ty = infer_expr fresh_tyvar env module_level_loc value in
-            let env' = subst_env s1 env in
-            let tysc = tysc_of_ty (subst_ty s1 ty) in
-            (name, tysc) :: env'
+            let ty = infer_expr fresh_tyvar env module_level_loc value in
+            (name, tysc_of_ty ty) :: env
         | ProcDef { name = proc_name; params; body; _ } ->
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params.items in
             let param_env =
@@ -476,23 +395,15 @@ let check_module (m : module_def) : unit =
                 fresh_tyvar;
               }
             in
-            let s1 = check_body ctx body in
-            let fn_ty' =
-              TyFun (List.map (subst_ty s1) param_tys, subst_ty s1 return_ty)
-            in
-            let env' = subst_env s1 env in
-            let tysc = generalize env' (subst_ty s1 fn_ty') in
-            (proc_name, tysc) :: env'
+            check_body ctx body;
+            (proc_name, generalize env fn_ty) :: env
         | Process { proc; lo; hi; loc; _ } ->
             (match List.assoc_opt proc env with
             | None -> type_error (Unbound_variable proc) loc
             | Some _ -> ());
-            let s1, lo_ty = infer_expr fresh_tyvar env loc lo in
-            let env' = subst_env s1 env in
-            let s2, hi_ty = infer_expr fresh_tyvar env' loc hi in
-            let s12 = compose_subst s2 s1 in
-            let s3 = unify loc [ (subst_ty s2 lo_ty, TyInt); (hi_ty, TyInt) ] in
-            subst_env (compose_subst s3 s12) env)
+            unify loc (infer_expr fresh_tyvar env loc lo) TyInt;
+            unify loc (infer_expr fresh_tyvar env loc hi) TyInt;
+            env)
       [] m.items
   in
   ()
@@ -504,13 +415,15 @@ let check (prog : program) : unit =
 
 (* ===== Pretty printing for error messages ===== *)
 
-let rec string_of_ty = function
+let rec string_of_ty ty =
+  match repr ty with
   | TyInt -> "int"
   | TyBool -> "bool"
   | TyUnit -> "unit"
-  | TyVar v ->
+  | TyVar { contents = Unbound v } ->
       let c = Char.chr (Char.code 'a' + (v mod 26)) in
       Printf.sprintf "'%c" c
+  | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
   | TyTuple tys -> "(" ^ String.concat ", " (List.map string_of_ty tys) ^ ")"
   | TySeq ty -> "[" ^ string_of_ty ty ^ "]"
   | TyMap (key_ty, value_ty) ->
@@ -523,7 +436,8 @@ let rec string_of_ty = function
       in
       params_s ^ " -> " ^ string_of_ty ret
 
-and paren_fun_ty = function
+and paren_fun_ty ty =
+  match repr ty with
   | TyFun _ as t -> "(" ^ string_of_ty t ^ ")"
   | t -> string_of_ty t
 
