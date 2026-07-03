@@ -16,6 +16,7 @@ let self_ = node Self
 let unop op r = node (UnOp (op, r))
 let binop op l r = node (BinOp (op, l, r))
 let app f args = node (App (f, args))
+let builtin_ b args = node (Builtin (b, args))
 let subscript lhs index = node (Subscript (lhs, index))
 let map_init binder lo hi value = node (MapInit { binder; lo; hi; value })
 let tuple elems _tc = node (Tuple elems)
@@ -190,6 +191,21 @@ let () =
                     (cl1 (param "x"))
                     (binop Plus (var "x") (intlit 1));
                 ]
+                actual);
+        ] );
+      ( "builtin",
+        [
+          Alcotest.test_case "application resolves to builtin" `Quick (fun () ->
+              let actual = parse_items "def x = head(xs);" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (builtin_ Sanpou.Builtin.Head (cl1 (var "xs"))) ]
+                actual);
+          Alcotest.test_case "non-builtin stays an app" `Quick (fun () ->
+              let actual = parse_items "def x = first(xs);" in
+              Alcotest.(check (list (testable pp_item equal_item)))
+                "parse"
+                [ const_def "x" (app "first" (cl1 (var "xs"))) ]
                 actual);
         ] );
       ( "var_decl",

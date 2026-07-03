@@ -48,6 +48,7 @@ let rec alpha_expr env st (e : expr) : expr =
     | BinOp (op, lhs, rhs) ->
         BinOp (op, alpha_expr env st lhs, alpha_expr env st rhs)
     | App (name, args) -> App (name, List.map (alpha_expr env st) args)
+    | Builtin (b, args) -> Builtin (b, List.map (alpha_expr env st) args)
     | Subscript (lhs, index) ->
         Subscript (alpha_expr env st lhs, alpha_expr env st index)
     | MapInit { binder; lo; hi; value } ->

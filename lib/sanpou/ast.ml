@@ -26,6 +26,7 @@ and expr_desc =
   | UnOp of unop * expr
   | BinOp of binop * expr * expr
   | App of id * expr list
+  | Builtin of Builtin.t * expr list
   | Subscript of expr * expr
   | MapInit of { binder : id; lo : expr; hi : expr; value : expr }
   | Tuple of expr list

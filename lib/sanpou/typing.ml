@@ -132,21 +132,21 @@ let tysc_of_ty ty = TyScheme ([], ty)
 
 (* Instantiated per use: each call gets fresh type variables, like a
    polymorphic function type would after [instantiate]. *)
-let builtin_signature fresh_tyvar = function
-  | "globally" | "finally" -> Some ([ TyBool ], TyBool)
-  | "head" ->
+let builtin_signature fresh_tyvar (b : Builtin.t) =
+  match b with
+  | Globally | Finally -> ([ TyBool ], TyBool)
+  | Head ->
       let elem_ty = fresh_tyvar () in
-      Some ([ TySeq elem_ty ], elem_ty)
-  | "tail" ->
+      ([ TySeq elem_ty ], elem_ty)
+  | Tail ->
       let elem_ty = fresh_tyvar () in
-      Some ([ TySeq elem_ty ], TySeq elem_ty)
-  | "append" ->
+      ([ TySeq elem_ty ], TySeq elem_ty)
+  | Append ->
       let elem_ty = fresh_tyvar () in
-      Some ([ TySeq elem_ty; elem_ty ], TySeq elem_ty)
-  | "concat" ->
+      ([ TySeq elem_ty; elem_ty ], TySeq elem_ty)
+  | Concat ->
       let elem_ty = fresh_tyvar () in
-      Some ([ TySeq elem_ty; TySeq elem_ty ], TySeq elem_ty)
-  | _ -> None
+      ([ TySeq elem_ty; TySeq elem_ty ], TySeq elem_ty)
 
 (* ===== Infer expression type ===== *)
 
@@ -198,20 +198,6 @@ and infer_app fresh_tyvar env loc fn_ty args : ty =
   unify loc fn_ty (TyFun (arg_tys, ret_ty));
   ret_ty
 
-(* Resolve [name] applied to [n_args] arguments: built-ins take precedence
-   over the environment, and their arity is checked here so the error is an
-   Arity_mismatch rather than a TyFun clash. *)
-and resolve_applied_name fresh_tyvar env loc name n_args : ty =
-  match builtin_signature fresh_tyvar name with
-  | Some (param_tys, ret_ty) ->
-      if List.length param_tys <> n_args then
-        type_error (Arity_mismatch (name, List.length param_tys, n_args)) loc;
-      TyFun (param_tys, ret_ty)
-  | None -> (
-      match List.assoc_opt name env with
-      | Some tysc -> instantiate fresh_tyvar tysc
-      | None -> type_error (Unbound_variable name) loc)
-
 and infer_expr fresh_tyvar (env : tyenv) (e : expr) : ty =
   match e.desc with
   | IntLit _ -> TyInt
@@ -230,9 +216,20 @@ and infer_expr fresh_tyvar (env : tyenv) (e : expr) : ty =
       ty_prim fresh_tyvar ~lhs_loc:lhs.loc ~rhs_loc:rhs.loc op ty1 ty2
   | App (name, args) ->
       let fn_ty =
-        resolve_applied_name fresh_tyvar env e.loc name (List.length args)
+        match List.assoc_opt name env with
+        | Some tysc -> instantiate fresh_tyvar tysc
+        | None -> type_error (Unbound_variable name) e.loc
       in
       infer_app fresh_tyvar env e.loc fn_ty args
+  | Builtin (b, args) ->
+      (* Arity is checked here so the error is an Arity_mismatch rather than
+         a TyFun clash. *)
+      let param_tys, ret_ty = builtin_signature fresh_tyvar b in
+      if List.length param_tys <> List.length args then
+        type_error
+          (Arity_mismatch (Builtin.name b, List.length param_tys, List.length args))
+          e.loc;
+      infer_app fresh_tyvar env e.loc (TyFun (param_tys, ret_ty)) args
   | Subscript (lhs, index) ->
       let lhs_ty = infer_expr fresh_tyvar env lhs in
       let index_ty = infer_expr fresh_tyvar env index in
