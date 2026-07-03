@@ -27,21 +27,21 @@ let wrapper_discard_label process_name = "__w_" ^ process_name ^ "_discard__"
 
 type stack_op =
   | StackNone
-  | StackPush of string * string * Cst.expr list
+  | StackPush of string * string * Ast.expr list
     (* procedure name, return label, arguments *)
-  | StackReturn of Cst.expr (* return value *)
+  | StackReturn of Ast.expr (* return value *)
   | StackDiscard (* pop return value after call *)
   | StackPopAssign of string (* assign return value, then pop *)
 
-type pc_dest = PcNext of string | PcBranch of Cst.expr * string * string
+type pc_dest = PcNext of string | PcBranch of Ast.expr * string * string
 
 type assignment =
-  | AssignVar of string * Cst.expr
-  | AssignIndex of string * Cst.expr * Cst.expr
+  | AssignVar of string * Ast.expr
+  | AssignIndex of string * Ast.expr * Ast.expr
 
 type action = {
   label : string;
-  guard : Cst.expr option;
+  guard : Ast.expr option;
   assignments : assignment list;
   pc_dest : pc_dest;
   stack_op : stack_op;
@@ -54,7 +54,7 @@ let make_action ?guard ?(assignments = []) ?(stack_op = StackNone) ~label
 
 type proc_ir = {
   proc_name : string;
-  params : Cst.id list;
+  params : Ast.id list;
   actions : action list;
   entry_label : string;
 }
@@ -63,16 +63,16 @@ type process_ir = {
   name : string;
   proc : string;
   fair : bool;
-  lo : Cst.expr;
-  hi : Cst.expr;
-  loc : Cst.loc;
+  lo : Ast.expr;
+  hi : Ast.expr;
+  loc : Ast.loc;
 }
 
 type module_ir = {
   name : string;
-  const_defs : (string * Cst.expr) list;
-  fun_defs : (string * string list * Cst.expr) list;
-  var_decls : (string * Cst.expr) list;
+  const_defs : (string * Ast.expr) list;
+  fun_defs : (string * string list * Ast.expr) list;
+  var_decls : (string * Ast.expr) list;
   local_var_decls : string list;
   var_infos : var_info list;
   procs : proc_ir list;

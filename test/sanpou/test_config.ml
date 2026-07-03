@@ -1,9 +1,9 @@
 let parse input =
   input |> Lexing.from_string |> Sanpou.Parser.program Sanpou.Lexer.main
 
-let compile ?(config = Sanpou.Config.default) cst =
-  Sanpou.Typing.check cst;
-  cst |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
+let compile ?(config = Sanpou.Config.default) ast =
+  Sanpou.Typing.check ast;
+  ast |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
   |> List.map (Sanpou.Emit_tla.generate_module ~config)
 
 let has_substring needle haystack =
@@ -93,7 +93,7 @@ let () =
         [
           test_case "termination disabled leaves tla unchanged" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
@@ -101,13 +101,13 @@ let () =
                    fair process p = f in 1..1;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               check_not_has "Terminating ==" tla;
               check_not_has "Termination ==" tla;
               check_not_has "\\/ Terminating" tla);
           test_case "termination enabled emits predicates and next branch"
             `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
@@ -120,7 +120,7 @@ let () =
                   {|{ "checks": { "termination": true, "deadlock": false } }|}
               in
               let tla =
-                compile ~config cst |> List.hd |> Tla.Tla_printer.render
+                compile ~config ast |> List.hd |> Tla.Tla_printer.render
               in
               check_has "Terminating ==" tla;
               check_has "\\A self \\in ProcSet: pc[self] = \"Done\"" tla;

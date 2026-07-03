@@ -143,10 +143,10 @@ lib/
   sanpou/      Compiler core
     lexer.mll      Lexer (ocamllex)
     parser.mly     Parser (Menhir)
-    cst.ml         Concrete Syntax Tree (CST)
-    cst_printer.ml CST pretty printer
+    ast.ml         Abstract Syntax Tree (AST)
+    ast_printer.ml AST pretty printer
     alpha_convert.ml  Alpha conversion pass
-    linearize.ml      CST → action IR lowering
+    linearize.ml      AST → action IR lowering
     emit_tla.ml       Action IR → TLA+ AST
     config.ml         Sidecar config parser and TLC .cfg generator
     source_map.ml  Label ↔ source line mapping

@@ -1,115 +1,39 @@
-open Sanpou.Cst
+open Sanpou.Ast
 open Sanpou.Ir
 
-let n = ""
 let loc0 = { line = 0; col = 0 }
-let cl0 = { items = []; commas = [] }
-let cl1 x = { items = [ x ]; commas = [] }
-let intlit v = IntLit { loc = loc0; t = n; value = v }
-let boollit v = BoolLit { loc = loc0; t = n; value = v }
-let var s = Var { loc = loc0; t = n; name = s }
-let app f args = App { loc = loc0; name_t = n; name = f; lp = n; args; rp = n }
-
-let assign x e =
-  Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }
-
-let call_ f = Call { name_t = n; name = f; lp = n; args = cl0; rp = n }
-let return_ e = Return { t = n; value = e }
-let break_ = Break { t = n }
-let await_ e = Await { t = n; cond = e }
-let tuple0 = Tuple { loc = loc0; lp = n; elems = cl0; trailing_comma = None; rp = n }
-let simple_step stmts = SimpleStep { loc = loc0; stmts; semi_t = n }
-let empty_step = EmptyStep { loc = loc0; semi_t = n }
-
-let var_step name value =
-  VarStep
-    { loc = loc0; var_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
-
-let while_block cond body =
-  BlockStep
-    {
-      loc = loc0;
-      stmt = While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n };
-    }
-
-let if_block cond body =
-  BlockStep
-    {
-      loc = loc0;
-      stmt =
-        If
-          {
-            if_t = n;
-            lp = n;
-            cond;
-            rp = n;
-            lb = n;
-            body;
-            rb = n;
-            else_branch = None;
-          };
-    }
-
-let make_proc name body =
-  ProcDef
-    {
-      loc = loc0;
-      fn_t = n;
-      name_t = n;
-      name;
-      lp = n;
-      params = cl0;
-      rp = n;
-      lb = n;
-      body;
-      rb = n;
-    }
-
-let make_var name value =
-  VarDecl { var_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
-
-let make_const name value =
-  ConstDef { def_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
-
-let make_fundef name params body_expr =
-  FunDef
-    {
-      def_t = n;
-      name_t = n;
-      name;
-      lp = n;
-      params = { items = List.map (fun p -> (n, p)) params; commas = [] };
-      rp = n;
-      eq_t = n;
-      body_expr;
-      semi_t = n;
-    }
+let node desc = { desc; loc = loc0 }
+let cl0 = []
+let cl1 x = [ x ]
+let intlit v = node (IntLit v)
+let boollit v = node (BoolLit v)
+let var s = node (Var s)
+let app f args = node (App (f, args))
+let assign x e = node (Assign (VarTarget x, e))
+let call_ f = node (Call (f, []))
+let return_ e = node (Return e)
+let break_ = node Break
+let await_ e = node (Await e)
+let tuple0 = node (Tuple [])
+let simple_step stmts = node (SimpleStep stmts)
+let empty_step = node EmptyStep
+let var_step name value = node (VarStep (name, value))
+let while_block cond body = node (BlockStep (While { cond; body }))
+let if_block cond body = node (BlockStep (If { cond; body; else_body = None }))
+let make_proc name body = node (ProcDef { name; params = []; body })
+let make_var name value = node (VarDecl { name; value })
+let make_const name value = node (ConstDef { name; value })
+let make_fundef name params body_expr = node (FunDef { name; params; body_expr })
 
 let make_process ?(fair = false) name proc lo hi =
-  Process
-    {
-      loc = loc0;
-      fair_t = (if fair then Some n else None);
-      process_t = n;
-      name_t = n;
-      name;
-      eq_t = n;
-      proc_t = n;
-      proc;
-      in_t = n;
-      lo;
-      dotdot_t = n;
-      hi;
-      semi_t = n;
-    }
+  node (Process { name; proc; fair; lo; hi })
 
-let make_module name items =
-  { mod_t = n; name_t = n; mod_name = name; lb = n; items; rb = n }
+let make_module name items = { mod_name = name; items; mod_loc = loc0 }
 
 (* Renames with original = tla_name so descriptions are unaffected *)
-let make_alpha_module cst local_vars : Sanpou.Alpha_convert.alpha_module =
+let make_alpha_module ast local_vars : Sanpou.Alpha_convert.alpha_module =
   {
-    cst;
+    ast;
     renames =
       List.map
         (fun name ->
@@ -370,7 +294,7 @@ let () =
                 List.find
                   (fun (a : action) ->
                     match a.assignments with
-                    | [ AssignVar ("x", Var { name = "callRet__1"; _ }) ] ->
+                    | [ AssignVar ("x", { desc = Var "callRet__1"; _ }) ] ->
                         true
                     | _ -> false)
                   foo.actions

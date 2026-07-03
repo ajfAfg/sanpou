@@ -1,6 +1,6 @@
-open Cst
+open Ast
 
-(* ===== Alpha conversion: CST → CST with unique variable names ===== *)
+(* ===== Alpha conversion: AST → AST with unique variable names ===== *)
 
 (* BinderVar = MapInit binder: never becomes a TLA state variable, but is
    still needed to demangle descriptions *)
@@ -13,7 +13,7 @@ type rename = {
   kind : rename_kind;
 }
 
-type alpha_module = { cst : Cst.module_def; renames : rename list }
+type alpha_module = { ast : Ast.module_def; renames : rename list }
 
 type alpha_state = {
   var_name_counter : int ref;
@@ -39,161 +39,119 @@ let resolve env name =
 
 (* ===== Expression alpha conversion ===== *)
 
-let rec alpha_expr env st = function
-  | IntLit _ as e -> e
-  | BoolLit _ as e -> e
-  | Var r -> Var { r with name = resolve env r.name }
-  | Self _ as e -> e
-  | UnOp r -> UnOp { r with rhs = alpha_expr env st r.rhs }
-  | BinOp r ->
-      BinOp
-        { r with lhs = alpha_expr env st r.lhs; rhs = alpha_expr env st r.rhs }
-  | App r ->
-      App
-        {
-          r with
-          args =
-            { r.args with items = List.map (alpha_expr env st) r.args.items };
-        }
-  | Subscript r ->
-      Subscript
-        {
-          r with
-          lhs = alpha_expr env st r.lhs;
-          index = alpha_expr env st r.index;
-        }
-  | MapInit r ->
-      let binder' = fresh_var_name st r.binder in
-      collect_rename st ~original:r.binder ~tla_name:binder' ~kind:BinderVar;
-      let env' = (r.binder, binder') :: env in
-      MapInit
-        {
-          r with
-          binder = binder';
-          lo = alpha_expr env st r.lo;
-          hi = alpha_expr env st r.hi;
-          value = alpha_expr env' st r.value;
-        }
-  | Tuple r ->
-      Tuple
-        {
-          r with
-          elems =
-            { r.elems with items = List.map (alpha_expr env st) r.elems.items };
-        }
-  | Sequence r ->
-      Sequence
-        {
-          r with
-          elems =
-            { r.elems with items = List.map (alpha_expr env st) r.elems.items };
-        }
-  | Paren r -> Paren { r with inner = alpha_expr env st r.inner }
+let rec alpha_expr env st (e : expr) : expr =
+  let desc =
+    match e.desc with
+    | (IntLit _ | BoolLit _ | Self) as d -> d
+    | Var name -> Var (resolve env name)
+    | UnOp (op, rhs) -> UnOp (op, alpha_expr env st rhs)
+    | BinOp (op, lhs, rhs) ->
+        BinOp (op, alpha_expr env st lhs, alpha_expr env st rhs)
+    | App (name, args) -> App (name, List.map (alpha_expr env st) args)
+    | Subscript (lhs, index) ->
+        Subscript (alpha_expr env st lhs, alpha_expr env st index)
+    | MapInit { binder; lo; hi; value } ->
+        let binder' = fresh_var_name st binder in
+        collect_rename st ~original:binder ~tla_name:binder' ~kind:BinderVar;
+        let env' = (binder, binder') :: env in
+        MapInit
+          {
+            binder = binder';
+            lo = alpha_expr env st lo;
+            hi = alpha_expr env st hi;
+            value = alpha_expr env' st value;
+          }
+    | Tuple elems -> Tuple (List.map (alpha_expr env st) elems)
+    | Sequence elems -> Sequence (List.map (alpha_expr env st) elems)
+  in
+  { e with desc }
 
-and alpha_assign_target env st = function
-  | VarTarget r -> VarTarget { r with name = resolve env r.name }
-  | SubscriptTarget r ->
-      SubscriptTarget
-        { r with name = resolve env r.name; index = alpha_expr env st r.index }
+let alpha_assign_target env st = function
+  | VarTarget name -> VarTarget (resolve env name)
+  | SubscriptTarget (name, index) ->
+      SubscriptTarget (resolve env name, alpha_expr env st index)
 
 (* ===== Step and body alpha conversion ===== *)
 
-let rec alpha_step st env = function
-  | SimpleStep r ->
-      let alpha_simple_stmt = function
-        | Assign assign_r ->
-            Assign
-              {
-                assign_r with
-                target = alpha_assign_target env st assign_r.target;
-                value = alpha_expr env st assign_r.value;
-              }
-        | Call call_r ->
-            Call
-              {
-                call_r with
-                args =
-                  {
-                    call_r.args with
-                    items = List.map (alpha_expr env st) call_r.args.items;
-                  };
-              }
-        | Return return_r ->
-            Return { return_r with value = alpha_expr env st return_r.value }
-        | Break _ as simple_stmt -> simple_stmt
-        | Continue _ as simple_stmt -> simple_stmt
-        | Await await_r ->
-            Await { await_r with cond = alpha_expr env st await_r.cond }
-      in
-      let stmts =
-        { r.stmts with items = List.map alpha_simple_stmt r.stmts.items }
-      in
-      SimpleStep { r with stmts }
-  | EmptyStep _ as s -> s
-  | BlockStep r -> BlockStep { r with stmt = alpha_block_stmt st env r.stmt }
-  | VarStep _ -> failwith "VarStep should be handled in alpha_body"
+let rec alpha_step st env (step : step) : step =
+  let desc =
+    match step.desc with
+    | SimpleStep stmts ->
+        let alpha_simple_stmt (stmt : simple_stmt) : simple_stmt =
+          let desc =
+            match stmt.desc with
+            | Assign (target, value) ->
+                Assign
+                  (alpha_assign_target env st target, alpha_expr env st value)
+            | Call (name, args) ->
+                Call (name, List.map (alpha_expr env st) args)
+            | Return value -> Return (alpha_expr env st value)
+            | (Break | Continue) as d -> d
+            | Await cond -> Await (alpha_expr env st cond)
+          in
+          { stmt with desc }
+        in
+        SimpleStep (List.map alpha_simple_stmt stmts)
+    | EmptyStep -> EmptyStep
+    | BlockStep stmt -> BlockStep (alpha_block_stmt st env stmt)
+    | VarStep _ -> failwith "VarStep should be handled in alpha_body"
+  in
+  { step with desc }
 
 and alpha_block_stmt st env = function
-  | While r ->
-      While
-        {
-          r with
-          cond = alpha_expr env st r.cond;
-          body = alpha_body st env r.body;
-        }
-  | If r ->
+  | While { cond; body } ->
+      While { cond = alpha_expr env st cond; body = alpha_body st env body }
+  | If { cond; body; else_body } ->
       If
         {
-          r with
-          cond = alpha_expr env st r.cond;
-          body = alpha_body st env r.body;
-          else_branch =
-            Option.map
-              (fun (else_t, else_lb, else_body, else_rb) ->
-                (else_t, else_lb, alpha_body st env else_body, else_rb))
-              r.else_branch;
+          cond = alpha_expr env st cond;
+          body = alpha_body st env body;
+          else_body = Option.map (alpha_body st env) else_body;
         }
 
-and alpha_body st env steps =
+and alpha_body st env (steps : body) : body =
   match steps with
   | [] -> []
-  | VarStep r :: rest ->
-      let tla_name = fresh_var_name st r.name in
-      collect_rename st ~original:r.name ~tla_name ~kind:LocalVar;
-      let alpha_value = alpha_expr env st r.value in
-      let new_env = (r.name, tla_name) :: env in
-      VarStep { r with name = tla_name; value = alpha_value }
+  | ({ desc = VarStep (name, value); _ } as step) :: rest ->
+      let tla_name = fresh_var_name st name in
+      collect_rename st ~original:name ~tla_name ~kind:LocalVar;
+      let alpha_value = alpha_expr env st value in
+      let new_env = (name, tla_name) :: env in
+      { step with desc = VarStep (tla_name, alpha_value) }
       :: alpha_body st new_env rest
   | step :: rest -> alpha_step st env step :: alpha_body st env rest
 
 (* ===== Module transformation ===== *)
 
-let transform_module (m : Cst.module_def) : alpha_module =
+let transform_module (m : Ast.module_def) : alpha_module =
   let st = create_state () in
   let items =
     List.map
-      (fun (item : Cst.item) ->
-        match item with
-        | ProcDef r ->
-            st.current_proc := r.name;
+      (fun (item : Ast.item) ->
+        match item.desc with
+        | ProcDef { name; params; body } ->
+            st.current_proc := name;
             let env_rev, params_rev =
               List.fold_left
-                (fun (env_acc, params_acc) (comma, param) ->
+                (fun (env_acc, params_acc) param ->
                   let fresh = fresh_var_name st param in
                   collect_rename st ~original:param ~tla_name:fresh
                     ~kind:ParamVar;
-                  ((param, fresh) :: env_acc, (comma, fresh) :: params_acc))
-                ([], []) r.params.items
+                  ((param, fresh) :: env_acc, fresh :: params_acc))
+                ([], []) params
             in
             let env = List.rev env_rev in
-            let params = { r.params with items = List.rev params_rev } in
-            ProcDef { r with params; body = alpha_body st env r.body }
+            let params = List.rev params_rev in
+            {
+              item with
+              desc = ProcDef { name; params; body = alpha_body st env body };
+            }
         | _ -> item)
       m.items
   in
-  { cst = { m with items }; renames = get_renames st }
+  { ast = { m with items }; renames = get_renames st }
 
 (* ===== Public API ===== *)
 
-let transform (prog : Cst.program) : alpha_module list =
-  List.map transform_module prog.modules
+let transform (prog : Ast.program) : alpha_module list =
+  List.map transform_module prog
