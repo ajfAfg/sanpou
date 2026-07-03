@@ -20,7 +20,9 @@ let rec cst_to_tla local_vars = function
   | Cst.IntLit { value; _ } -> TInt value
   | Cst.BoolLit { value; _ } -> TBool value
   | Cst.Var { name; _ } ->
-      if List.mem name local_vars then TSubscript (TId name, TId "self")
+      (* Locals live in the top stack frame; globals are plain variables *)
+      if List.mem name local_vars then
+        TDot (THead (TSubscript (TId "stack", TId "self")), name)
       else TId name
   | Cst.Self _ -> TId "self"
   | Cst.UnOp { op = Neg; rhs; _ } -> (
@@ -133,164 +135,160 @@ let wrapper_of_process (process : process_ir) : process_wrapper =
 
 let compute_unchanged (ir : module_ir) (action : action) : string list =
   let global_vars = List.map fst ir.var_decls in
-  let all_vars = global_vars @ ir.local_var_decls in
+  let is_local name = List.mem name ir.local_var_decls in
   let assigned =
     (match action.stack_op with
-      | StackDiscard -> ir.local_var_decls
-      | StackPopAssign name -> name :: ir.local_var_decls
+      | StackPopAssign name when not (is_local name) -> [ name ]
       | _ -> [])
-    @ List.map
+    @ List.filter_map
         (function
-          | AssignVar (name, _) -> name | AssignIndex (name, _, _) -> name)
+          | AssignVar (name, _) | AssignIndex (name, _, _) ->
+              if is_local name then None else Some name)
         action.assignments
   in
-  let unchanged = List.filter (fun v -> not (List.mem v assigned)) all_vars in
-  match action.stack_op with
-  | StackNone -> "stack" :: unchanged
-  | _ -> unchanged
+  let unchanged =
+    List.filter (fun v -> not (List.mem v assigned)) global_vars
+  in
+  let stack_touched =
+    action.stack_op <> StackNone
+    || List.exists
+         (function
+           | AssignVar (name, _) | AssignIndex (name, _, _) -> is_local name)
+         action.assignments
+  in
+  if stack_touched then unchanged else "stack" :: unchanged
 
 (* ===== Action IR → TLA+ AST ===== *)
 
-let action_to_decl proc_entry_labels local_vars (ir : module_ir)
+(* Locals live in the top frame of stack[self]. Every write to a local is an
+   update of that frame, so each action builds a single stack' expression:
+   frame updates first, then the stack operation. This relies on an invariant
+   guaranteed by Linearize: an action assigns locals of procedure P only while
+   a P-frame is on top (pop actions carry no guards/assignments, so the
+   transient [value |-> v] record is never read or written except by them). *)
+let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
     (action : action) : tla_decl =
   let to_tla = cst_to_tla local_vars in
   let self = TId "self" in
   let conjuncts = ref [] in
   let add c = conjuncts := !conjuncts @ [ c ] in
-  let stack_head = THead (TSubscript (TId "stack", self)) in
-  let restore_local_vars except_var =
-    List.iter
-      (fun var ->
-        if Some var <> except_var then
+  let stack_self = TSubscript (TId "stack", self) in
+  let stack_head = THead stack_self in
+  let pc_dest_val () =
+    match action.pc_dest with
+    | PcNext l -> TStr l
+    | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
+  in
+  let set_pc v = add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", [ ([ SubSel self ], v) ]))) in
+  add (TBinOp ("=", TSubscript (TId "pc", self), TStr action.label));
+  (match action.guard with Some g -> add (to_tla g) | None -> ());
+  (* Split assignments: globals become their own conjuncts, locals become
+     EXCEPT updates of the top frame folded into stack'. *)
+  let local_updates =
+    List.filter_map
+      (function
+        | AssignVar (var, expr) when List.mem var local_vars ->
+            Some ([ SubSel (TInt 1); FieldSel var ], to_tla expr)
+        | AssignIndex (var, index, expr) when List.mem var local_vars ->
+            Some
+              ( [ SubSel (TInt 1); FieldSel var; SubSel (to_tla index) ],
+                to_tla expr )
+        | _ -> None)
+      action.assignments
+  in
+  List.iter
+    (function
+      | AssignVar (var, expr) when not (List.mem var local_vars) ->
+          add (TBinOp ("=", TPrimed (TId var), to_tla expr))
+      | AssignIndex (var, index, expr) when not (List.mem var local_vars) ->
           add
             (TBinOp
                ( "=",
                  TPrimed (TId var),
-                 TExcept (TId var, self, TDot (stack_head, var)) )))
-      local_vars
-  in
-  add (TBinOp ("=", TSubscript (TId "pc", self), TStr action.label));
-  (match action.guard with Some g -> add (to_tla g) | None -> ());
-  List.iter
-    (function
-      | AssignVar (var, expr) ->
-          if List.mem var local_vars then
-            add
-              (TBinOp
-                 ("=", TPrimed (TId var), TExcept (TId var, self, to_tla expr)))
-          else add (TBinOp ("=", TPrimed (TId var), to_tla expr))
-      | AssignIndex (var, index, expr) ->
-          if List.mem var local_vars then
-            let local_collection = TSubscript (TId var, self) in
-            let updated_local =
-              TExcept (local_collection, to_tla index, to_tla expr)
-            in
-            add
-              (TBinOp
-                 ("=", TPrimed (TId var), TExcept (TId var, self, updated_local)))
-          else
-            add
-              (TBinOp
-                 ( "=",
-                   TPrimed (TId var),
-                   TExcept (TId var, to_tla index, to_tla expr) )))
+                 TExcept (TId var, [ ([ SubSel (to_tla index) ], to_tla expr) ])
+               ))
+      | _ -> ())
     action.assignments;
+  let base =
+    if local_updates = [] then stack_self
+    else TExcept (stack_self, local_updates)
+  in
+  (* The new value of stack[self], if the action touches the stack at all *)
+  let new_stack_self =
+    match action.stack_op with
+    | StackNone -> if local_updates = [] then None else Some base
+    | StackPush (proc_name, return_label, args) ->
+        let params, other_fields = List.assoc proc_name frame_fields in
+        (* Bind params to args (evaluated in the caller's frame, unprimed).
+           Not-yet-assigned fields (the callee's locals, and params of a
+           process root proc pushed by a wrapper) start as the null sentinel:
+           sanpou values are never strings, so "__null__" cannot collide with
+           a user value and keeps "unassigned" distinguishable from a computed
+           0. Every field must exist at push time: TLC silently ignores EXCEPT
+           updates to missing record fields. *)
+        let null_value = TStr "__null__" in
+        let rec bind params args =
+          match (params, args) with
+          | [], _ -> []
+          | p :: ps, [] -> (p, null_value) :: bind ps []
+          | p :: ps, a :: rest -> (p, to_tla a) :: bind ps rest
+        in
+        let frame =
+          TRecord
+            ([
+               ("procedure", TStr proc_name); ("return_pc", TStr return_label);
+             ]
+            @ bind params args
+            @ List.map (fun v -> (v, null_value)) other_fields)
+        in
+        Some (TConcat (TSeqLit [ frame ], base))
+    | StackReturn retval ->
+        (* Replace the departing frame with a record carrying only the return
+           value; the caller's pop action consumes it. *)
+        Some
+          (TConcat
+             (TSeqLit [ TRecord [ ("value", to_tla retval) ] ], TTail base))
+    | StackDiscard -> Some (TTail base)
+    | StackPopAssign var ->
+        if List.mem var local_vars then
+          (* After Tail the caller's frame is element 1 *)
+          Some
+            (TExcept
+               ( TTail base,
+                 [
+                   ( [ SubSel (TInt 1); FieldSel var ],
+                     TDot (stack_head, "value") );
+                 ] ))
+        else (
+          add (TBinOp ("=", TPrimed (TId var), TDot (stack_head, "value")));
+          Some (TTail base))
+  in
+  (match new_stack_self with
+  | Some v ->
+      add
+        (TBinOp
+           ( "=",
+             TPrimed (TId "stack"),
+             TExcept (TId "stack", [ ([ SubSel self ], v) ]) ))
+  | None -> ());
   (match action.stack_op with
-  | StackPush (proc_name, return_label, _) ->
-      let entry = List.assoc proc_name proc_entry_labels in
-      let saved_locals =
-        List.map (fun var -> (var, TSubscript (TId var, self))) local_vars
-      in
-      add
-        (TBinOp
-           ( "=",
-             TPrimed (TId "stack"),
-             TExcept
-               ( TId "stack",
-                 self,
-                 TConcat
-                   ( TSeqLit
-                       [
-                         TRecord
-                           ([
-                              ("procedure", TStr proc_name);
-                              ("return_pc", TStr return_label);
-                            ]
-                           @ saved_locals);
-                       ],
-                     TSubscript (TId "stack", self) ) ) ));
-      add
-        (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, TStr entry)))
-  | StackReturn retval ->
-      let saved_locals =
-        List.map (fun var -> (var, TDot (stack_head, var))) local_vars
-      in
-      add
-        (TBinOp
-           ( "=",
-             TPrimed (TId "pc"),
-             TExcept (TId "pc", self, TDot (stack_head, "return_pc")) ));
-      add
-        (TBinOp
-           ( "=",
-             TPrimed (TId "stack"),
-             TExcept
-               ( TId "stack",
-                 self,
-                 TConcat
-                   ( TSeqLit
-                       [ TRecord (("value", to_tla retval) :: saved_locals) ],
-                     TTail (TSubscript (TId "stack", self)) ) ) ))
-  | StackDiscard ->
-      let pc_val =
-        match action.pc_dest with
-        | PcNext l -> TStr l
-        | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
-      in
-      restore_local_vars None;
-      add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, pc_val)));
-      add
-        (TBinOp
-           ( "=",
-             TPrimed (TId "stack"),
-             TExcept (TId "stack", self, TTail (TSubscript (TId "stack", self)))
-           ))
-  | StackPopAssign var ->
-      let pc_val =
-        match action.pc_dest with
-        | PcNext l -> TStr l
-        | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
-      in
-      let return_value = TDot (stack_head, "value") in
-      restore_local_vars (Some var);
-      if List.mem var local_vars then
-        add
-          (TBinOp ("=", TPrimed (TId var), TExcept (TId var, self, return_value)))
-      else add (TBinOp ("=", TPrimed (TId var), return_value));
-      add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, pc_val)));
-      add
-        (TBinOp
-           ( "=",
-             TPrimed (TId "stack"),
-             TExcept (TId "stack", self, TTail (TSubscript (TId "stack", self)))
-           ))
-  | StackNone ->
-      let pc_val =
-        match action.pc_dest with
-        | PcNext l -> TStr l
-        | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
-      in
-      add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, pc_val))));
+  | StackPush (proc_name, _, _) ->
+      set_pc (TStr (List.assoc proc_name proc_entry_labels))
+  | StackReturn _ -> set_pc (TDot (stack_head, "return_pc"))
+  | StackDiscard | StackPopAssign _ | StackNone -> set_pc (pc_dest_val ()));
   let unchanged = compute_unchanged ir action in
   if unchanged <> [] then add (TUnchanged (List.map (fun v -> TId v) unchanged));
   DOpDef (action.label, [ "self" ], TConj (Block, !conjuncts))
 
-let proc_to_decls proc_entry_labels local_vars (ir : module_ir) (proc : proc_ir)
-    : tla_decl list =
+let proc_to_decls proc_entry_labels frame_fields local_vars (ir : module_ir)
+    (proc : proc_ir) : tla_decl list =
   let action_decls =
     List.concat_map
       (fun a ->
-        [ action_to_decl proc_entry_labels local_vars ir a; DSeparator ])
+        [
+          action_to_decl proc_entry_labels frame_fields local_vars ir a;
+          DSeparator;
+        ])
       proc.actions
   in
   let action_labels = List.map (fun (a : action) -> a.label) proc.actions in
@@ -321,13 +319,33 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
       (fun (p : proc_ir) -> (p.proc_name, p.entry_label))
       all_runtime_procs
   in
+  (* Frame layout per procedure: params (in declaration order) plus the
+     procedure's other locals (user vars and callRet temps). Only procs in
+     ir.procs can be pushed (wrappers are never callees). *)
+  let frame_fields =
+    List.map
+      (fun (p : proc_ir) ->
+        let other_fields =
+          List.filter_map
+            (fun (v : var_info) ->
+              match v.proc with
+              | Some owner
+                when owner = p.proc_name && not (List.mem v.tla_name p.params)
+                ->
+                  Some v.tla_name
+              | _ -> None)
+            ir.var_infos
+        in
+        (p.proc_name, (p.params, other_fields)))
+      ir.procs
+  in
   let decls = ref [] in
   let add d = decls := !decls @ [ d ] in
   let add_sep () = add DSeparator in
   add (DExtends [ "TLC"; "Sequences"; "Integers" ]);
   add_sep ();
   let global_vars = List.map fst ir.var_decls in
-  let all_tla_vars = ("pc" :: global_vars) @ ir.local_var_decls @ [ "stack" ] in
+  let all_tla_vars = ("pc" :: global_vars) @ [ "stack" ] in
   add (DVariables all_tla_vars);
   add_sep ();
   add (DOpDef ("vars", [], TSeqLit (List.map (fun v -> TId v) all_tla_vars)));
@@ -357,11 +375,6 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
     ir.var_decls;
   add_init
     (TBinOp ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit [])));
-  List.iter
-    (fun name ->
-      add_init
-        (TBinOp ("=", TId name, TFuncMap ("self", TId "ProcSet", TInt 0))))
-    ir.local_var_decls;
   (match ir.processes with
   | [ single ] ->
       let wrapper =
@@ -397,7 +410,9 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
   add_sep ();
   List.iter
     (fun proc ->
-      List.iter add (proc_to_decls proc_entry_labels ir.local_var_decls ir proc);
+      List.iter add
+        (proc_to_decls proc_entry_labels frame_fields ir.local_var_decls ir
+           proc);
       add_sep ())
     all_runtime_procs;
   let procedure_procs = ir.procs in
