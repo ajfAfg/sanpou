@@ -34,7 +34,11 @@ let cmd_compile file outdir =
   let config_opt = load_compile_config file in
   let config = Option.value ~default:Sanpou.Config.default config_opt in
   let cst = Sanpou.Parser.program Sanpou.Lexer.main lexbuf in
-  Sanpou.Typing.check cst;
+  (try Sanpou.Typing.check cst
+   with Sanpou.Typing.Type_error (err, { line; col }) ->
+     Printf.eprintf "%s:%d:%d: %s\n" file line col
+       (Sanpou.Typing.string_of_type_error err);
+     exit 1);
   let irs = Sanpou.Alpha_convert.transform cst |> Sanpou.Linearize.linearize in
   if not (Sys.file_exists outdir) then Sys.mkdir outdir 0o755;
   List.iter
