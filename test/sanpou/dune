@@ -3,7 +3,7 @@
   test_parse
   test_compile
   test_config
-  test_cst_printer
+  test_ast_printer
   test_typing
   test_alpha_convert
   test_linearize

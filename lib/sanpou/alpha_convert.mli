@@ -1,4 +1,4 @@
-(** Alpha conversion: CST -> CST in which every procedure-local binding
+(** Alpha conversion: AST -> AST in which every procedure-local binding
     (parameter, [var], MapInit binder) has a unique TLA-safe name. The renames
     are recorded so later passes can map TLA names back to source names. *)
 
@@ -16,6 +16,6 @@ type rename = {
   kind : rename_kind;
 }
 
-type alpha_module = { cst : Cst.module_def; renames : rename list }
+type alpha_module = { ast : Ast.module_def; renames : rename list }
 
-val transform : Cst.program -> alpha_module list
+val transform : Ast.program -> alpha_module list

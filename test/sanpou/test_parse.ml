@@ -1,157 +1,55 @@
-open Sanpou.Cst
+open Sanpou.Ast
 
+(* Trailing-comma markers are not represented in the AST; the [tc] parameters
+   below are kept so call sites read like the surface syntax. *)
 let n = ""
 let loc0 = { line = 0; col = 0 }
-let cl0 = { items = []; commas = [] }
-let cl1 x = { items = [ x ]; commas = [] }
-let cl2 x y = { items = [ x; y ]; commas = [ n ] }
-let cl3 x y z = { items = [ x; y; z ]; commas = [ n; n ] }
-let intlit v = IntLit { loc = loc0; t = n; value = v }
-let boollit v = BoolLit { loc = loc0; t = n; value = v }
-let var s = Var { loc = loc0; t = n; name = s }
-let self_ = Self { loc = loc0; t = n }
-let unop op r = UnOp { loc = loc0; op_t = n; op; rhs = r }
-let binop op l r = BinOp { loc = loc0; lhs = l; op_t = n; op; rhs = r }
-let app f args = App { loc = loc0; name_t = n; name = f; lp = n; args; rp = n }
-let subscript lhs index = Subscript { loc = loc0; lhs; lb_t = n; index; rb_t = n }
-
-let map_init binder lo hi value =
-  MapInit
-    {
-      loc = loc0;
-      lb = n;
-      binder_t = n;
-      binder;
-      in_t = n;
-      lo;
-      dotdot_t = n;
-      hi;
-      colon_t = n;
-      value;
-      trailing_semi_t = Some n;
-      rb = n;
-    }
-
-let tuple elems tc = Tuple { loc = loc0; lp = n; elems; trailing_comma = tc; rp = n }
-let sequence elems tc = Sequence { loc = loc0; lb = n; elems; trailing_comma = tc; rb = n }
-let paren e = Paren { loc = loc0; lp = n; inner = e; rp = n }
-
-let assign x e =
-  Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }
-
-let index_assign x index e =
-  Assign
-    {
-      target =
-        SubscriptTarget { name_t = n; name = x; lb_t = n; index; rb_t = n };
-      eq_t = n;
-      value = e;
-    }
-
-let call f args = Call { name_t = n; name = f; lp = n; args; rp = n }
-let return_ e = Return { t = n; value = e }
-let break_ = Break { t = n }
-let continue_ = Continue { t = n }
-let await_ e = Await { t = n; cond = e }
-
-let simple_step stmts =
-  SimpleStep { loc = { line = 0; col = 0 }; stmts; semi_t = n }
-
-let empty_step = EmptyStep { loc = { line = 0; col = 0 }; semi_t = n }
-let block_step s = BlockStep { loc = { line = 0; col = 0 }; stmt = s }
-
-let while_ cond body =
-  While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n }
-
-let if_ cond body =
-  If
-    { if_t = n; lp = n; cond; rp = n; lb = n; body; rb = n; else_branch = None }
-
-let if_else cond body else_body =
-  If
-    {
-      if_t = n;
-      lp = n;
-      cond;
-      rp = n;
-      lb = n;
-      body;
-      rb = n;
-      else_branch = Some (n, n, else_body, n);
-    }
-
-let const_def x e =
-  ConstDef { def_t = n; name_t = n; name = x; eq_t = n; value = e; semi_t = n }
-
-let fun_def f ps e =
-  FunDef
-    {
-      def_t = n;
-      name_t = n;
-      name = f;
-      lp = n;
-      params = ps;
-      rp = n;
-      eq_t = n;
-      body_expr = e;
-      semi_t = n;
-    }
-
-let var_decl x e =
-  VarDecl { var_t = n; name_t = n; name = x; eq_t = n; value = e; semi_t = n }
-
-let proc_def f ps body =
-  ProcDef
-    {
-      loc = { line = 0; col = 0 };
-      fn_t = n;
-      name_t = n;
-      name = f;
-      lp = n;
-      params = ps;
-      rp = n;
-      lb = n;
-      body;
-      rb = n;
-    }
+let node desc = { desc; loc = loc0 }
+let cl0 = []
+let cl1 x = [ x ]
+let cl2 x y = [ x; y ]
+let cl3 x y z = [ x; y; z ]
+let intlit v = node (IntLit v)
+let boollit v = node (BoolLit v)
+let var s = node (Var s)
+let self_ = node Self
+let unop op r = node (UnOp (op, r))
+let binop op l r = node (BinOp (op, l, r))
+let app f args = node (App (f, args))
+let subscript lhs index = node (Subscript (lhs, index))
+let map_init binder lo hi value = node (MapInit { binder; lo; hi; value })
+let tuple elems _tc = node (Tuple elems)
+let sequence elems _tc = node (Sequence elems)
+let paren e = e
+let assign x e = node (Assign (VarTarget x, e))
+let index_assign x index e = node (Assign (SubscriptTarget (x, index), e))
+let call f args = node (Call (f, args))
+let return_ e = node (Return e)
+let break_ = node Break
+let continue_ = node Continue
+let await_ e = node (Await e)
+let simple_step stmts = node (SimpleStep stmts)
+let empty_step = node EmptyStep
+let block_step s = node (BlockStep s)
+let while_ cond body = While { cond; body }
+let if_ cond body = If { cond; body; else_body = None }
+let if_else cond body else_body = If { cond; body; else_body = Some else_body }
+let const_def x e = node (ConstDef { name = x; value = e })
+let fun_def f ps e = node (FunDef { name = f; params = ps; body_expr = e })
+let var_decl x e = node (VarDecl { name = x; value = e })
+let proc_def f ps body = node (ProcDef { name = f; params = ps; body })
 
 let process_ ?(fair = false) nm pr lo hi =
-  Process
-    {
-      loc = { line = 0; col = 0 };
-      fair_t = (if fair then Some n else None);
-      process_t = n;
-      name_t = n;
-      name = nm;
-      eq_t = n;
-      proc_t = n;
-      proc = pr;
-      in_t = n;
-      lo;
-      dotdot_t = n;
-      hi;
-      semi_t = n;
-    }
+  node (Process { name = nm; proc = pr; fair; lo; hi })
 
-let param s = (n, s)
-
-let var_step x e =
-  VarStep
-    {
-      loc = { line = 0; col = 0 };
-      var_t = n;
-      name_t = n;
-      name = x;
-      eq_t = n;
-      value = e;
-      semi_t = n;
-    }
+let param s = s
+let var_step x e = node (VarStep (x, e))
 
 let parse input =
   input |> Lexing.from_string |> Sanpou.Parser.program Sanpou.Lexer.main
 
 let parse_items input =
-  match (parse ("mod test { " ^ input ^ " }")).modules with
+  match parse ("mod test { " ^ input ^ " }") with
   | [ { items; _ } ] -> items
   | _ -> failwith "expected single module"
 

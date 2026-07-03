@@ -1,64 +1,23 @@
-open Sanpou.Cst
+open Sanpou.Ast
 
-let n = ""
 let loc0 = { line = 0; col = 0 }
-let cl0 = { items = []; commas = [] }
-let cl1 x = { items = [ x ]; commas = [] }
-let intlit v = IntLit { loc = loc0; t = n; value = v }
-let boollit v = BoolLit { loc = loc0; t = n; value = v }
-let var s = Var { loc = loc0; t = n; name = s }
-let binop op l r = BinOp { loc = loc0; lhs = l; op_t = n; op; rhs = r }
-
-let assign x e =
-  Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }
-
-let return_ e = Return { t = n; value = e }
-let await_ e = Await { t = n; cond = e }
-let simple_step stmts = SimpleStep { loc = loc0; stmts; semi_t = n }
-
-let var_step name value =
-  VarStep
-    { loc = loc0; var_t = n; name_t = n; name; eq_t = n; value; semi_t = n }
-
-let while_block cond body =
-  BlockStep
-    {
-      loc = loc0;
-      stmt = While { while_t = n; lp = n; cond; rp = n; lb = n; body; rb = n };
-    }
+let node desc = { desc; loc = loc0 }
+let cl1 x = [ x ]
+let intlit v = node (IntLit v)
+let boollit v = node (BoolLit v)
+let var s = node (Var s)
+let binop op l r = node (BinOp (op, l, r))
+let assign x e = node (Assign (VarTarget x, e))
+let return_ e = node (Return e)
+let await_ e = node (Await e)
+let simple_step stmts = node (SimpleStep stmts)
+let var_step name value = node (VarStep (name, value))
+let while_block cond body = node (BlockStep (While { cond; body }))
 
 let if_block cond body =
-  BlockStep
-    {
-      loc = loc0;
-      stmt =
-        If
-          {
-            if_t = n;
-            lp = n;
-            cond;
-            rp = n;
-            lb = n;
-            body;
-            rb = n;
-            else_branch = None;
-          };
-    }
+  node (BlockStep (If { cond; body; else_body = None }))
 
-let make_proc name body =
-  ProcDef
-    {
-      loc = loc0;
-      fn_t = n;
-      name_t = n;
-      name;
-      lp = n;
-      params = cl0;
-      rp = n;
-      lb = n;
-      body;
-      rb = n;
-    }
+let make_proc name body = node (ProcDef { name; params = []; body })
 
 (* TLA names of renamed variables that become state variables (i.e. not
    MapInit binders), in declaration order *)
@@ -70,10 +29,8 @@ let local_tla_names (am : Sanpou.Alpha_convert.alpha_module) =
       | _ -> Some r.tla_name)
     am.renames
 
-let make_module items =
-  { mod_t = n; name_t = n; mod_name = "m"; lb = n; items; rb = n }
-
-let make_program modules = { modules; eof_t = n }
+let make_module items = { mod_name = "m"; items; mod_loc = loc0 }
+let make_program modules = modules
 
 let transform_one input =
   let result = Sanpou.Alpha_convert.transform input in
@@ -83,34 +40,39 @@ let get_proc_body (am : Sanpou.Alpha_convert.alpha_module) proc_name =
   let item =
     List.find
       (fun (item : item) ->
-        match item with ProcDef { name; _ } -> name = proc_name | _ -> false)
-      am.cst.items
+        match item.desc with
+        | ProcDef { name; _ } -> name = proc_name
+        | _ -> false)
+      am.ast.items
   in
-  match item with ProcDef { body; _ } -> body | _ -> assert false
+  match item.desc with ProcDef { body; _ } -> body | _ -> assert false
 
-let extract_var_name = function
-  | Var { name; _ } -> name
-  | _ -> failwith "expected Var"
+let extract_var_name (e : expr) =
+  match e.desc with Var name -> name | _ -> failwith "expected Var"
 
-let extract_assign_name = function
-  | Assign { target = VarTarget { name; _ }; _ } -> name
-  | Assign { target = SubscriptTarget { name; _ }; _ } -> name
+let extract_assign_name (stmt : simple_stmt) =
+  match stmt.desc with
+  | Assign (VarTarget name, _) | Assign (SubscriptTarget (name, _), _) -> name
   | _ -> failwith "expected Assign"
 
-let extract_assign_value = function
-  | Assign { value; _ } -> value
+let extract_assign_value (stmt : simple_stmt) =
+  match stmt.desc with
+  | Assign (_, value) -> value
   | _ -> failwith "expected Assign"
 
-let extract_var_step_name = function
-  | VarStep { name; _ } -> name
+let extract_var_step_name (step : step) =
+  match step.desc with
+  | VarStep (name, _) -> name
   | _ -> failwith "expected VarStep"
 
-let extract_var_step_value = function
-  | VarStep { value; _ } -> value
+let extract_var_step_value (step : step) =
+  match step.desc with
+  | VarStep (_, value) -> value
   | _ -> failwith "expected VarStep"
 
-let extract_simple_stmts = function
-  | SimpleStep { stmts; _ } -> stmts.items
+let extract_simple_stmts (step : step) =
+  match step.desc with
+  | SimpleStep stmts -> stmts
   | _ -> failwith "expected SimpleStep"
 
 let () =
@@ -196,8 +158,8 @@ let () =
               let body = get_proc_body am "foo" in
               check string "outer" "x__1"
                 (extract_var_step_name (List.nth body 0));
-              match List.nth body 1 with
-              | BlockStep { stmt = While { body = while_body; _ }; _ } ->
+              match (List.nth body 1).desc with
+              | BlockStep (While { body = while_body; _ }) ->
                   check string "inner" "x__2"
                     (extract_var_step_name (List.hd while_body))
               | _ -> fail "expected while");
@@ -328,8 +290,8 @@ let () =
               let body = get_proc_body am "foo" in
               let stmts = extract_simple_stmts (List.nth body 1) in
               let value = extract_assign_value (List.hd stmts) in
-              match value with
-              | BinOp { lhs; _ } ->
+              match value.desc with
+              | BinOp (_, lhs, _) ->
                   check string "lhs renamed" "x__1" (extract_var_name lhs)
               | _ -> fail "expected BinOp");
           test_case "await cond renamed" `Quick (fun () ->
@@ -349,47 +311,26 @@ let () =
               let am = transform_one prog in
               let body = get_proc_body am "foo" in
               let stmts = extract_simple_stmts (List.nth body 1) in
-              match List.hd stmts with
-              | Await { cond; _ } ->
-                  check string "cond" "x__1" (extract_var_name cond)
+              match (List.hd stmts).desc with
+              | Await cond -> check string "cond" "x__1" (extract_var_name cond)
               | _ -> fail "expected Await");
         ] );
       ( "non_proc_items",
         [
           test_case "const def unchanged" `Quick (fun () ->
-              let const =
-                ConstDef
-                  {
-                    def_t = n;
-                    name_t = n;
-                    name = "c";
-                    eq_t = n;
-                    value = intlit 1;
-                    semi_t = n;
-                  }
-              in
+              let const = node (ConstDef { name = "c"; value = intlit 1 }) in
               let prog = make_program [ make_module [ const ] ] in
               let am = transform_one prog in
-              match List.hd am.cst.items with
-              | ConstDef { name; value; _ } ->
+              match (List.hd am.ast.items).desc with
+              | ConstDef { name; value } ->
                   check string "name" "c" name;
                   check bool "value" true (equal_expr (intlit 1) value)
               | _ -> fail "expected ConstDef");
           test_case "var decl unchanged" `Quick (fun () ->
-              let vd =
-                VarDecl
-                  {
-                    var_t = n;
-                    name_t = n;
-                    name = "v";
-                    eq_t = n;
-                    value = intlit 0;
-                    semi_t = n;
-                  }
-              in
+              let vd = node (VarDecl { name = "v"; value = intlit 0 }) in
               let prog = make_program [ make_module [ vd ] ] in
               let am = transform_one prog in
-              match List.hd am.cst.items with
+              match (List.hd am.ast.items).desc with
               | VarDecl { name; _ } -> check string "name" "v" name
               | _ -> fail "expected VarDecl");
         ] );

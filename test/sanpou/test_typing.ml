@@ -2,13 +2,13 @@ let parse input =
   input |> Lexing.from_string |> Sanpou.Parser.program Sanpou.Lexer.main
 
 let check_ok input =
-  let cst = parse input in
-  Sanpou.Typing.check cst
+  let ast = parse input in
+  Sanpou.Typing.check ast
 
 let check_fails input =
-  let cst = parse input in
+  let ast = parse input in
   try
-    Sanpou.Typing.check cst;
+    Sanpou.Typing.check ast;
     Alcotest.fail "Expected type error"
   with Sanpou.Typing.Type_error _ -> ()
 

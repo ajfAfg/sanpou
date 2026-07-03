@@ -30,12 +30,12 @@ let tlc_available =
 (* ===== Compile pipeline ===== *)
 
 let compile_to_tla source =
-  let cst =
+  let ast =
     source |> Lexing.from_string |> Sanpou.Parser.program Sanpou.Lexer.main
   in
-  Sanpou.Typing.check cst;
+  Sanpou.Typing.check ast;
   let irs =
-    cst |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
+    ast |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
   in
   List.map
     (fun ir ->

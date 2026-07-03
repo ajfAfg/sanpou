@@ -75,9 +75,9 @@ mod rwlock {
 }
 |}
 
-let compile cst =
-  Sanpou.Typing.check cst;
-  cst |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
+let compile ast =
+  Sanpou.Typing.check ast;
+  ast |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
   |> List.map Sanpou.Emit_tla.generate_module
 
 let has_in s tla =
@@ -103,7 +103,7 @@ let () =
       ( "codegen",
         [
           Alcotest.test_case "simple proc" `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod foo {\n\
                    var x = 0;\n\
@@ -111,7 +111,7 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = compile cst in
+              let modules = compile ast in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "---- MODULE foo ----";
@@ -123,21 +123,21 @@ let () =
               has "====");
           Alcotest.test_case "top-level return uses process wrapper" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod foo {\n\
                    fn foo() { return (); }\n\
                    process ps = foo in 1..1;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
               has "__process_ps_wrapper__(self) ==";
               has "__w_ps_entry__(self) ==";
               has "__w_ps_discard__(self) ==";
               has "pc = [self \\in ProcSet |-> \"__w_ps_entry__\"]");
           Alcotest.test_case "fair process adds weak fairness" `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod foo {\n\
                    var x = 0;\n\
@@ -145,7 +145,7 @@ let () =
                    fair process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = compile cst in
+              let modules = compile ast in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "WF_vars(__process_ps_wrapper__(self))";
@@ -153,7 +153,7 @@ let () =
               has "====");
           Alcotest.test_case "fair process covers helper procedures" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod foo {\n\
                    var x = 0;\n\
@@ -162,7 +162,7 @@ let () =
                    fair process ps = main in 1..2;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
               has "WF_vars(__process_ps_wrapper__(self))";
               has "WF_vars(main(self))";
@@ -170,7 +170,7 @@ let () =
               has "return_pc |->");
           Alcotest.test_case "plain process omits weak fairness" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod foo {\n\
                    var x = 0;\n\
@@ -178,7 +178,7 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = compile cst in
+              let modules = compile ast in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has_not s =
                 Alcotest.(check bool)
@@ -190,8 +190,8 @@ let () =
               in
               has_not "WF_vars(foo(self))");
           Alcotest.test_case "full example compiles" `Quick (fun () ->
-              let cst = parse full_example in
-              let modules = compile cst in
+              let ast = parse full_example in
+              let modules = compile ast in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "---- MODULE rwlock ----";
@@ -208,7 +208,7 @@ let () =
               has "====");
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod seqs {\n\
                    def xs = [1, 2];\n\
@@ -220,7 +220,7 @@ let () =
                    process ps = main in 1..1;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
               has "xs == << 1, 2 >>";
               has "y == Head(xs)";
@@ -229,7 +229,7 @@ let () =
               has "ws == xs \\o << 4, 5 >>");
           Alcotest.test_case "inequality compiles to tla not-equals" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod neq {\n\
                    def differs = [1] != [2];\n\
@@ -237,10 +237,10 @@ let () =
                    process ps = main in 1..1;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "differs == (<< 1 >> /= << 2 >>)" tla);
           Alcotest.test_case "or compiles to tla disjunction" `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod ormod {\n\
                    def either = true || false;\n\
@@ -248,11 +248,11 @@ let () =
                    process ps = main in 1..1;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "either == (TRUE \\/ FALSE)" tla);
           Alcotest.test_case "map init and indexed update compile" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod maps {\n\
                    var xs = { i in 1..2: 0; };\n\
@@ -260,11 +260,11 @@ let () =
                    process ps = main in 1..2;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "xs = [i \\in 1..2 |-> 0]" tla;
               has_in "xs' = [xs EXCEPT ![1] = self]" tla);
           Alcotest.test_case "unary minus compiles" `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod neg {\n\
                    def literal = -1;\n\
@@ -273,11 +273,11 @@ let () =
                    process ps = main in 1..1;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "literal == -1" tla;
               has_in "expr == (0 - (1 + 2))" tla);
           Alcotest.test_case "multiple modules" `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod a {\n\
                    var x = 0;\n\
@@ -290,7 +290,7 @@ let () =
                    process qs = g in 1..3;\n\
                    }\n"
               in
-              let modules = compile cst in
+              let modules = compile ast in
               Alcotest.(check int) "two modules" 2 (List.length modules);
               let tla_a = Tla.Tla_printer.render (List.nth modules 0) in
               let tla_b = Tla.Tla_printer.render (List.nth modules 1) in
@@ -299,7 +299,7 @@ let () =
               has_in "---- MODULE b ----" tla_b;
               has_in "VARIABLES pc, y, stack" tla_b);
           Alcotest.test_case "local variable" `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod m {\n\
                    var g = 0;\n\
@@ -307,7 +307,7 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = compile cst in
+              let modules = compile ast in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "VARIABLES pc, g, stack";
@@ -315,7 +315,7 @@ let () =
               has "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT ![1].x__1 = 5]]";
               has "g' = Head(stack[self]).x__1");
           Alcotest.test_case "shadowing module var" `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
@@ -323,13 +323,13 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = compile cst in
+              let modules = compile ast in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "VARIABLES pc, x, stack";
               has "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT ![1].x__1 = 42]]");
           Alcotest.test_case "nested shadowing" `Quick (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod m {\n\
                    var g = 0;\n\
@@ -346,7 +346,7 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = compile cst in
+              let modules = compile ast in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "VARIABLES pc, g, stack";
@@ -356,7 +356,7 @@ let () =
               has "g' = Head(stack[self]).x__1");
           Alcotest.test_case "procedure parameters become local state" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod params {\n\
                    fn callee(idx) {\n\
@@ -367,7 +367,7 @@ let () =
                    process ps = caller in 1..2;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
               has "VARIABLES pc, stack";
               (* Argument bound directly in the pushed callee frame *)
@@ -377,7 +377,7 @@ let () =
               has_not_in "![idx]" tla);
           Alcotest.test_case "procedure call expression captures return" `Quick
             (fun () ->
-              let cst =
+              let ast =
                 parse
                   "mod factorial {\n\
                    var x = 0;\n\
@@ -391,7 +391,7 @@ let () =
                    process ps = worker in 1..1;\n\
                    }\n"
               in
-              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
               has "callRet__1";
               has "Head(stack[self]).value";

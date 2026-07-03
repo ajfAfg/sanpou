@@ -2,91 +2,89 @@ open Tla.Tla_ast
 open Ir
 open Config
 
-(* ===== CST expression → TLA+ expression ===== *)
+(* ===== AST expression → TLA+ expression ===== *)
 
 let binop_to_tla = function
-  | Cst.Plus -> "+"
-  | Cst.Minus -> "-"
-  | Cst.Mult -> "*"
-  | Cst.Lt -> "<"
-  | Cst.LtEq -> "<="
-  | Cst.GtEq -> ">="
-  | Cst.Eq -> "="
-  | Cst.Neq -> "/="
-  | Cst.And -> "/\\"
-  | Cst.Or -> "\\/"
+  | Ast.Plus -> "+"
+  | Ast.Minus -> "-"
+  | Ast.Mult -> "*"
+  | Ast.Lt -> "<"
+  | Ast.LtEq -> "<="
+  | Ast.GtEq -> ">="
+  | Ast.Eq -> "="
+  | Ast.Neq -> "/="
+  | Ast.And -> "/\\"
+  | Ast.Or -> "\\/"
 
-let rec cst_to_tla local_vars = function
-  | Cst.IntLit { value; _ } -> TInt value
-  | Cst.BoolLit { value; _ } -> TBool value
-  | Cst.Var { name; _ } ->
+let rec expr_to_tla local_vars (e : Ast.expr) =
+  match e.desc with
+  | Ast.IntLit value -> TInt value
+  | Ast.BoolLit value -> TBool value
+  | Ast.Var name ->
       (* Locals live in the top stack frame; globals are plain variables *)
       if List.mem name local_vars then
         TDot (THead (TSubscript (TId "stack", TId "self")), name)
       else TId name
-  | Cst.Self _ -> TId "self"
-  | Cst.UnOp { op = Neg; rhs; _ } -> (
-      match rhs with
-      | Cst.IntLit { value; _ } -> TInt (-value)
-      | _ -> TParens (TBinOp ("-", TInt 0, cst_to_tla local_vars rhs)))
-  | Cst.BinOp { op; lhs; rhs; _ } ->
+  | Ast.Self -> TId "self"
+  | Ast.UnOp (Ast.Neg, rhs) -> (
+      match rhs.desc with
+      | Ast.IntLit value -> TInt (-value)
+      | _ -> TParens (TBinOp ("-", TInt 0, expr_to_tla local_vars rhs)))
+  | Ast.BinOp (op, lhs, rhs) ->
       TParens
         (TBinOp
            ( binop_to_tla op,
-             cst_to_tla local_vars lhs,
-             cst_to_tla local_vars rhs ))
-  | Cst.App { name = "globally"; args; _ } -> (
-      match args.items with
-      | [ e ] -> TGlobally (cst_to_tla local_vars e)
+             expr_to_tla local_vars lhs,
+             expr_to_tla local_vars rhs ))
+  | Ast.App ("globally", args) -> (
+      match args with
+      | [ e ] -> TGlobally (expr_to_tla local_vars e)
       | _ -> failwith "globally takes exactly one argument")
-  | Cst.App { name = "finally"; args; _ } -> (
-      match args.items with
-      | [ e ] -> TFinally (cst_to_tla local_vars e)
+  | Ast.App ("finally", args) -> (
+      match args with
+      | [ e ] -> TFinally (expr_to_tla local_vars e)
       | _ -> failwith "finally takes exactly one argument")
-  | Cst.App { name = "head"; args; _ } -> (
-      match args.items with
-      | [ e ] -> THead (cst_to_tla local_vars e)
+  | Ast.App ("head", args) -> (
+      match args with
+      | [ e ] -> THead (expr_to_tla local_vars e)
       | _ -> failwith "head takes exactly one argument")
-  | Cst.App { name = "tail"; args; _ } -> (
-      match args.items with
-      | [ e ] -> TTail (cst_to_tla local_vars e)
+  | Ast.App ("tail", args) -> (
+      match args with
+      | [ e ] -> TTail (expr_to_tla local_vars e)
       | _ -> failwith "tail takes exactly one argument")
-  | Cst.App { name = "append"; args; _ } -> (
-      match args.items with
+  | Ast.App ("append", args) -> (
+      match args with
       | [ seq; value ] ->
           TApp
             ( "Append",
-              [ cst_to_tla local_vars seq; cst_to_tla local_vars value ] )
+              [ expr_to_tla local_vars seq; expr_to_tla local_vars value ] )
       | _ -> failwith "append takes exactly two arguments")
-  | Cst.App { name = "concat"; args; _ } -> (
-      match args.items with
+  | Ast.App ("concat", args) -> (
+      match args with
       | [ lhs; rhs ] ->
-          TConcat (cst_to_tla local_vars lhs, cst_to_tla local_vars rhs)
+          TConcat (expr_to_tla local_vars lhs, expr_to_tla local_vars rhs)
       | _ -> failwith "concat takes exactly two arguments")
-  | Cst.App { name; args; _ } ->
-      TApp (name, List.map (cst_to_tla local_vars) args.items)
-  | Cst.Subscript { lhs; index; _ } ->
-      TSubscript (cst_to_tla local_vars lhs, cst_to_tla local_vars index)
-  | Cst.MapInit { binder; lo; hi; value; _ } ->
+  | Ast.App (name, args) ->
+      TApp (name, List.map (expr_to_tla local_vars) args)
+  | Ast.Subscript (lhs, index) ->
+      TSubscript (expr_to_tla local_vars lhs, expr_to_tla local_vars index)
+  | Ast.MapInit { binder; lo; hi; value } ->
       TFuncMap
         ( binder,
-          TRange (cst_to_tla local_vars lo, cst_to_tla local_vars hi),
-          cst_to_tla local_vars value )
-  | Cst.Tuple { elems; _ } ->
-      TSeqLit (List.map (cst_to_tla local_vars) elems.items)
-  | Cst.Sequence { elems; _ } ->
-      TSeqLit (List.map (cst_to_tla local_vars) elems.items)
-  | Cst.Paren { inner; _ } -> cst_to_tla local_vars inner
+          TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi),
+          expr_to_tla local_vars value )
+  | Ast.Tuple elems -> TSeqLit (List.map (expr_to_tla local_vars) elems)
+  | Ast.Sequence elems -> TSeqLit (List.map (expr_to_tla local_vars) elems)
 
 (* Module-level expressions have no local vars *)
-let cst_to_tla_global = cst_to_tla []
+let expr_to_tla_global = expr_to_tla []
 
 type process_wrapper = { process : process_ir; proc : proc_ir }
 
 let wrapper_proc_name (process : process_ir) =
   "__process_" ^ process.name ^ "_wrapper__"
 
-let make_wrapper_source proc_name description (loc : Cst.loc) =
+let make_wrapper_source proc_name description (loc : Ast.loc) =
   { proc_name; description; line = loc.line; col = loc.col }
 
 let wrapper_of_process (process : process_ir) : process_wrapper =
@@ -160,7 +158,7 @@ let compute_unchanged (ir : module_ir) (action : action) : string list =
    transient [value |-> v] record is never read or written except by them). *)
 let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
     (action : action) : tla_decl =
-  let to_tla = cst_to_tla local_vars in
+  let to_tla = expr_to_tla local_vars in
   let self = TId "self" in
   let stack_self = TSubscript (TId "stack", self) in
   let stack_head = THead stack_self in
@@ -339,19 +337,19 @@ let const_and_fun_decls (ir : module_ir) : tla_decl list =
   in
   with_trailing_sep
     (List.map
-       (fun (name, expr) -> DOpDef (name, [], cst_to_tla_global expr))
+       (fun (name, expr) -> DOpDef (name, [], expr_to_tla_global expr))
        ir.const_defs)
   @ with_trailing_sep
       (List.map
          (fun (name, params, expr) ->
-           DOpDef (name, params, cst_to_tla_global expr))
+           DOpDef (name, params, expr_to_tla_global expr))
          ir.fun_defs)
 
 let proc_set_decls (ir : module_ir) : tla_decl list =
   let parts =
     List.map
       (fun (p : process_ir) ->
-        TParens (TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi)))
+        TParens (TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi)))
       ir.processes
   in
   [ DOpDef ("ProcSet", [], TCup parts); DSeparator ]
@@ -374,7 +372,7 @@ let init_decls process_wrappers (ir : module_ir) : tla_decl list =
               let wrapper = wrapper_for process_wrappers p in
               ( TIn
                   ( TId "self",
-                    TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi) ),
+                    TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi) ),
                 TStr wrapper.proc.entry_label ))
             ir.processes
         in
@@ -382,7 +380,7 @@ let init_decls process_wrappers (ir : module_ir) : tla_decl list =
   in
   let conjuncts =
     List.map
-      (fun (name, expr) -> TBinOp ("=", TId name, cst_to_tla_global expr))
+      (fun (name, expr) -> TBinOp ("=", TId name, expr_to_tla_global expr))
       ir.var_decls
     @ [
         TBinOp
@@ -435,8 +433,8 @@ let next_decls config process_wrappers (ir : module_ir) : tla_decl list =
           (TExists
              ( "self",
                TRange
-                 ( cst_to_tla_global wrapper.process.lo,
-                   cst_to_tla_global wrapper.process.hi ),
+                 ( expr_to_tla_global wrapper.process.lo,
+                   expr_to_tla_global wrapper.process.hi ),
                TApp (wrapper.proc.proc_name, [ TId "self" ]) )))
       process_wrappers
   in
@@ -462,8 +460,8 @@ let spec_decls process_wrappers (ir : module_ir) : tla_decl list =
         if wrapper.process.fair then
           let process_range =
             TRange
-              ( cst_to_tla_global wrapper.process.lo,
-                cst_to_tla_global wrapper.process.hi )
+              ( expr_to_tla_global wrapper.process.lo,
+                expr_to_tla_global wrapper.process.hi )
           in
           let fairness_for proc_name =
             TParens
