@@ -7,9 +7,9 @@ let cl0 = []
 let cl1 x = [ x ]
 let intlit v = node (IntLit v)
 let boollit v = node (BoolLit v)
-let var s = node (Var s)
+let var s = node (Var (Sanpou.Resolved_ast.ident s))
 let app f args = node (App (f, args))
-let assign x e = node (Assign (VarTarget x, e))
+let assign x e = node (Assign (VarTarget (Sanpou.Resolved_ast.ident x), e))
 let call_ f = node (Call (f, []))
 let return_ e = node (Return e)
 let break_ = node Break
@@ -17,7 +17,7 @@ let await_ e = node (Await e)
 let tuple0 = node (Tuple [])
 let simple_step stmts = node (SimpleStep stmts)
 let empty_step = node EmptyStep
-let var_step name value = node (VarStep (name, value))
+let var_step name value = node (VarStep (Sanpou.Resolved_ast.ident name, value))
 let while_block cond body = node (BlockStep (While { cond; body }))
 let if_block cond body = node (BlockStep (If { cond; body; else_body = None }))
 let make_proc name body = node (ProcDef { name; params = []; body })
@@ -30,20 +30,8 @@ let make_process ?(fair = false) name proc lo hi =
 
 let make_module name items = { mod_name = name; items; mod_loc = loc0 }
 
-(* Renames with original = tla_name so descriptions are unaffected *)
-let make_alpha_module ast local_vars : Sanpou.Alpha_convert.alpha_module =
-  {
-    ast;
-    renames =
-      List.map
-        (fun name ->
-          Sanpou.Alpha_convert.
-            { tla_name = name; original = name; proc = ""; kind = LocalVar })
-        local_vars;
-  }
-
-let linearize_one am =
-  let result = Sanpou.Linearize.linearize [ am ] in
+let linearize_one m =
+  let result = Sanpou.Linearize.linearize [ m ] in
   List.hd result
 
 let find_action ir label =
@@ -67,7 +55,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               check int "one action" 1 (List.length proc.actions);
               let a = List.hd proc.actions in
@@ -91,7 +79,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               check int "two actions" 2 (List.length proc.actions);
               let entry = find_action ir proc.entry_label in
@@ -110,7 +98,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               check int "one action" 1 (List.length proc.actions);
               let a = List.hd proc.actions in
@@ -125,7 +113,7 @@ let () =
                     make_process ~fair:true "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               match ir.processes with
               | [ p ] -> Alcotest.(check bool) "fair" true p.fair
               | _ -> fail "expected one process");
@@ -144,7 +132,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               match entry.pc_dest with
@@ -162,7 +150,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               match entry.pc_dest with
@@ -180,7 +168,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let foo = find_proc ir "foo" in
               let return_action =
                 List.find
@@ -218,7 +206,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let foo = find_proc ir "foo" in
               let push_action =
                 List.find
@@ -250,7 +238,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let foo = find_proc ir "foo" in
               let push_action =
                 List.find
@@ -274,7 +262,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 1);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m [ "x" ]) in
+              let ir = linearize_one m in
               check bool "temp local" true
                 (List.mem "callRet__1" ir.local_var_decls);
               let foo = find_proc ir "foo" in
@@ -293,7 +281,7 @@ let () =
                 List.find
                   (fun (a : action) ->
                     match a.assignments with
-                    | [ AssignVar ("x", { desc = Var "callRet__1"; _ }) ] ->
+                    | [ AssignVar ("x", { desc = Var { name = "callRet__1"; _ }; _ }) ] ->
                         true
                     | _ -> false)
                   foo.actions
@@ -315,7 +303,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m [ "x" ]) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               check int "one assignment" 1 (List.length entry.assignments);
@@ -325,7 +313,7 @@ let () =
                 | AssignIndex _ -> failwith "expected AssignVar"
               in
               check string "name" "x" name;
-              check bool "value" true (equal_expr (intlit 42) value));
+              check bool "value" true (Sanpou.Resolved_ast.equal_expr (intlit 42) value));
         ] );
       ( "module_items",
         [
@@ -338,7 +326,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               check int "one const" 1 (List.length ir.const_defs);
               let name, _ = List.hd ir.const_defs in
               check string "name" "c" name);
@@ -351,7 +339,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               check int "one var" 1 (List.length ir.var_decls);
               let name, _ = List.hd ir.var_decls in
               check string "name" "x" name);
@@ -364,7 +352,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               check int "one fun" 1 (List.length ir.fun_defs);
               let name, params, _ = List.hd ir.fun_defs in
               check string "name" "f" name;
@@ -377,20 +365,25 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               check int "one process" 1 (List.length ir.processes);
               let p = List.hd ir.processes in
               check string "name" "ps" p.name;
               check string "proc" "foo" p.proc);
-          test_case "local var decls passed through" `Quick (fun () ->
+          test_case "local var decls collected from bodies" `Quick (fun () ->
               let m =
                 make_module "m"
                   [
-                    make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ];
+                    make_proc "foo"
+                      [
+                        var_step "x__1" (intlit 1);
+                        var_step "y__2" (intlit 2);
+                        simple_step (cl1 (return_ tuple0));
+                      ];
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m [ "x__1"; "y__2" ]) in
+              let ir = linearize_one m in
               check (list string) "locals" [ "x__1"; "y__2" ] ir.local_var_decls);
           test_case "module name" `Quick (fun () ->
               let m =
@@ -400,7 +393,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               check string "name" "mymod" ir.name);
         ] );
       ( "labels",
@@ -418,7 +411,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               let labels =
                 List.map (fun (a : action) -> a.label) proc.actions
@@ -438,7 +431,7 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               check int "entry has assign" 1 (List.length entry.assignments));
@@ -458,11 +451,11 @@ let () =
                     make_process "ps" "foo" (intlit 1) (intlit 2);
                   ]
               in
-              let ir = linearize_one (make_alpha_module m []) in
+              let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               match entry.guard with
-              | Some g -> check bool "guard" true (equal_expr (boollit true) g)
+              | Some g -> check bool "guard" true (Sanpou.Resolved_ast.equal_expr (boollit true) g)
               | None -> fail "expected guard");
         ] );
     ]

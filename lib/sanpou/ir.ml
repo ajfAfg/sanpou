@@ -30,26 +30,26 @@ let done_label = "Done"
 
 type stack_op =
   | StackNone
-  | StackPush of string * string * Ast.expr list
+  | StackPush of string * string * Resolved_ast.expr list
     (* procedure name, return label, arguments *)
-  | StackReturn of Ast.expr (* return value *)
+  | StackReturn of Resolved_ast.expr (* return value *)
   | StackDiscard (* pop return value after call *)
   | StackPopAssign of string (* assign return value, then pop *)
 
 (* Where control goes after the action; fully determines pc'. *)
 type pc_dest =
   | PcNext of string
-  | PcBranch of Ast.expr * string * string
+  | PcBranch of Resolved_ast.expr * string * string
   | PcCall of string (* enter the named procedure at its entry label *)
   | PcReturn (* jump to the top frame's return_pc *)
 
 type assignment =
-  | AssignVar of string * Ast.expr
-  | AssignIndex of string * Ast.expr * Ast.expr
+  | AssignVar of string * Resolved_ast.expr
+  | AssignIndex of string * Resolved_ast.expr * Resolved_ast.expr
 
 type action = {
   label : string;
-  guard : Ast.expr option;
+  guard : Resolved_ast.expr option;
   assignments : assignment list;
   pc_dest : pc_dest;
   stack_op : stack_op;
@@ -71,16 +71,16 @@ type process_ir = {
   name : string;
   proc : string;
   fair : bool;
-  lo : Ast.expr;
-  hi : Ast.expr;
+  lo : Resolved_ast.expr;
+  hi : Resolved_ast.expr;
   loc : Ast.loc;
 }
 
 type module_ir = {
   name : string;
-  const_defs : (string * Ast.expr) list;
-  fun_defs : (string * string list * Ast.expr) list;
-  var_decls : (string * Ast.expr) list;
+  const_defs : (string * Resolved_ast.expr) list;
+  fun_defs : (string * string list * Resolved_ast.expr) list;
+  var_decls : (string * Resolved_ast.expr) list;
   local_var_decls : string list;
   var_infos : var_info list;
   procs : proc_ir list;

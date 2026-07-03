@@ -18,59 +18,62 @@ let if_block cond body =
   node (BlockStep (If { cond; body; else_body = None }))
 
 let make_proc name body = node (ProcDef { name; params = []; body })
-
-(* TLA names of renamed variables that become state variables (i.e. not
-   MapInit binders), in declaration order *)
-let local_tla_names (am : Sanpou.Alpha_convert.alpha_module) =
-  List.filter_map
-    (fun (r : Sanpou.Alpha_convert.rename) ->
-      match r.kind with
-      | Sanpou.Alpha_convert.BinderVar -> None
-      | _ -> Some r.tla_name)
-    am.renames
-
 let make_module items = { mod_name = "m"; items; mod_loc = loc0 }
 let make_program modules = modules
+let transform_one input = List.hd (Sanpou.Alpha_convert.transform input)
 
-let transform_one input =
-  let result = Sanpou.Alpha_convert.transform input in
-  List.hd result
-
-let get_proc_body (am : Sanpou.Alpha_convert.alpha_module) proc_name =
+let get_proc_body (m : Sanpou.Resolved_ast.module_def) proc_name =
   let item =
     List.find
-      (fun (item : item) ->
+      (fun (item : Sanpou.Resolved_ast.item) ->
         match item.desc with
         | ProcDef { name; _ } -> name = proc_name
         | _ -> false)
-      am.ast.items
+      m.items
   in
   match item.desc with ProcDef { body; _ } -> body | _ -> assert false
 
-let extract_var_name (e : expr) =
-  match e.desc with Var name -> name | _ -> failwith "expected Var"
+(* Renamed [var] bindings of a body, in pre-order (the old rename table,
+   read back from the tree). *)
+let rec var_step_idents (steps : Sanpou.Resolved_ast.body) : Sanpou.Resolved_ast.ident list =
+  List.concat_map
+    (fun (step : Sanpou.Resolved_ast.step) ->
+      match step.desc with
+      | VarStep (i, _) -> [ i ]
+      | BlockStep (While { body; _ }) -> var_step_idents body
+      | BlockStep (If { body; else_body; _ }) ->
+          var_step_idents body
+          @ (match else_body with Some b -> var_step_idents b | None -> [])
+      | SimpleStep _ | EmptyStep -> [])
+    steps
 
-let extract_assign_name (stmt : simple_stmt) =
+let local_names m proc_name =
+  List.map (fun (i : Sanpou.Resolved_ast.ident) -> i.name) (var_step_idents (get_proc_body m proc_name))
+
+let extract_var_name (e : Sanpou.Resolved_ast.expr) =
+  match e.desc with Var i -> i.name | _ -> failwith "expected Var"
+
+let extract_assign_name (stmt : Sanpou.Resolved_ast.simple_stmt) =
   match stmt.desc with
-  | Assign (VarTarget name, _) | Assign (SubscriptTarget (name, _), _) -> name
+  | Assign (VarTarget i, _) | Assign (SubscriptTarget (i, _), _) -> i.name
   | _ -> failwith "expected Assign"
 
-let extract_assign_value (stmt : simple_stmt) =
+let extract_assign_value (stmt : Sanpou.Resolved_ast.simple_stmt) =
   match stmt.desc with
   | Assign (_, value) -> value
   | _ -> failwith "expected Assign"
 
-let extract_var_step_name (step : step) =
+let extract_var_step_name (step : Sanpou.Resolved_ast.step) =
   match step.desc with
-  | VarStep (name, _) -> name
+  | VarStep (i, _) -> i.name
   | _ -> failwith "expected VarStep"
 
-let extract_var_step_value (step : step) =
+let extract_var_step_value (step : Sanpou.Resolved_ast.step) =
   match step.desc with
   | VarStep (_, value) -> value
   | _ -> failwith "expected VarStep"
 
-let extract_simple_stmts (step : step) =
+let extract_simple_stmts (step : Sanpou.Resolved_ast.step) =
   match step.desc with
   | SimpleStep stmts -> stmts
   | _ -> failwith "expected SimpleStep"
@@ -88,10 +91,22 @@ let () =
                     make_module [ make_proc "foo" [ var_step "x" (intlit 5) ] ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               check string "renamed" "x__1"
                 (extract_var_step_name (List.hd body)));
+          test_case "original name preserved" `Quick (fun () ->
+              let prog =
+                make_program
+                  [
+                    make_module [ make_proc "foo" [ var_step "x" (intlit 5) ] ];
+                  ]
+              in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
+              match (List.hd body).desc with
+              | VarStep (i, _) -> check string "original" "x" i.original
+              | _ -> fail "expected VarStep");
           test_case "var value unchanged" `Quick (fun () ->
               let prog =
                 make_program
@@ -99,10 +114,10 @@ let () =
                     make_module [ make_proc "foo" [ var_step "x" (intlit 42) ] ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               check bool "value" true
-                (equal_expr (intlit 42) (extract_var_step_value (List.hd body))));
+                (Sanpou.Resolved_ast.equal_expr (intlit 42) (extract_var_step_value (List.hd body))));
           test_case "usage after var uses new name" `Quick (fun () ->
               let prog =
                 make_program
@@ -117,11 +132,31 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               let stmts = extract_simple_stmts (List.nth body 1) in
               let value = extract_assign_value (List.hd stmts) in
               check string "var renamed" "x__1" (extract_var_name value));
+          test_case "reference keeps original for display" `Quick (fun () ->
+              let prog =
+                make_program
+                  [
+                    make_module
+                      [
+                        make_proc "foo"
+                          [
+                            var_step "x" (intlit 1);
+                            simple_step (cl1 (assign "g" (var "x")));
+                          ];
+                      ];
+                  ]
+              in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
+              let stmts = extract_simple_stmts (List.nth body 1) in
+              match (extract_assign_value (List.hd stmts)).desc with
+              | Var i -> check string "original" "x" i.original
+              | _ -> fail "expected Var");
           test_case "multiple vars get different names" `Quick (fun () ->
               let prog =
                 make_program
@@ -133,8 +168,8 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               check string "first" "x__1"
                 (extract_var_step_name (List.nth body 0));
               check string "second" "y__2"
@@ -154,8 +189,8 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               check string "outer" "x__1"
                 (extract_var_step_name (List.nth body 0));
               match (List.nth body 1).desc with
@@ -177,17 +212,12 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
+              let m = transform_one prog in
+              let idents = var_step_idents (get_proc_body m "foo") in
               check (list string) "locals" [ "x__1"; "y__2" ]
-                (local_tla_names am);
+                (List.map (fun (i : Sanpou.Resolved_ast.ident) -> i.name) idents);
               check (list string) "originals" [ "x"; "y" ]
-                (List.map
-                   (fun (r : Sanpou.Alpha_convert.rename) -> r.original)
-                   am.renames);
-              check (list string) "owning proc" [ "foo"; "foo" ]
-                (List.map
-                   (fun (r : Sanpou.Alpha_convert.rename) -> r.proc)
-                   am.renames));
+                (List.map (fun (i : Sanpou.Resolved_ast.ident) -> i.original) idents));
           test_case "no var steps no locals" `Quick (fun () ->
               let prog =
                 make_program
@@ -199,8 +229,8 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              check (list string) "empty" [] (local_tla_names am));
+              let m = transform_one prog in
+              check (list string) "empty" [] (local_names m "foo"));
           test_case "nested var in while collected" `Quick (fun () ->
               let prog =
                 make_program
@@ -216,9 +246,9 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
+              let m = transform_one prog in
               check (list string) "locals" [ "x__1"; "y__2" ]
-                (local_tla_names am));
+                (local_names m "foo"));
           test_case "nested var in if collected" `Quick (fun () ->
               let prog =
                 make_program
@@ -232,8 +262,8 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              check (list string) "locals" [ "z__1" ] (local_tla_names am));
+              let m = transform_one prog in
+              check (list string) "locals" [ "z__1" ] (local_names m "foo"));
         ] );
       ( "expressions",
         [
@@ -248,8 +278,8 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               let stmts = extract_simple_stmts (List.hd body) in
               check string "assign target" "g"
                 (extract_assign_name (List.hd stmts));
@@ -266,8 +296,8 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               check string "y value uses x__1" "x__1"
                 (extract_var_name (extract_var_step_value (List.nth body 1))));
           test_case "binop subexprs renamed" `Quick (fun () ->
@@ -286,8 +316,8 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               let stmts = extract_simple_stmts (List.nth body 1) in
               let value = extract_assign_value (List.hd stmts) in
               match value.desc with
@@ -308,8 +338,8 @@ let () =
                       ];
                   ]
               in
-              let am = transform_one prog in
-              let body = get_proc_body am "foo" in
+              let m = transform_one prog in
+              let body = get_proc_body m "foo" in
               let stmts = extract_simple_stmts (List.nth body 1) in
               match (List.hd stmts).desc with
               | Await cond -> check string "cond" "x__1" (extract_var_name cond)
@@ -320,17 +350,17 @@ let () =
           test_case "const def unchanged" `Quick (fun () ->
               let const = node (ConstDef { name = "c"; value = intlit 1 }) in
               let prog = make_program [ make_module [ const ] ] in
-              let am = transform_one prog in
-              match (List.hd am.ast.items).desc with
+              let m = transform_one prog in
+              match (List.hd m.items).desc with
               | ConstDef { name; value } ->
                   check string "name" "c" name;
-                  check bool "value" true (equal_expr (intlit 1) value)
+                  check bool "value" true (Sanpou.Resolved_ast.equal_expr (intlit 1) value)
               | _ -> fail "expected ConstDef");
           test_case "var decl unchanged" `Quick (fun () ->
               let vd = node (VarDecl { name = "v"; value = intlit 0 }) in
               let prog = make_program [ make_module [ vd ] ] in
-              let am = transform_one prog in
-              match (List.hd am.ast.items).desc with
+              let m = transform_one prog in
+              match (List.hd m.items).desc with
               | VarDecl { name; _ } -> check string "name" "v" name
               | _ -> fail "expected VarDecl");
         ] );
@@ -345,10 +375,10 @@ let () =
                   ]
               in
               let result = Sanpou.Alpha_convert.transform prog in
-              let am1 = List.nth result 0 in
-              let am2 = List.nth result 1 in
-              let body1 = get_proc_body am1 "foo" in
-              let body2 = get_proc_body am2 "bar" in
+              let m1 = List.nth result 0 in
+              let m2 = List.nth result 1 in
+              let body1 = get_proc_body m1 "foo" in
+              let body2 = get_proc_body m2 "bar" in
               check string "mod1" "x__1" (extract_var_step_name (List.hd body1));
               check string "mod2" "x__1" (extract_var_step_name (List.hd body2)));
         ] );
