@@ -37,3 +37,8 @@ _opam/
 
 # Compiled files
 dist
+
+# Local editor and TLC artifacts
+.vscode/
+states/
+tla2tools.jar
