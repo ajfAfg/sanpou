@@ -119,6 +119,32 @@ let test_split_empty () =
     "empty tuple" (Some [])
     (Trace_printer.split_tuple_elements "<<>>")
 
+(* ===== Record field splitting ===== *)
+
+let test_record_fields () =
+  Alcotest.(check (option (list (pair string string))))
+    "simple"
+    (Some [ ("x__1", "3"); ("ans__2", "0") ])
+    (Trace_printer.split_record_fields "[x__1 |-> 3, ans__2 |-> 0]");
+  (* TLC reorders fields and quotes strings *)
+  Alcotest.(check (option (list (pair string string))))
+    "reordered with strings"
+    (Some
+       [
+         ("ans__2", "0");
+         ("return_pc", "\"L7\"");
+         ("procedure", "\"fact\"");
+       ])
+    (Trace_printer.split_record_fields
+       "[ans__2 |-> 0, return_pc |-> \"L7\", procedure |-> \"fact\"]");
+  Alcotest.(check (option (list (pair string string))))
+    "nested values"
+    (Some [ ("value", "<<1, 2>>"); ("m", "[a |-> 1]") ])
+    (Trace_printer.split_record_fields "[value |-> <<1, 2>>, m |-> [a |-> 1]]");
+  Alcotest.(check (option (list (pair string string))))
+    "not a record" None
+    (Trace_printer.split_record_fields "<<1, 2>>")
+
 (* ===== Display names ===== *)
 
 let test_display_names () =
@@ -139,7 +165,25 @@ let test_display_names () =
 
 (* ===== Rendering ===== *)
 
-let test_render_demangles_and_unwraps () =
+(* Locals live inside the stack frames: the printer must dig them out of the
+   top frame, diff same-depth frames, and show frame context on call/return. *)
+let test_render_frame_locals () =
+  (* [ans] is a raw TLC value string: unassigned fields hold "__null__" *)
+  let fact_frame ~x ~ans ~call_ret =
+    Printf.sprintf
+      "[x__1 |-> %d, ans__2 |-> %s, callRet__1 |-> %d, return_pc |-> \
+       \"L11\", procedure |-> \"fact\"]"
+      x ans call_ret
+  in
+  let null = "\"__null__\"" in
+  let stack frames = "<<<<" ^ String.concat ", " frames ^ ">>>>" in
+  let state ~stack_value ~x ~pc =
+    [
+      { Trace_reader.var_name = "x"; value = string_of_int x };
+      { var_name = "stack"; value = stack_value };
+      { var_name = "pc"; value = pc };
+    ]
+  in
   let trace : Trace_reader.trace =
     {
       is_deadlock = false;
@@ -149,56 +193,91 @@ let test_render_demangles_and_unwraps () =
           {
             step_num = 1;
             header = Trace_reader.InitialPredicate;
-            state =
-              [
-                { var_name = "x"; value = "0" };
-                { var_name = "x__1"; value = "<<0>>" };
-                { var_name = "ans__2"; value = "<<0>>" };
-                { var_name = "callRet__1"; value = "<<0>>" };
-                { var_name = "pc"; value = "<<\"L2\">>" };
-              ];
+            state = state ~stack_value:"<<<<>>>>" ~x:0 ~pc:"<<\"L10\">>";
           };
+          (* Same depth: plain assignment inside the frame -> diff *)
           {
             step_num = 2;
             header = Trace_reader.Action { label = "L5"; process_id = 1 };
             state =
-              [
-                { var_name = "x"; value = "0" };
-                { var_name = "x__1"; value = "<<3>>" };
-                { var_name = "ans__2"; value = "<<6>>" };
-                { var_name = "callRet__1"; value = "<<2>>" };
-                { var_name = "pc"; value = "<<\"L4\">>" };
-              ];
+              state
+                ~stack_value:(stack [ fact_frame ~x:3 ~ans:null ~call_ret:2 ])
+                ~x:0 ~pc:"<<\"L5\">>";
+          };
+          {
+            step_num = 3;
+            header = Trace_reader.Action { label = "L5"; process_id = 1 };
+            state =
+              state
+                ~stack_value:(stack [ fact_frame ~x:3 ~ans:"6" ~call_ret:2 ])
+                ~x:0 ~pc:"<<\"L4\">>";
+          };
+          (* Depth increased (call): frame context, not a diff *)
+          {
+            step_num = 4;
+            header = Trace_reader.Action { label = "L2"; process_id = 1 };
+            state =
+              state
+                ~stack_value:
+                  (stack
+                     [
+                       fact_frame ~x:2 ~ans:null ~call_ret:0;
+                       fact_frame ~x:3 ~ans:"6" ~call_ret:2;
+                     ])
+                ~x:0 ~pc:"<<\"L2\">>";
+          };
+          (* Depth decreased (return): frame context, not a diff *)
+          {
+            step_num = 5;
+            header = Trace_reader.Action { label = "L2"; process_id = 1 };
+            state =
+              state
+                ~stack_value:(stack [ fact_frame ~x:3 ~ans:"6" ~call_ret:2 ])
+                ~x:0 ~pc:"<<\"L2\">>";
           };
         ];
     }
   in
   let rendered = Trace_printer.render trace smap_v2 in
-  (* Mangled names must not appear *)
+  let flat = Str.global_replace (Str.regexp "\n") " " rendered in
+  let contains hay needle =
+    Str.string_match (Str.regexp (".*" ^ Str.quote needle ^ ".*")) hay 0
+  in
+  (* The rendered text of one step, newlines flattened *)
+  let step_block n =
+    let marker = Printf.sprintf "Step %d:" n in
+    let blocks = Str.full_split (Str.regexp "Step [0-9]+:") flat in
+    let rec find = function
+      | Str.Delim d :: Str.Text t :: rest ->
+          if d = marker then d ^ t else find rest
+      | _ :: rest -> find rest
+      | [] -> Alcotest.fail ("step not rendered: " ^ marker)
+    in
+    find blocks
+  in
+  (* Mangled and internal names must not appear *)
+  Alcotest.(check bool) "no x__1" false (contains flat "x__1");
+  Alcotest.(check bool) "no callRet" false (contains flat "callRet");
+  Alcotest.(check bool) "no return_pc" false (contains flat "return_pc");
+  (* Same-depth assignment diffs only the changed field *)
+  Alcotest.(check bool) "diffed local" true (contains (step_block 3) "ans = 6");
   Alcotest.(check bool)
-    "no x__1" false
-    (Str.string_match (Str.regexp ".*x__1.*") rendered 0);
+    "unchanged field not diffed" false
+    (contains (step_block 3) "x (fact)");
+  (* Depth change (call at step 4, return at step 5) shows frame context;
+     unassigned fields render as null *)
   Alcotest.(check bool)
-    "no callRet" false
-    (Str.string_match (Str.regexp ".*callRet.*") rendered 0);
-  (* Per-process values unwrapped *)
+    "call frame context" true
+    (contains (step_block 4) "(frame: x (fact) = 2, ans = null)");
   Alcotest.(check bool)
-    "unwrapped param" true
-    (Str.string_match (Str.regexp ".*x (fact) = 3.*")
-       (Str.global_replace (Str.regexp "\n") " " rendered)
-       0);
-  Alcotest.(check bool)
-    "unwrapped local" true
-    (Str.string_match (Str.regexp ".*ans = 6.*")
-       (Str.global_replace (Str.regexp "\n") " " rendered)
-       0);
+    "return frame context" true
+    (contains (step_block 5) "(frame: x (fact) = 3, ans = 6)");
+  (* Initial state: empty stacks, globals only *)
+  Alcotest.(check bool) "initial global" true (contains (step_block 1) "x = 0");
   (* Header uses the demangled description *)
   Alcotest.(check bool)
     "header desc" true
-    (Str.string_match
-       (Str.regexp ".*fact (process 1): var ans = x \\* fact(x - 1).*")
-       (Str.global_replace (Str.regexp "\n") " " rendered)
-       0)
+    (contains flat "fact (process 1): var ans = x * fact(x - 1)")
 
 let () =
   Alcotest.run "Trace"
@@ -220,10 +299,11 @@ let () =
           Alcotest.test_case "records" `Quick test_split_records;
           Alcotest.test_case "not a tuple" `Quick test_split_not_tuple;
           Alcotest.test_case "empty" `Quick test_split_empty;
+          Alcotest.test_case "record fields" `Quick test_record_fields;
         ] );
       ( "display",
         [
           Alcotest.test_case "names" `Quick test_display_names;
-          Alcotest.test_case "render" `Quick test_render_demangles_and_unwraps;
+          Alcotest.test_case "render" `Quick test_render_frame_locals;
         ] );
     ]

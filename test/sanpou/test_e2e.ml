@@ -228,6 +228,35 @@ mod m {
   in
   check_pass "top level non-unit return" (snd (List.hd results))
 
+(* Frame-resident locals: recursion with parameters, user locals, and
+   call-return temporaries. Self-checking: the await unblocks only if
+   fact(3) = 6 was computed correctly through the stack frames. *)
+let test_recursive_factorial () =
+  let results =
+    run_e2e
+      {|
+mod m {
+  var x = 0;
+  fn fact(n) {
+    if (n == 0) {
+      return 1;
+    } else {
+      var ans = n * fact(n - 1);
+      return ans;
+    }
+  }
+  fn f() {
+    x = fact(3);
+    while (true) {
+      await x == 6;
+    }
+  }
+  process p = f in 1..1;
+}
+|}
+  in
+  check_pass "recursive factorial" (snd (List.hd results))
+
 (* --- deadlock: processes that block forever --- *)
 
 let test_mutual_deadlock () =
@@ -360,6 +389,7 @@ let () =
             test_case "top level return" `Slow test_top_level_return;
             test_case "top level non-unit return" `Slow
               test_top_level_non_unit_return;
+            test_case "recursive factorial" `Slow test_recursive_factorial;
           ] );
         ( "deadlock",
           [

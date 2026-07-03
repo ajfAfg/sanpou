@@ -13,9 +13,19 @@ let rec render_expr = function
   | TApp (name, args) ->
       name ^ "(" ^ String.concat ", " (List.map render_expr args) ^ ")"
   | TPrimed e -> render_expr e ^ "'"
-  | TExcept (f, idx, v) ->
-      "[" ^ render_expr f ^ " EXCEPT ![" ^ render_expr idx ^ "] = "
-      ^ render_expr v ^ "]"
+  | TExcept (f, updates) ->
+      let render_selector = function
+        | SubSel idx -> "[" ^ render_expr idx ^ "]"
+        | FieldSel field -> "." ^ field
+      in
+      let render_update (path, v) =
+        "!"
+        ^ String.concat "" (List.map render_selector path)
+        ^ " = " ^ render_expr v
+      in
+      "[" ^ render_expr f ^ " EXCEPT "
+      ^ String.concat ", " (List.map render_update updates)
+      ^ "]"
   | TSeqLit [] -> "<< >>"
   | TSeqLit es -> "<< " ^ String.concat ", " (List.map render_expr es) ^ " >>"
   | TRecord fields ->

@@ -310,9 +310,10 @@ let () =
               let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
-              has "VARIABLES pc, g, x__1, stack";
-              has "x__1 = [self \\in ProcSet |-> 0]";
-              has "x__1' = [x__1 EXCEPT ![self] = 5]");
+              has "VARIABLES pc, g, stack";
+              has "x__1 |-> \"__null__\"";
+              has "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT ![1].x__1 = 5]]";
+              has "g' = Head(stack[self]).x__1");
           Alcotest.test_case "shadowing module var" `Quick (fun () ->
               let cst =
                 parse
@@ -325,8 +326,8 @@ let () =
               let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
-              has "VARIABLES pc, x, x__1, stack";
-              has "x__1' = [x__1 EXCEPT ![self] = 42]");
+              has "VARIABLES pc, x, stack";
+              has "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT ![1].x__1 = 42]]");
           Alcotest.test_case "nested shadowing" `Quick (fun () ->
               let cst =
                 parse
@@ -348,9 +349,11 @@ let () =
               let modules = compile cst in
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
-              has "VARIABLES pc, g, x__1, x__2, stack";
-              has "x__1' = [x__1 EXCEPT ![self] = 1]";
-              has "x__2' = [x__2 EXCEPT ![self] = 2]");
+              has "VARIABLES pc, g, stack";
+              has "![1].x__1 = 1";
+              has "![1].x__2 = 2";
+              has "g' = Head(stack[self]).x__2";
+              has "g' = Head(stack[self]).x__1");
           Alcotest.test_case "procedure parameters become local state" `Quick
             (fun () ->
               let cst =
@@ -366,10 +369,11 @@ let () =
               in
               let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
-              has "VARIABLES pc, idx__1, seen__2, stack";
-              has "idx__1 = [self \\in ProcSet |-> 0]";
-              has "idx__1' = [idx__1 EXCEPT ![self] = self]";
-              has "seen__2' = [seen__2 EXCEPT ![self] = idx__1[self]]";
+              has "VARIABLES pc, stack";
+              (* Argument bound directly in the pushed callee frame *)
+              has "idx__1 |-> self";
+              has "seen__2 |-> \"__null__\"";
+              has "![1].seen__2 = Head(stack[self]).idx__1";
               has_not_in "![idx]" tla);
           Alcotest.test_case "procedure call expression captures return" `Quick
             (fun () ->

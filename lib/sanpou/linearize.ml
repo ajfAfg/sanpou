@@ -494,23 +494,17 @@ and linearize_var_step ctx step next_label =
 
 (* ===== Resolve call targets ===== *)
 
+(* Parameter binding is not lowered to assignments here: the arguments stay
+   in StackPush and Emit_tla writes them directly into the pushed frame. *)
 let resolve_call_target procs action =
   match action.stack_op with
   | StackPush (proc_name, _, args) ->
       let target_proc =
         List.find (fun (p : proc_ir) -> p.proc_name = proc_name) procs
       in
-      let params = target_proc.params in
-      let param_bindings =
-        try List.map2 (fun param arg -> AssignVar (param, arg)) params args
-        with Invalid_argument _ ->
-          failwith ("arity mismatch when calling procedure " ^ proc_name)
-      in
-      {
-        action with
-        assignments = action.assignments @ param_bindings;
-        pc_dest = PcNext target_proc.entry_label;
-      }
+      if List.length target_proc.params <> List.length args then
+        failwith ("arity mismatch when calling procedure " ^ proc_name);
+      { action with pc_dest = PcNext target_proc.entry_label }
   | _ -> action
 
 (* ===== Module linearization ===== *)

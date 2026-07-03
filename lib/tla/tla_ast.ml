@@ -1,6 +1,9 @@
 type layout = Inline | Block
 
-type tla_expr =
+(* A selector step in an EXCEPT update path: ![idx] or !.field *)
+type except_selector = SubSel of tla_expr | FieldSel of string
+
+and tla_expr =
   | TInt of int
   | TBool of bool
   | TStr of string
@@ -8,7 +11,8 @@ type tla_expr =
   | TBinOp of string * tla_expr * tla_expr
   | TApp of string * tla_expr list
   | TPrimed of tla_expr
-  | TExcept of tla_expr * tla_expr * tla_expr
+  | TExcept of tla_expr * (except_selector list * tla_expr) list
+    (* [f EXCEPT !<path1> = v1, !<path2> = v2, ...] *)
   | TSeqLit of tla_expr list
   | TRecord of (string * tla_expr) list
   | TRange of tla_expr * tla_expr
