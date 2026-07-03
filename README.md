@@ -30,6 +30,14 @@ dune build
 dune test
 ```
 
+Unit tests (`test/sanpou/`, Alcotest) cover the compiler passes. E2E tests
+(`test/cram/`, dune cram tests) run the `sanpou` CLI itself: golden compile
+output, TLC model checking, and trace annotation. The TLC-backed cram tests
+(`tlc.t`, `trace.t`) need `SANPOU_JAVA` and `SANPOU_TLA2TOOLS_JAR` and are
+skipped otherwise; mise provides both (see `mise.toml`), so run tests as
+`mise x -- dune test`. After an intended output change, update the cram
+expectations with `dune promote`.
+
 ## Install
 
 ```sh
@@ -163,6 +171,7 @@ lib/
   tla/         TLA+ AST and printer
   json/        JSON serialization/deserialization
 test/
-  sanpou/      Alcotest tests
+  sanpou/      Alcotest unit tests for the compiler passes
+  cram/        E2E tests running the sanpou CLI (cram)
 example/       Example inputs (.snp files)
 ```

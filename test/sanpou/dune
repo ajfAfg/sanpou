@@ -8,6 +8,5 @@
   test_alpha_convert
   test_normalize_calls
   test_linearize
-  test_trace
-  test_e2e)
- (libraries sanpou tla alcotest str unix))
+  test_trace)
+ (libraries sanpou tla alcotest str))
