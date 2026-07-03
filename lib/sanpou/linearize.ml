@@ -11,9 +11,12 @@ let fresh_label counter =
 
 type ctx = {
   proc_name : string;
+  proc_names : string list;
   break_label : string option;
   continue_label : string option;
   label_counter : int ref;
+  temp_counter : int ref;
+  temp_local_vars : string list ref;
 }
 
 type compiled = { actions : action list; entry : string; exit_label : string }
@@ -26,22 +29,141 @@ let make_source ~proc_name ~description ~(loc : Cst.loc) =
 let describe_simple_stmts (stmts : simple_stmt comma_list) =
   String.concat ", " (List.map Cst_printer.pretty_simple_stmt stmts.items)
 
+let is_proc_call ctx name = List.mem name ctx.proc_names
+
+let fresh_temp_var ctx =
+  incr ctx.temp_counter;
+  let name = "callRet__" ^ string_of_int !(ctx.temp_counter) in
+  ctx.temp_local_vars := !(ctx.temp_local_vars) @ [ name ];
+  name
+
+let rec lower_expr ctx source continuation expr =
+  match expr with
+  | IntLit _ | BoolLit _ | Var _ | Self _ -> ([], continuation, expr)
+  | UnOp r ->
+      let actions, entry, rhs = lower_expr ctx source continuation r.rhs in
+      (actions, entry, UnOp { r with rhs })
+  | BinOp r ->
+      let rhs_actions, rhs_entry, rhs =
+        lower_expr ctx source continuation r.rhs
+      in
+      let lhs_actions, lhs_entry, lhs = lower_expr ctx source rhs_entry r.lhs in
+      (lhs_actions @ rhs_actions, lhs_entry, BinOp { r with lhs; rhs })
+  | App r when is_proc_call ctx r.name ->
+      let call_label = fresh_label ctx.label_counter in
+      let pop_label = fresh_label ctx.label_counter in
+      let temp = fresh_temp_var ctx in
+      let args_actions, args_entry, args =
+        lower_expr_list ctx source call_label r.args.items
+      in
+      let call_action =
+        {
+          label = call_label;
+          guard = None;
+          assignments = [];
+          pc_dest = PcNext "__call__";
+          stack_op = StackPush (r.name, pop_label, args);
+          source = { source with description = "[call " ^ r.name ^ "]" };
+        }
+      in
+      let pop_action =
+        {
+          label = pop_label;
+          guard = None;
+          assignments = [];
+          pc_dest = PcNext continuation;
+          stack_op = StackPopAssign temp;
+          source = { source with description = "[return from " ^ r.name ^ "]" };
+        }
+      in
+      ( args_actions @ [ call_action; pop_action ],
+        args_entry,
+        Var { t = r.name_t; name = temp } )
+  | App r ->
+      let actions, entry, args =
+        lower_expr_list ctx source continuation r.args.items
+      in
+      (actions, entry, App { r with args = { r.args with items = args } })
+  | Subscript r ->
+      let index_actions, index_entry, index =
+        lower_expr ctx source continuation r.index
+      in
+      let lhs_actions, lhs_entry, lhs =
+        lower_expr ctx source index_entry r.lhs
+      in
+      (lhs_actions @ index_actions, lhs_entry, Subscript { r with lhs; index })
+  | MapInit r ->
+      let value_actions, value_entry, value =
+        lower_expr ctx source continuation r.value
+      in
+      let hi_actions, hi_entry, hi = lower_expr ctx source value_entry r.hi in
+      let lo_actions, lo_entry, lo = lower_expr ctx source hi_entry r.lo in
+      ( lo_actions @ hi_actions @ value_actions,
+        lo_entry,
+        MapInit { r with lo; hi; value } )
+  | Tuple r ->
+      let actions, entry, elems =
+        lower_expr_list ctx source continuation r.elems.items
+      in
+      (actions, entry, Tuple { r with elems = { r.elems with items = elems } })
+  | Sequence r ->
+      let actions, entry, elems =
+        lower_expr_list ctx source continuation r.elems.items
+      in
+      ( actions,
+        entry,
+        Sequence { r with elems = { r.elems with items = elems } } )
+  | Paren r ->
+      let actions, entry, inner = lower_expr ctx source continuation r.inner in
+      (actions, entry, Paren { r with inner })
+
+and lower_expr_list ctx source continuation exprs =
+  let actions_rev, entry, exprs_rev =
+    List.fold_right
+      (fun expr (actions_acc, continuation_acc, exprs_acc) ->
+        let actions, entry, expr =
+          lower_expr ctx source continuation_acc expr
+        in
+        (actions @ actions_acc, entry, expr :: exprs_acc))
+      exprs ([], continuation, [])
+  in
+  (actions_rev, entry, exprs_rev)
+
+let lower_assign_target ctx source continuation = function
+  | VarTarget _ as target -> ([], continuation, target)
+  | SubscriptTarget r ->
+      let actions, entry, index = lower_expr ctx source continuation r.index in
+      (actions, entry, SubscriptTarget { r with index })
+
 (* ===== Simple statement linearization ===== *)
 
 let linearize_simple_stmt ctx (stmt : simple_stmt) ~guard ~assignments
-    ~stack_op_ref ~actual_next ~extra_actions ~next_label ~source =
+    ~stack_op_ref ~actual_next ~extra_actions ~pre_actions ~next_label ~source
+    ~label =
   match stmt with
   | Assign { target; value; _ } ->
+      let value_actions, value_entry, value =
+        lower_expr ctx source label value
+      in
+      let target_actions, entry, target =
+        lower_assign_target ctx source value_entry target
+      in
+      pre_actions := !pre_actions @ target_actions @ value_actions;
       let assignment =
         match target with
         | VarTarget { name; _ } -> AssignVar (name, value)
         | SubscriptTarget { name; index; _ } -> AssignIndex (name, index, value)
       in
       assignments := !assignments @ [ assignment ]
-  | Await { cond; _ } -> guard := Some cond
+  | Await { cond; _ } ->
+      let actions, _, cond = lower_expr ctx source label cond in
+      pre_actions := !pre_actions @ actions;
+      guard := Some cond
   | Call { name; args; _ } ->
       let pop_label = fresh_label ctx.label_counter in
-      stack_op_ref := StackPush (name, pop_label, args.items);
+      let args_actions, _, args = lower_expr_list ctx source label args.items in
+      pre_actions := !pre_actions @ args_actions;
+      stack_op_ref := StackPush (name, pop_label, args);
       actual_next := "__call__";
       let pop_source =
         { source with description = "[return from " ^ name ^ "]" }
@@ -58,6 +180,8 @@ let linearize_simple_stmt ctx (stmt : simple_stmt) ~guard ~assignments
       in
       extra_actions := [ pop_action ]
   | Return { value; _ } ->
+      let actions, _, value = lower_expr ctx source label value in
+      pre_actions := !pre_actions @ actions;
       stack_op_ref := StackReturn value;
       actual_next := "__return__"
   | Break _ ->
@@ -101,6 +225,7 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
       in
       match stmts.items with
       | [ Return { value; _ } ] ->
+          let pre_actions, entry, value = lower_expr ctx source label value in
           let a =
             {
               label;
@@ -111,7 +236,7 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
               source;
             }
           in
-          { actions = [ a ]; entry = label; exit_label = next_label }
+          { actions = pre_actions @ [ a ]; entry; exit_label = next_label }
       | [ Break _ ] ->
           let break_target =
             match ctx.break_label with
@@ -148,13 +273,16 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
           { actions = [ a ]; entry = label; exit_label = next_label }
       | [ Call { name; args; _ } ] ->
           let pop_label = fresh_label ctx.label_counter in
+          let args_actions, entry, args =
+            lower_expr_list ctx source label args.items
+          in
           let call_action =
             {
               label;
               guard = None;
               assignments = [];
               pc_dest = PcNext "__call__";
-              stack_op = StackPush (name, pop_label, args.items);
+              stack_op = StackPush (name, pop_label, args);
               source;
             }
           in
@@ -172,8 +300,8 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
             }
           in
           {
-            actions = [ call_action; pop_action ];
-            entry = label;
+            actions = args_actions @ [ call_action; pop_action ];
+            entry;
             exit_label = next_label;
           }
       | _ ->
@@ -182,10 +310,12 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
           let stack_op_ref = ref StackNone in
           let actual_next = ref next_label in
           let extra_actions = ref [] in
+          let pre_actions = ref [] in
           List.iter
             (fun stmt ->
               linearize_simple_stmt ctx stmt ~guard ~assignments ~stack_op_ref
-                ~actual_next ~extra_actions ~next_label ~source)
+                ~actual_next ~extra_actions ~pre_actions ~next_label ~source
+                ~label)
             stmts.items;
           let a =
             {
@@ -198,8 +328,11 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
             }
           in
           {
-            actions = [ a ] @ !extra_actions;
-            entry = label;
+            actions = !pre_actions @ [ a ] @ !extra_actions;
+            entry =
+              (match !pre_actions with
+              | first :: _ -> first.label
+              | [] -> label);
             exit_label = next_label;
           })
   | BlockStep { stmt = While { cond; body; _ }; loc } ->
@@ -210,16 +343,20 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
 
 and linearize_while ctx cond body after_loop_label loc =
   let check_label = fresh_label ctx.label_counter in
+  let source =
+    make_source ~proc_name:ctx.proc_name
+      ~description:("while (" ^ Cst_printer.pretty_expr cond ^ ") [check]")
+      ~loc
+  in
+  let cond_actions, cond_entry, cond = lower_expr ctx source check_label cond in
   let body_ctx =
     {
       ctx with
       break_label = Some after_loop_label;
-      continue_label = Some check_label;
+      continue_label = Some cond_entry;
     }
   in
-  let body_compiled = linearize_body body_ctx body check_label in
-  let desc = "while (" ^ Cst_printer.pretty_expr cond ^ ") [check]" in
-  let source = make_source ~proc_name:ctx.proc_name ~description:desc ~loc in
+  let body_compiled = linearize_body body_ctx body cond_entry in
   let check_action =
     {
       label = check_label;
@@ -231,13 +368,19 @@ and linearize_while ctx cond body after_loop_label loc =
     }
   in
   {
-    actions = [ check_action ] @ body_compiled.actions;
-    entry = check_label;
+    actions = cond_actions @ [ check_action ] @ body_compiled.actions;
+    entry = cond_entry;
     exit_label = after_loop_label;
   }
 
 and linearize_if ctx cond body next_label loc else_branch =
   let check_label = fresh_label ctx.label_counter in
+  let source =
+    make_source ~proc_name:ctx.proc_name
+      ~description:("if (" ^ Cst_printer.pretty_expr cond ^ ") [check]")
+      ~loc
+  in
+  let cond_actions, cond_entry, cond = lower_expr ctx source check_label cond in
   let body_compiled = linearize_body ctx body next_label in
   let else_entry, else_actions =
     match else_branch with
@@ -246,8 +389,6 @@ and linearize_if ctx cond body next_label loc else_branch =
         (compiled.entry, compiled.actions)
     | None -> (next_label, [])
   in
-  let desc = "if (" ^ Cst_printer.pretty_expr cond ^ ") [check]" in
-  let source = make_source ~proc_name:ctx.proc_name ~description:desc ~loc in
   let check_action =
     {
       label = check_label;
@@ -259,8 +400,9 @@ and linearize_if ctx cond body next_label loc else_branch =
     }
   in
   {
-    actions = [ check_action ] @ body_compiled.actions @ else_actions;
-    entry = check_label;
+    actions =
+      cond_actions @ [ check_action ] @ body_compiled.actions @ else_actions;
+    entry = cond_entry;
     exit_label = next_label;
   }
 
@@ -313,6 +455,7 @@ and linearize_var_step ctx step next_label =
           ~description:("var " ^ name ^ " = " ^ Cst_printer.pretty_expr value)
           ~loc
       in
+      let pre_actions, entry, value = lower_expr ctx source label value in
       let a =
         {
           label;
@@ -323,7 +466,7 @@ and linearize_var_step ctx step next_label =
           source;
         }
       in
-      { actions = [ a ]; entry = label; exit_label = next_label }
+      { actions = pre_actions @ [ a ]; entry; exit_label = next_label }
   | _ -> failwith "linearize_var_step called on non-VarStep"
 
 (* ===== Resolve call targets ===== *)
@@ -352,6 +495,13 @@ let resolve_call_target procs action =
 let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
   let m = am.cst in
   let label_counter = ref 0 in
+  let temp_counter = ref 0 in
+  let temp_local_vars = ref [] in
+  let proc_names =
+    List.filter_map
+      (function ProcDef { name; _ } -> Some name | _ -> None)
+      m.items
+  in
   let const_defs = ref [] in
   let fun_defs = ref [] in
   let var_decls = ref [] in
@@ -371,9 +521,12 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
           let ctx =
             {
               proc_name = name;
+              proc_names;
               break_label = None;
               continue_label = None;
               label_counter;
+              temp_counter;
+              temp_local_vars;
             }
           in
           let done_label = "Done" in
@@ -404,7 +557,7 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
     const_defs = !const_defs;
     fun_defs = !fun_defs;
     var_decls = !var_decls;
-    local_var_decls = am.local_vars;
+    local_var_decls = am.local_vars @ !temp_local_vars;
     procs = resolved_procs;
     processes = !processes;
   }

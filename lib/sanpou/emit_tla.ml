@@ -139,10 +139,14 @@ let compute_unchanged (ir : module_ir) (action : action) : string list =
   let global_vars = List.map fst ir.var_decls in
   let all_vars = global_vars @ ir.local_var_decls in
   let assigned =
-    List.map
-      (function
-        | AssignVar (name, _) -> name | AssignIndex (name, _, _) -> name)
-      action.assignments
+    (match action.stack_op with
+      | StackDiscard -> ir.local_var_decls
+      | StackPopAssign name -> name :: ir.local_var_decls
+      | _ -> [])
+    @ List.map
+        (function
+          | AssignVar (name, _) -> name | AssignIndex (name, _, _) -> name)
+        action.assignments
   in
   let unchanged = List.filter (fun v -> not (List.mem v assigned)) all_vars in
   match action.stack_op with
@@ -157,6 +161,18 @@ let action_to_decl proc_entry_labels local_vars (ir : module_ir)
   let self = TId "self" in
   let conjuncts = ref [] in
   let add c = conjuncts := !conjuncts @ [ c ] in
+  let stack_head = THead (TSubscript (TId "stack", self)) in
+  let restore_local_vars except_var =
+    List.iter
+      (fun var ->
+        if Some var <> except_var then
+          add
+            (TBinOp
+               ( "=",
+                 TPrimed (TId var),
+                 TExcept (TId var, self, TDot (stack_head, var)) )))
+      local_vars
+  in
   add (TBinOp ("=", TSubscript (TId "pc", self), TStr action.label));
   (match action.guard with Some g -> add (to_tla g) | None -> ());
   List.iter
@@ -186,6 +202,9 @@ let action_to_decl proc_entry_labels local_vars (ir : module_ir)
   (match action.stack_op with
   | StackPush (proc_name, return_label, _) ->
       let entry = List.assoc proc_name proc_entry_labels in
+      let saved_locals =
+        List.map (fun var -> (var, TSubscript (TId var, self))) local_vars
+      in
       add
         (TBinOp
            ( "=",
@@ -197,23 +216,24 @@ let action_to_decl proc_entry_labels local_vars (ir : module_ir)
                    ( TSeqLit
                        [
                          TRecord
-                           [
-                             ("procedure", TStr proc_name);
-                             ("return_pc", TStr return_label);
-                           ];
+                           ([
+                              ("procedure", TStr proc_name);
+                              ("return_pc", TStr return_label);
+                            ]
+                           @ saved_locals);
                        ],
                      TSubscript (TId "stack", self) ) ) ));
       add
         (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, TStr entry)))
   | StackReturn retval ->
+      let saved_locals =
+        List.map (fun var -> (var, TDot (stack_head, var))) local_vars
+      in
       add
         (TBinOp
            ( "=",
              TPrimed (TId "pc"),
-             TExcept
-               ( TId "pc",
-                 self,
-                 TDot (THead (TSubscript (TId "stack", self)), "return_pc") ) ));
+             TExcept (TId "pc", self, TDot (stack_head, "return_pc")) ));
       add
         (TBinOp
            ( "=",
@@ -222,7 +242,8 @@ let action_to_decl proc_entry_labels local_vars (ir : module_ir)
                ( TId "stack",
                  self,
                  TConcat
-                   ( TSeqLit [ to_tla retval ],
+                   ( TSeqLit
+                       [ TRecord (("value", to_tla retval) :: saved_locals) ],
                      TTail (TSubscript (TId "stack", self)) ) ) ))
   | StackDiscard ->
       let pc_val =
@@ -230,6 +251,26 @@ let action_to_decl proc_entry_labels local_vars (ir : module_ir)
         | PcNext l -> TStr l
         | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
       in
+      restore_local_vars None;
+      add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, pc_val)));
+      add
+        (TBinOp
+           ( "=",
+             TPrimed (TId "stack"),
+             TExcept (TId "stack", self, TTail (TSubscript (TId "stack", self)))
+           ))
+  | StackPopAssign var ->
+      let pc_val =
+        match action.pc_dest with
+        | PcNext l -> TStr l
+        | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
+      in
+      let return_value = TDot (stack_head, "value") in
+      restore_local_vars (Some var);
+      if List.mem var local_vars then
+        add
+          (TBinOp ("=", TPrimed (TId var), TExcept (TId var, self, return_value)))
+      else add (TBinOp ("=", TPrimed (TId var), return_value));
       add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", self, pc_val)));
       add
         (TBinOp

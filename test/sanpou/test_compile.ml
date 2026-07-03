@@ -371,5 +371,28 @@ let () =
               has "idx__1' = [idx__1 EXCEPT ![self] = self]";
               has "seen__2' = [seen__2 EXCEPT ![self] = idx__1[self]]";
               has_not_in "![idx]" tla);
+          Alcotest.test_case "procedure call expression captures return" `Quick
+            (fun () ->
+              let cst =
+                parse
+                  "mod factorial {\n\
+                   var x = 0;\n\
+                   fn fact(y) {\n\
+                   if (y == 0) { return 1; } else {\n\
+                   var ans = y * fact(y - 1);\n\
+                   return ans;\n\
+                   }\n\
+                   }\n\
+                   fn worker() { x = fact(5); return (); }\n\
+                   process ps = worker in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile cst |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "callRet__1";
+              has "Head(stack[self]).value";
+              has "value |->";
+              has_not_in "x' = fact(5)" tla;
+              has_not_in "* fact(" tla);
         ] );
     ]

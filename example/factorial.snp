@@ -1,0 +1,21 @@
+mod factorial {
+  var x = 0;
+
+  def testing = finally(x == 120);
+
+  fn fact(y) {
+    if (y == 0) {
+      return 1;
+    } else {
+      var ans = y * fact(y-1);
+      return ans;
+    }
+  }
+
+  fn worker() {
+    x = fact(5);
+    return ();
+  }
+
+  fair process workers = worker in 1..1;
+}
