@@ -35,7 +35,8 @@ let compile_to_tla source =
   in
   Sanpou.Typing.check ast;
   let irs =
-    ast |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
+    ast |> Sanpou.Alpha_convert.transform |> Sanpou.Normalize_calls.normalize
+    |> Sanpou.Linearize.linearize
   in
   List.map
     (fun ir ->
