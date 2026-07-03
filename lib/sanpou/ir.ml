@@ -23,6 +23,9 @@ type var_info = {
 let wrapper_entry_label process_name = "__w_" ^ process_name ^ "_entry__"
 let wrapper_discard_label process_name = "__w_" ^ process_name ^ "_discard__"
 
+(* The terminal pc value; not an action label. *)
+let done_label = "Done"
+
 (* ===== Action IR ===== *)
 
 type stack_op =
@@ -33,7 +36,12 @@ type stack_op =
   | StackDiscard (* pop return value after call *)
   | StackPopAssign of string (* assign return value, then pop *)
 
-type pc_dest = PcNext of string | PcBranch of Ast.expr * string * string
+(* Where control goes after the action; fully determines pc'. *)
+type pc_dest =
+  | PcNext of string
+  | PcBranch of Ast.expr * string * string
+  | PcCall of string (* enter the named procedure at its entry label *)
+  | PcReturn (* jump to the top frame's return_pc *)
 
 type assignment =
   | AssignVar of string * Ast.expr

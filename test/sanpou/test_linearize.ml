@@ -76,8 +76,8 @@ let () =
               | StackReturn _ -> ()
               | _ -> fail "expected StackReturn");
               match a.pc_dest with
-              | PcNext "__return__" -> ()
-              | _ -> fail "expected PcNext __return__");
+              | PcReturn -> ()
+              | _ -> fail "expected PcReturn");
           test_case "assign generates action" `Quick (fun () ->
               let m =
                 make_module "m"
@@ -237,7 +237,7 @@ let () =
               in
               check bool "pop has no assignments" true
                 (pop_action.assignments = []));
-          test_case "call target resolved" `Quick (fun () ->
+          test_case "call jumps into the callee" `Quick (fun () ->
               let m =
                 make_module "m"
                   [
@@ -251,7 +251,6 @@ let () =
                   ]
               in
               let ir = linearize_one (make_alpha_module m []) in
-              let bar = find_proc ir "bar" in
               let foo = find_proc ir "foo" in
               let push_action =
                 List.find
@@ -260,8 +259,8 @@ let () =
                   foo.actions
               in
               match push_action.pc_dest with
-              | PcNext l -> check string "resolved" bar.entry_label l
-              | _ -> fail "expected PcNext");
+              | PcCall callee -> check string "callee" "bar" callee
+              | _ -> fail "expected PcCall");
           test_case "call expression captures return value" `Quick (fun () ->
               let m =
                 make_module "m"

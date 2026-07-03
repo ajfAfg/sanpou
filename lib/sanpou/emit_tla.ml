@@ -92,7 +92,7 @@ let wrapper_of_process (process : process_ir) : process_wrapper =
   let entry_label = Ir.wrapper_entry_label process.name in
   let discard_label = Ir.wrapper_discard_label process.name in
   let entry_action =
-    make_action ~label:entry_label ~pc_dest:(PcNext "__call__")
+    make_action ~label:entry_label ~pc_dest:(PcCall process.proc)
       ~stack_op:(StackPush (process.proc, discard_label, []))
       ~source:
         (make_wrapper_source proc_name
@@ -102,7 +102,7 @@ let wrapper_of_process (process : process_ir) : process_wrapper =
       ()
   in
   let discard_action =
-    make_action ~label:discard_label ~pc_dest:(PcNext "Done")
+    make_action ~label:discard_label ~pc_dest:(PcNext Ir.done_label)
       ~stack_op:StackDiscard
       ~source:
         (make_wrapper_source proc_name
@@ -270,15 +270,12 @@ let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
       ("=", TPrimed (TId "pc"), TExcept (TId "pc", [ ([ SubSel self ], v) ]))
   in
   let pc_conjunct =
-    match action.stack_op with
-    | StackPush (proc_name, _, _) ->
-        set_pc (TStr (List.assoc proc_name proc_entry_labels))
-    | StackReturn _ -> set_pc (TDot (stack_head, "return_pc"))
-    | StackDiscard | StackPopAssign _ | StackNone ->
-        set_pc
-          (match action.pc_dest with
-          | PcNext l -> TStr l
-          | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f))
+    set_pc
+      (match action.pc_dest with
+      | PcNext l -> TStr l
+      | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
+      | PcCall callee -> TStr (List.assoc callee proc_entry_labels)
+      | PcReturn -> TDot (stack_head, "return_pc"))
   in
   let unchanged_conjuncts =
     match compute_unchanged ir action with
@@ -403,7 +400,7 @@ let termination_decls : tla_decl list =
     TForall
       ( "self",
         TId "ProcSet",
-        TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr "Done") )
+        TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr Ir.done_label) )
   in
   [
     DOpDef
