@@ -48,6 +48,7 @@ let if_block cond body =
 let make_proc name body =
   ProcDef
     {
+      loc = loc0;
       fn_t = n;
       name_t = n;
       name;
@@ -58,6 +59,16 @@ let make_proc name body =
       body;
       rb = n;
     }
+
+(* TLA names of renamed variables that become state variables (i.e. not
+   MapInit binders), in declaration order *)
+let local_tla_names (am : Sanpou.Alpha_convert.alpha_module) =
+  List.filter_map
+    (fun (r : Sanpou.Alpha_convert.rename) ->
+      match r.kind with
+      | Sanpou.Alpha_convert.BinderVar -> None
+      | _ -> Some r.tla_name)
+    am.renames
 
 let make_module items =
   { mod_t = n; name_t = n; mod_name = "m"; lb = n; items; rb = n }
@@ -205,7 +216,16 @@ let () =
                   ]
               in
               let am = transform_one prog in
-              check (list string) "locals" [ "x__1"; "y__2" ] am.local_vars);
+              check (list string) "locals" [ "x__1"; "y__2" ]
+                (local_tla_names am);
+              check (list string) "originals" [ "x"; "y" ]
+                (List.map
+                   (fun (r : Sanpou.Alpha_convert.rename) -> r.original)
+                   am.renames);
+              check (list string) "owning proc" [ "foo"; "foo" ]
+                (List.map
+                   (fun (r : Sanpou.Alpha_convert.rename) -> r.proc)
+                   am.renames));
           test_case "no var steps no locals" `Quick (fun () ->
               let prog =
                 make_program
@@ -218,7 +238,7 @@ let () =
                   ]
               in
               let am = transform_one prog in
-              check (list string) "empty" [] am.local_vars);
+              check (list string) "empty" [] (local_tla_names am));
           test_case "nested var in while collected" `Quick (fun () ->
               let prog =
                 make_program
@@ -235,7 +255,8 @@ let () =
                   ]
               in
               let am = transform_one prog in
-              check (list string) "locals" [ "x__1"; "y__2" ] am.local_vars);
+              check (list string) "locals" [ "x__1"; "y__2" ]
+                (local_tla_names am));
           test_case "nested var in if collected" `Quick (fun () ->
               let prog =
                 make_program
@@ -250,7 +271,7 @@ let () =
                   ]
               in
               let am = transform_one prog in
-              check (list string) "locals" [ "z__1" ] am.local_vars);
+              check (list string) "locals" [ "z__1" ] (local_tla_names am));
         ] );
       ( "expressions",
         [

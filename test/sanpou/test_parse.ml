@@ -101,6 +101,7 @@ let var_decl x e =
 let proc_def f ps body =
   ProcDef
     {
+      loc = { line = 0; col = 0 };
       fn_t = n;
       name_t = n;
       name = f;
@@ -115,6 +116,7 @@ let proc_def f ps body =
 let process_ ?(fair = false) nm pr lo hi =
   Process
     {
+      loc = { line = 0; col = 0 };
       fair_t = (if fair then Some n else None);
       process_t = n;
       name_t = n;

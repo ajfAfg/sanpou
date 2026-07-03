@@ -125,7 +125,7 @@ let print_item = function
   | VarDecl { var_t; name_t; name; eq_t; value; semi_t } ->
       var_t ^ "var" ^ name_t ^ name ^ eq_t ^ "=" ^ print_expr value ^ semi_t
       ^ ";"
-  | ProcDef { fn_t; name_t; name; lp; params; rp; lb; body; rb } ->
+  | ProcDef { fn_t; name_t; name; lp; params; rp; lb; body; rb; _ } ->
       fn_t ^ "fn" ^ name_t ^ name ^ lp ^ "("
       ^ print_comma_list print_param params
       ^ rp ^ ")" ^ lb ^ "{" ^ print_body body ^ rb ^ "}"
@@ -143,6 +143,7 @@ let print_item = function
         dotdot_t;
         hi;
         semi_t;
+        _;
       } ->
       (match fair_t with Some fair_t -> fair_t ^ "fair" | None -> "")
       ^ process_t ^ "process" ^ name_t ^ name ^ eq_t ^ "=" ^ proc_t ^ proc
@@ -171,45 +172,57 @@ let pretty_binop = function
   | And -> " && "
   | Or -> " || "
 
-let rec pretty_expr = function
+(* [rename] maps identifiers back to their display names (e.g. undoing
+   alpha conversion). It applies only to variable positions, never to
+   function/procedure names. *)
+let rec pretty_expr ?(rename = Fun.id) = function
   | IntLit { value; _ } -> string_of_int value
   | BoolLit { value; _ } -> if value then "true" else "false"
-  | Var { name; _ } -> name
+  | Var { name; _ } -> rename name
   | Self _ -> "self"
-  | UnOp { op; rhs; _ } -> unop_str op ^ pretty_expr rhs
+  | UnOp { op; rhs; _ } -> unop_str op ^ pretty_expr ~rename rhs
   | BinOp { lhs; op; rhs; _ } ->
-      pretty_expr lhs ^ pretty_binop op ^ pretty_expr rhs
+      pretty_expr ~rename lhs ^ pretty_binop op ^ pretty_expr ~rename rhs
   | App { name; args; _ } ->
-      name ^ "(" ^ String.concat ", " (List.map pretty_expr args.items) ^ ")"
+      name ^ "("
+      ^ String.concat ", " (List.map (pretty_expr ~rename) args.items)
+      ^ ")"
   | Subscript { lhs; index; _ } ->
-      pretty_expr lhs ^ "[" ^ pretty_expr index ^ "]"
+      pretty_expr ~rename lhs ^ "[" ^ pretty_expr ~rename index ^ "]"
   | MapInit { binder; lo; hi; value; trailing_semi_t; _ } ->
-      "{ " ^ binder ^ " in " ^ pretty_expr lo ^ ".." ^ pretty_expr hi ^ ": "
-      ^ pretty_expr value
+      "{ " ^ rename binder ^ " in " ^ pretty_expr ~rename lo ^ ".."
+      ^ pretty_expr ~rename hi ^ ": "
+      ^ pretty_expr ~rename value
       ^ (match trailing_semi_t with Some _ -> ";" | None -> "")
       ^ " }"
   | Tuple { elems; _ } -> (
       match elems.items with
       | [] -> "()"
-      | [ e ] -> "(" ^ pretty_expr e ^ ",)"
-      | es -> "(" ^ String.concat ", " (List.map pretty_expr es) ^ ")")
+      | [ e ] -> "(" ^ pretty_expr ~rename e ^ ",)"
+      | es ->
+          "(" ^ String.concat ", " (List.map (pretty_expr ~rename) es) ^ ")")
   | Sequence { elems; _ } ->
-      "[" ^ String.concat ", " (List.map pretty_expr elems.items) ^ "]"
-  | Paren { inner; _ } -> "(" ^ pretty_expr inner ^ ")"
+      "["
+      ^ String.concat ", " (List.map (pretty_expr ~rename) elems.items)
+      ^ "]"
+  | Paren { inner; _ } -> "(" ^ pretty_expr ~rename inner ^ ")"
 
-let pretty_assign_target = function
-  | VarTarget { name; _ } -> name
-  | SubscriptTarget { name; index; _ } -> name ^ "[" ^ pretty_expr index ^ "]"
+let pretty_assign_target ?(rename = Fun.id) = function
+  | VarTarget { name; _ } -> rename name
+  | SubscriptTarget { name; index; _ } ->
+      rename name ^ "[" ^ pretty_expr ~rename index ^ "]"
 
-let pretty_simple_stmt = function
+let pretty_simple_stmt ?(rename = Fun.id) = function
   | Assign { target; value; _ } ->
-      pretty_assign_target target ^ " = " ^ pretty_expr value
+      pretty_assign_target ~rename target ^ " = " ^ pretty_expr ~rename value
   | Call { name; args; _ } ->
-      name ^ "(" ^ String.concat ", " (List.map pretty_expr args.items) ^ ")"
-  | Return { value; _ } -> "return " ^ pretty_expr value
+      name ^ "("
+      ^ String.concat ", " (List.map (pretty_expr ~rename) args.items)
+      ^ ")"
+  | Return { value; _ } -> "return " ^ pretty_expr ~rename value
   | Break _ -> "break"
   | Continue _ -> "continue"
-  | Await { cond; _ } -> "await " ^ pretty_expr cond
+  | Await { cond; _ } -> "await " ^ pretty_expr ~rename cond
 
 let rec pretty_step indent = function
   | SimpleStep { stmts; _ } ->

@@ -12,7 +12,11 @@ type trace_step = {
   state : state_var list;
 }
 
-type trace = { is_deadlock : bool; steps : trace_step list }
+type trace = {
+  is_deadlock : bool;
+  steps : trace_step list;
+  module_name : string option;
+}
 
 (* ===== Parsing helpers ===== *)
 
@@ -68,9 +72,24 @@ let parse_state_var line =
 
 (* ===== Main parser ===== *)
 
+(* SANY logs "Semantic processing of module <M>" for each module, dependencies
+   first and the checked module last. Internal modules (e.g. _TLCTrace) start
+   with '_' and are skipped. *)
+let semantic_processing_prefix = "Semantic processing of module "
+
+let parse_module_name line =
+  let trimmed = String.trim line in
+  if starts_with semantic_processing_prefix trimmed then
+    let plen = String.length semantic_processing_prefix in
+    let name = String.sub trimmed plen (String.length trimmed - plen) in
+    let name = String.trim name in
+    if name <> "" && name.[0] <> '_' then Some name else None
+  else None
+
 let parse (input : string) : trace =
   let lines = String.split_on_char '\n' input in
   let is_deadlock = ref false in
+  let module_name = ref None in
   let steps = ref [] in
   let current_step = ref None in
   let current_vars = ref [] in
@@ -87,6 +106,9 @@ let parse (input : string) : trace =
   in
   List.iter
     (fun line ->
+      (match parse_module_name line with
+      | Some name -> module_name := Some name (* keep the last match *)
+      | None -> ());
       if starts_with "@!@!@STARTMSG 2114" line then is_deadlock := true
       else if starts_with "@!@!@STARTMSG 2217" line then (
         flush_step ();
@@ -130,4 +152,4 @@ let parse (input : string) : trace =
                 | [] -> ()))
     lines;
   flush_step ();
-  { is_deadlock = !is_deadlock; steps = !steps }
+  { is_deadlock = !is_deadlock; steps = !steps; module_name = !module_name }

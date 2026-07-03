@@ -7,5 +7,6 @@
   test_typing
   test_alpha_convert
   test_linearize
+  test_trace
   test_e2e)
  (libraries sanpou tla alcotest str unix))

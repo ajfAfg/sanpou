@@ -16,7 +16,9 @@ type ctx = {
   continue_label : string option;
   label_counter : int ref;
   temp_counter : int ref;
-  temp_local_vars : string list ref;
+  temp_var_infos : var_info list ref;
+  demangle : string -> string;
+      (* maps alpha-converted names back to source names for descriptions *)
 }
 
 type compiled = { actions : action list; entry : string; exit_label : string }
@@ -26,15 +28,27 @@ type compiled = { actions : action list; entry : string; exit_label : string }
 let make_source ~proc_name ~description ~(loc : Cst.loc) =
   { proc_name; description; line = loc.line; col = loc.col }
 
-let describe_simple_stmts (stmts : simple_stmt comma_list) =
-  String.concat ", " (List.map Cst_printer.pretty_simple_stmt stmts.items)
+let describe_simple_stmts ctx (stmts : simple_stmt comma_list) =
+  String.concat ", "
+    (List.map
+       (Cst_printer.pretty_simple_stmt ~rename:ctx.demangle)
+       stmts.items)
 
 let is_proc_call ctx name = List.mem name ctx.proc_names
 
-let fresh_temp_var ctx =
+let fresh_temp_var ctx ~callee =
   incr ctx.temp_counter;
   let name = "callRet__" ^ string_of_int !(ctx.temp_counter) in
-  ctx.temp_local_vars := !(ctx.temp_local_vars) @ [ name ];
+  ctx.temp_var_infos :=
+    !(ctx.temp_var_infos)
+    @ [
+        {
+          tla_name = name;
+          original = name;
+          proc = Some ctx.proc_name;
+          kind = CallRet callee;
+        };
+      ];
   name
 
 let rec lower_expr ctx source continuation expr =
@@ -52,7 +66,7 @@ let rec lower_expr ctx source continuation expr =
   | App r when is_proc_call ctx r.name ->
       let call_label = fresh_label ctx.label_counter in
       let pop_label = fresh_label ctx.label_counter in
-      let temp = fresh_temp_var ctx in
+      let temp = fresh_temp_var ctx ~callee:r.name in
       let args_actions, args_entry, args =
         lower_expr_list ctx source call_label r.args.items
       in
@@ -220,7 +234,7 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
   | SimpleStep { stmts; loc; _ } -> (
       let source =
         make_source ~proc_name:ctx.proc_name
-          ~description:(describe_simple_stmts stmts)
+          ~description:(describe_simple_stmts ctx stmts)
           ~loc
       in
       match stmts.items with
@@ -345,7 +359,10 @@ and linearize_while ctx cond body after_loop_label loc =
   let check_label = fresh_label ctx.label_counter in
   let source =
     make_source ~proc_name:ctx.proc_name
-      ~description:("while (" ^ Cst_printer.pretty_expr cond ^ ") [check]")
+      ~description:
+        ("while ("
+        ^ Cst_printer.pretty_expr ~rename:ctx.demangle cond
+        ^ ") [check]")
       ~loc
   in
   let cond_actions, cond_entry, cond = lower_expr ctx source check_label cond in
@@ -356,7 +373,7 @@ and linearize_while ctx cond body after_loop_label loc =
       continue_label = Some cond_entry;
     }
   in
-  let body_compiled = linearize_body body_ctx body cond_entry in
+  let body_compiled = linearize_body body_ctx body cond_entry ~loc in
   let check_action =
     {
       label = check_label;
@@ -377,15 +394,18 @@ and linearize_if ctx cond body next_label loc else_branch =
   let check_label = fresh_label ctx.label_counter in
   let source =
     make_source ~proc_name:ctx.proc_name
-      ~description:("if (" ^ Cst_printer.pretty_expr cond ^ ") [check]")
+      ~description:
+        ("if ("
+        ^ Cst_printer.pretty_expr ~rename:ctx.demangle cond
+        ^ ") [check]")
       ~loc
   in
   let cond_actions, cond_entry, cond = lower_expr ctx source check_label cond in
-  let body_compiled = linearize_body ctx body next_label in
+  let body_compiled = linearize_body ctx body next_label ~loc in
   let else_entry, else_actions =
     match else_branch with
     | Some (_, _, else_body, _) ->
-        let compiled = linearize_body ctx else_body next_label in
+        let compiled = linearize_body ctx else_body next_label ~loc in
         (compiled.entry, compiled.actions)
     | None -> (next_label, [])
   in
@@ -406,13 +426,14 @@ and linearize_if ctx cond body next_label loc else_branch =
     exit_label = next_label;
   }
 
-and linearize_body ctx (steps : Cst.body) (continuation : string) : compiled =
+and linearize_body ctx (steps : Cst.body) (continuation : string)
+    ~(loc : Cst.loc) : compiled =
+  (* [loc] is the enclosing construct's location, used when the body is empty *)
   match steps with
   | [] ->
       let label = fresh_label ctx.label_counter in
       let source =
-        make_source ~proc_name:ctx.proc_name ~description:"[empty body]"
-          ~loc:{ line = 0; col = 0 }
+        make_source ~proc_name:ctx.proc_name ~description:"[empty body]" ~loc
       in
       let a =
         {
@@ -452,7 +473,9 @@ and linearize_var_step ctx step next_label =
   | VarStep { name; value; loc; _ } ->
       let source =
         make_source ~proc_name:ctx.proc_name
-          ~description:("var " ^ name ^ " = " ^ Cst_printer.pretty_expr value)
+          ~description:
+            ("var " ^ ctx.demangle name ^ " = "
+            ^ Cst_printer.pretty_expr ~rename:ctx.demangle value)
           ~loc
       in
       let pre_actions, entry, value = lower_expr ctx source label value in
@@ -496,7 +519,16 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
   let m = am.cst in
   let label_counter = ref 0 in
   let temp_counter = ref 0 in
-  let temp_local_vars = ref [] in
+  let temp_var_infos = ref [] in
+  let demangle name =
+    match
+      List.find_opt
+        (fun (r : Alpha_convert.rename) -> r.tla_name = name)
+        am.renames
+    with
+    | Some r -> r.original
+    | None -> name
+  in
   let proc_names =
     List.filter_map
       (function ProcDef { name; _ } -> Some name | _ -> None)
@@ -517,7 +549,7 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
             !fun_defs @ [ (name, List.map snd params.items, body_expr) ]
       | VarDecl { name; value; _ } ->
           var_decls := !var_decls @ [ (name, value) ]
-      | ProcDef { name; params; body; _ } ->
+      | ProcDef { name; params; body; loc; _ } ->
           let ctx =
             {
               proc_name = name;
@@ -526,11 +558,12 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
               continue_label = None;
               label_counter;
               temp_counter;
-              temp_local_vars;
+              temp_var_infos;
+              demangle;
             }
           in
           let done_label = "Done" in
-          let compiled = linearize_body ctx body done_label in
+          let compiled = linearize_body ctx body done_label ~loc in
           let proc =
             {
               proc_name = name;
@@ -540,10 +573,10 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
             }
           in
           procs := !procs @ [ proc ]
-      | Process { name; proc; fair_t; lo; hi; _ } ->
+      | Process { name; proc; fair_t; lo; hi; loc; _ } ->
           processes :=
             !processes
-            @ [ { name; proc; fair = Option.is_some fair_t; lo; hi } ])
+            @ [ { name; proc; fair = Option.is_some fair_t; lo; hi; loc } ])
     m.items;
   (* Resolve call targets *)
   let resolved_procs =
@@ -552,12 +585,42 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
         { p with actions = List.map (resolve_call_target !procs) p.actions })
       !procs
   in
+  let var_infos =
+    List.map
+      (fun (name, _) -> { tla_name = name; original = name; proc = None; kind = Global })
+      !var_decls
+    @ List.filter_map
+        (fun (r : Alpha_convert.rename) ->
+          match r.kind with
+          | Alpha_convert.BinderVar -> None (* never a TLA state variable *)
+          | Alpha_convert.ParamVar | Alpha_convert.LocalVar ->
+              Some
+                {
+                  tla_name = r.tla_name;
+                  original = r.original;
+                  proc = Some r.proc;
+                  kind =
+                    (match r.kind with
+                    | Alpha_convert.ParamVar -> Param
+                    | _ -> Local);
+                })
+        am.renames
+    @ !temp_var_infos
+  in
+  (* Derived from var_infos so the two cannot drift apart *)
+  let local_var_decls =
+    List.filter_map
+      (fun (v : var_info) ->
+        match v.kind with Global -> None | _ -> Some v.tla_name)
+      var_infos
+  in
   {
     name = m.mod_name;
     const_defs = !const_defs;
     fun_defs = !fun_defs;
     var_decls = !var_decls;
-    local_var_decls = am.local_vars @ !temp_local_vars;
+    local_var_decls;
+    var_infos;
     procs = resolved_procs;
     processes = !processes;
   }

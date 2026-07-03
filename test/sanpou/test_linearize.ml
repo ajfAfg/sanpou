@@ -53,6 +53,7 @@ let if_block cond body =
 let make_proc name body =
   ProcDef
     {
+      loc = loc0;
       fn_t = n;
       name_t = n;
       name;
@@ -87,6 +88,7 @@ let make_fundef name params body_expr =
 let make_process ?(fair = false) name proc lo hi =
   Process
     {
+      loc = loc0;
       fair_t = (if fair then Some n else None);
       process_t = n;
       name_t = n;
@@ -104,8 +106,17 @@ let make_process ?(fair = false) name proc lo hi =
 let make_module name items =
   { mod_t = n; name_t = n; mod_name = name; lb = n; items; rb = n }
 
+(* Renames with original = tla_name so descriptions are unaffected *)
 let make_alpha_module cst local_vars : Sanpou.Alpha_convert.alpha_module =
-  { cst; local_vars }
+  {
+    cst;
+    renames =
+      List.map
+        (fun name ->
+          Sanpou.Alpha_convert.
+            { tla_name = name; original = name; proc = ""; kind = LocalVar })
+        local_vars;
+  }
 
 let linearize_one am =
   let result = Sanpou.Linearize.linearize [ am ] in
