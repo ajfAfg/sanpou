@@ -1,4 +1,6 @@
 {
+exception Error of string
+
 let reservedWords = [
   ("def", Parser.DEF);
   ("var", Parser.VAR);
@@ -78,3 +80,5 @@ rule main = parse
       try List.assoc id reservedWords with Not_found -> Parser.ID id }
 | eof
     { Parser.EOF }
+| _
+    { raise (Error ("Unexpected character: '" ^ Lexing.lexeme lexbuf ^ "'")) }

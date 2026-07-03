@@ -30,34 +30,27 @@ let load_compile_config file =
 
 let cmd_compile file outdir =
   let input = read_all file in
-  let lexbuf = Lexing.from_string input in
   let config_opt = load_compile_config file in
   let config = Option.value ~default:Sanpou.Config.default config_opt in
-  let ast = Sanpou.Parser.program Sanpou.Lexer.main lexbuf in
-  (try Sanpou.Typing.check ast
-   with Sanpou.Typing.Type_error (err, { line; col }) ->
-     Printf.eprintf "%s:%d:%d: %s\n" file line col
-       (Sanpou.Typing.string_of_type_error err);
-     exit 1);
-  let irs = Sanpou.Alpha_convert.transform ast |> Sanpou.Linearize.linearize in
-  if not (Sys.file_exists outdir) then Sys.mkdir outdir 0o755;
-  List.iter
-    (fun (ir : Sanpou.Ir.module_ir) ->
-      let tla_module = Sanpou.Emit_tla.generate_module ~config ir in
-      let tla_path = Filename.concat outdir (tla_module.name ^ ".tla") in
-      write_all tla_path (Tla.Tla_printer.render tla_module);
-      (match config_opt with
-      | Some config ->
-          let cfg_path = Filename.concat outdir (tla_module.name ^ ".cfg") in
-          write_all cfg_path (Sanpou.Config.to_cfg_string config)
-      | None -> ());
-      let smap = Sanpou.Source_map.extract ir in
-      let json_path =
-        Filename.concat outdir (tla_module.name ^ ".sourcemap.json")
-      in
-      write_all json_path (Sanpou.Source_map.to_json smap))
-    irs;
-  ()
+  match Sanpou.Compile.compile ~config input with
+  | Error { loc = { line; col }; message } ->
+      Printf.eprintf "%s:%d:%d: %s\n" file line col message;
+      exit 1
+  | Ok outputs ->
+      if not (Sys.file_exists outdir) then Sys.mkdir outdir 0o755;
+      List.iter
+        (fun (o : Sanpou.Compile.output) ->
+          let name = o.tla_module.name in
+          let tla_path = Filename.concat outdir (name ^ ".tla") in
+          write_all tla_path (Tla.Tla_printer.render o.tla_module);
+          (match config_opt with
+          | Some config ->
+              let cfg_path = Filename.concat outdir (name ^ ".cfg") in
+              write_all cfg_path (Sanpou.Config.to_cfg_string config)
+          | None -> ());
+          let json_path = Filename.concat outdir (name ^ ".sourcemap.json") in
+          write_all json_path (Sanpou.Source_map.to_json o.source_map))
+        outputs
 
 let cmd_trace file outdir =
   if not (Sys.file_exists outdir) then (
