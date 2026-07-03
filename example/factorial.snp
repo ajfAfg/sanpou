@@ -3,11 +3,11 @@ mod factorial {
 
   def testing = finally(x == 120);
 
-  fn fact(y) {
-    if (y == 0) {
+  fn fact(x) {
+    if (x == 0) {
       return 1;
     } else {
-      var ans = y * fact(y-1);
+      var ans = x * fact(x-1);
       return ans;
     }
   }
