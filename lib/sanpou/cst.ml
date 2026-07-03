@@ -29,21 +29,29 @@ type assign_target =
     }
 
 and expr =
-  | IntLit of { t : trivia; value : int }
-  | BoolLit of { t : trivia; value : bool }
-  | Var of { t : trivia; name : id }
-  | Self of { t : trivia }
-  | UnOp of { op_t : trivia; op : unop; rhs : expr }
-  | BinOp of { lhs : expr; op_t : trivia; op : binop; rhs : expr }
+  | IntLit of { loc : loc; t : trivia; value : int }
+  | BoolLit of { loc : loc; t : trivia; value : bool }
+  | Var of { loc : loc; t : trivia; name : id }
+  | Self of { loc : loc; t : trivia }
+  | UnOp of { loc : loc; op_t : trivia; op : unop; rhs : expr }
+  | BinOp of { loc : loc; lhs : expr; op_t : trivia; op : binop; rhs : expr }
   | App of {
+      loc : loc;
       name_t : trivia;
       name : id;
       lp : trivia;
       args : expr comma_list;
       rp : trivia;
     }
-  | Subscript of { lhs : expr; lb_t : trivia; index : expr; rb_t : trivia }
+  | Subscript of {
+      loc : loc;
+      lhs : expr;
+      lb_t : trivia;
+      index : expr;
+      rb_t : trivia;
+    }
   | MapInit of {
+      loc : loc;
       lb : trivia;
       binder_t : trivia;
       binder : id;
@@ -57,19 +65,35 @@ and expr =
       rb : trivia;
     }
   | Tuple of {
+      loc : loc;
       lp : trivia;
       elems : expr comma_list;
       trailing_comma : trivia option;
       rp : trivia;
     }
   | Sequence of {
+      loc : loc;
       lb : trivia;
       elems : expr comma_list;
       trailing_comma : trivia option;
       rb : trivia;
     }
-  | Paren of { lp : trivia; inner : expr; rp : trivia }
+  | Paren of { loc : loc; lp : trivia; inner : expr; rp : trivia }
 [@@deriving show, eq]
+
+let loc_of_expr = function
+  | IntLit { loc; _ }
+  | BoolLit { loc; _ }
+  | Var { loc; _ }
+  | Self { loc; _ }
+  | UnOp { loc; _ }
+  | BinOp { loc; _ }
+  | App { loc; _ }
+  | Subscript { loc; _ }
+  | MapInit { loc; _ }
+  | Tuple { loc; _ }
+  | Sequence { loc; _ }
+  | Paren { loc; _ } -> loc
 
 type simple_stmt =
   | Assign of { target : assign_target; eq_t : trivia; value : expr }
