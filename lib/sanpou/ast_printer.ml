@@ -4,7 +4,12 @@ open Ast
 
    The AST carries no parenthesization, so the printer re-inserts the
    parentheses the grammar requires: each subexpression is printed within a
-   minimum precedence level and wrapped in parens when it binds looser. *)
+   minimum precedence level and wrapped in parens when it binds looser.
+
+   The tree is parameterized by its name type, so every function takes a
+   [name_of] rendering the names; [print_pretty] fixes it to the surface
+   tree, and alpha-converted trees pass [Resolved_ast.display] to print
+   source names. *)
 
 let binop_str = function
   | Plus -> "+"
@@ -29,7 +34,7 @@ let binop_prec = function
   | Plus | Minus -> 4
   | Mult -> 5
 
-let prec (e : expr) =
+let prec (e : 'n expr) =
   match e.desc with
   | BinOp (op, _, _) -> binop_prec op
   | Subscript _ -> 6
@@ -37,18 +42,15 @@ let prec (e : expr) =
   | IntLit _ | BoolLit _ | Var _ | Self | App _ | Builtin _ | MapInit _
   | Tuple _ | Sequence _ -> 8
 
-(* [rename] maps identifiers back to their display names (e.g. undoing
-   alpha conversion). It applies only to variable positions, never to
-   function/procedure names. *)
-let rec pretty_expr ?(rename = Fun.id) (e : expr) =
+let rec pretty_expr name_of (e : 'n expr) =
   let at level e' =
-    let s = pretty_expr ~rename e' in
+    let s = pretty_expr name_of e' in
     if prec e' < level then "(" ^ s ^ ")" else s
   in
   match e.desc with
   | IntLit value -> string_of_int value
   | BoolLit value -> if value then "true" else "false"
-  | Var name -> rename name
+  | Var n -> name_of n
   | Self -> "self"
   | UnOp (op, rhs) -> unop_str op ^ at 7 rhs
   | BinOp (op, lhs, rhs) ->
@@ -56,91 +58,101 @@ let rec pretty_expr ?(rename = Fun.id) (e : expr) =
       (* left-associative: the right operand must bind strictly tighter *)
       at level lhs ^ " " ^ binop_str op ^ " " ^ at (level + 1) rhs
   | App (name, args) ->
-      name ^ "(" ^ String.concat ", " (List.map (pretty_expr ~rename) args) ^ ")"
+      name ^ "("
+      ^ String.concat ", " (List.map (pretty_expr name_of) args)
+      ^ ")"
   | Builtin (b, args) ->
       Builtin.name b ^ "("
-      ^ String.concat ", " (List.map (pretty_expr ~rename) args)
+      ^ String.concat ", " (List.map (pretty_expr name_of) args)
       ^ ")"
-  | Subscript (lhs, index) -> at 6 lhs ^ "[" ^ pretty_expr ~rename index ^ "]"
+  | Subscript (lhs, index) -> at 6 lhs ^ "[" ^ pretty_expr name_of index ^ "]"
   | MapInit { binder; lo; hi; value } ->
-      "{ " ^ rename binder ^ " in " ^ pretty_expr ~rename lo ^ ".."
-      ^ pretty_expr ~rename hi ^ ": "
-      ^ pretty_expr ~rename value
+      "{ " ^ name_of binder ^ " in " ^ pretty_expr name_of lo ^ ".."
+      ^ pretty_expr name_of hi ^ ": "
+      ^ pretty_expr name_of value
       ^ " }"
   | Tuple elems -> (
       match elems with
       | [] -> "()"
-      | [ e ] -> "(" ^ pretty_expr ~rename e ^ ",)"
-      | es -> "(" ^ String.concat ", " (List.map (pretty_expr ~rename) es) ^ ")")
+      | [ e ] -> "(" ^ pretty_expr name_of e ^ ",)"
+      | es -> "(" ^ String.concat ", " (List.map (pretty_expr name_of) es) ^ ")")
   | Sequence elems ->
-      "[" ^ String.concat ", " (List.map (pretty_expr ~rename) elems) ^ "]"
+      "[" ^ String.concat ", " (List.map (pretty_expr name_of) elems) ^ "]"
 
-let pretty_assign_target ?(rename = Fun.id) = function
-  | VarTarget name -> rename name
-  | SubscriptTarget (name, index) ->
-      rename name ^ "[" ^ pretty_expr ~rename index ^ "]"
+let pretty_assign_target name_of = function
+  | VarTarget n -> name_of n
+  | SubscriptTarget (n, index) ->
+      name_of n ^ "[" ^ pretty_expr name_of index ^ "]"
 
-let pretty_simple_stmt ?(rename = Fun.id) (stmt : simple_stmt) =
+let pretty_simple_stmt name_of (stmt : 'n simple_stmt) =
   match stmt.desc with
   | Assign (target, value) ->
-      pretty_assign_target ~rename target ^ " = " ^ pretty_expr ~rename value
+      pretty_assign_target name_of target ^ " = " ^ pretty_expr name_of value
   | Call (name, args) ->
-      name ^ "(" ^ String.concat ", " (List.map (pretty_expr ~rename) args) ^ ")"
-  | Return value -> "return " ^ pretty_expr ~rename value
+      name ^ "("
+      ^ String.concat ", " (List.map (pretty_expr name_of) args)
+      ^ ")"
+  | Return value -> "return " ^ pretty_expr name_of value
   | Break -> "break"
   | Continue -> "continue"
-  | Await cond -> "await " ^ pretty_expr ~rename cond
+  | Await cond -> "await " ^ pretty_expr name_of cond
 
-let rec pretty_step indent (step : step) =
+let rec pretty_step name_of indent (step : 'n step) =
   match step.desc with
   | SimpleStep stmts ->
-      indent ^ String.concat ", " (List.map pretty_simple_stmt stmts) ^ ";\n"
+      indent
+      ^ String.concat ", " (List.map (pretty_simple_stmt name_of) stmts)
+      ^ ";\n"
   | EmptyStep -> indent ^ ";\n"
-  | BlockStep stmt -> pretty_block_stmt indent stmt
-  | VarStep (name, value) ->
-      indent ^ "var " ^ name ^ " = " ^ pretty_expr value ^ ";\n"
+  | BlockStep stmt -> pretty_block_stmt name_of indent stmt
+  | VarStep (n, value) ->
+      indent ^ "var " ^ name_of n ^ " = " ^ pretty_expr name_of value ^ ";\n"
 
-and pretty_block_stmt indent = function
+and pretty_block_stmt name_of indent = function
   | While { cond; body } ->
-      indent ^ "while (" ^ pretty_expr cond ^ ") {\n"
-      ^ pretty_body (indent ^ "  ") body
+      indent ^ "while (" ^ pretty_expr name_of cond ^ ") {\n"
+      ^ pretty_body name_of (indent ^ "  ") body
       ^ indent ^ "}\n"
   | If { cond; body; else_body } -> (
-      indent ^ "if (" ^ pretty_expr cond ^ ") {\n"
-      ^ pretty_body (indent ^ "  ") body
+      indent ^ "if (" ^ pretty_expr name_of cond ^ ") {\n"
+      ^ pretty_body name_of (indent ^ "  ") body
       ^ indent ^ "}"
       ^
       match else_body with
       | Some else_body ->
-          " else {\n" ^ pretty_body (indent ^ "  ") else_body ^ indent ^ "}\n"
+          " else {\n"
+          ^ pretty_body name_of (indent ^ "  ") else_body
+          ^ indent ^ "}\n"
       | None -> "\n")
 
-and pretty_body indent steps =
-  String.concat "" (List.map (pretty_step indent) steps)
+and pretty_body name_of indent steps =
+  String.concat "" (List.map (pretty_step name_of indent) steps)
 
-let pretty_item indent (item : item) =
+let pretty_item name_of indent (item : 'n item) =
   match item.desc with
   | ConstDef { name; value } ->
-      indent ^ "def " ^ name ^ " = " ^ pretty_expr value ^ ";\n"
+      indent ^ "def " ^ name ^ " = " ^ pretty_expr name_of value ^ ";\n"
   | FunDef { name; params; body_expr } ->
       indent ^ "def " ^ name ^ "(" ^ String.concat ", " params ^ ") = "
-      ^ pretty_expr body_expr ^ ";\n"
+      ^ pretty_expr name_of body_expr ^ ";\n"
   | VarDecl { name; value } ->
-      indent ^ "var " ^ name ^ " = " ^ pretty_expr value ^ ";\n"
+      indent ^ "var " ^ name ^ " = " ^ pretty_expr name_of value ^ ";\n"
   | ProcDef { name; params; body } ->
-      indent ^ "fn " ^ name ^ "(" ^ String.concat ", " params ^ ") {\n"
-      ^ pretty_body (indent ^ "  ") body
+      indent ^ "fn " ^ name ^ "("
+      ^ String.concat ", " (List.map name_of params)
+      ^ ") {\n"
+      ^ pretty_body name_of (indent ^ "  ") body
       ^ indent ^ "}\n"
   | Process { name; proc; fair; lo; hi } ->
       indent
       ^ (if fair then "fair process " else "process ")
-      ^ name ^ " = " ^ proc ^ " in " ^ pretty_expr lo ^ ".." ^ pretty_expr hi
-      ^ ";\n"
+      ^ name ^ " = " ^ proc ^ " in " ^ pretty_expr name_of lo ^ ".."
+      ^ pretty_expr name_of hi ^ ";\n"
 
-let pretty_module_def m =
+let pretty_module_def name_of (m : 'n module_def) =
   "mod " ^ m.mod_name ^ " {\n"
-  ^ String.concat "" (List.map (pretty_item "  ") m.items)
+  ^ String.concat "" (List.map (pretty_item name_of "  ") m.items)
   ^ "}\n"
 
-let print_pretty (prog : program) =
-  String.concat "" (List.map pretty_module_def prog)
+let print_pretty (prog : id program) =
+  String.concat "" (List.map (pretty_module_def Fun.id) prog)

@@ -21,7 +21,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
    (or_expr > and_expr > comparison_expr > add_expr > mult_expr), so no
    %left declarations are needed. *)
 
-%start <Ast.program> program
+%start <Ast.id Ast.program> program
 %%
 
 program:

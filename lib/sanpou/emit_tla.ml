@@ -16,15 +16,15 @@ let binop_to_tla = function
   | Ast.And -> "/\\"
   | Ast.Or -> "\\/"
 
-let rec expr_to_tla local_vars (e : Ast.expr) =
+let rec expr_to_tla local_vars (e : Resolved_ast.expr) =
   match e.desc with
   | Ast.IntLit value -> TInt value
   | Ast.BoolLit value -> TBool value
-  | Ast.Var name ->
+  | Ast.Var i ->
       (* Locals live in the top stack frame; globals are plain variables *)
-      if List.mem name local_vars then
-        TDot (THead (TSubscript (TId "stack", TId "self")), name)
-      else TId name
+      if List.mem i.name local_vars then
+        TDot (THead (TSubscript (TId "stack", TId "self")), i.name)
+      else TId i.name
   | Ast.Self -> TId "self"
   | Ast.UnOp (Ast.Neg, rhs) -> (
       match rhs.desc with
@@ -55,7 +55,7 @@ let rec expr_to_tla local_vars (e : Ast.expr) =
       TSubscript (expr_to_tla local_vars lhs, expr_to_tla local_vars index)
   | Ast.MapInit { binder; lo; hi; value } ->
       TFuncMap
-        ( binder,
+        ( binder.name,
           TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi),
           expr_to_tla local_vars value )
   | Ast.Tuple elems -> TSeqLit (List.map (expr_to_tla local_vars) elems)
