@@ -48,6 +48,10 @@ type action = {
   source : source_info;
 }
 
+let make_action ?guard ?(assignments = []) ?(stack_op = StackNone) ~label
+    ~pc_dest ~source () =
+  { label; guard; assignments; pc_dest; stack_op; source }
+
 type proc_ir = {
   proc_name : string;
   params : Cst.id list;

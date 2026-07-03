@@ -151,67 +151,84 @@ let lower_assign_target ctx source continuation = function
 
 (* ===== Simple statement linearization ===== *)
 
-let linearize_simple_stmt ctx (stmt : simple_stmt) ~guard ~assignments
-    ~stack_op_ref ~actual_next ~extra_actions ~pre_actions ~next_label ~source
-    ~label =
+(* Cumulative effect of the simple statements merged into one action.
+   [assignments] and [pre_actions] accumulate across statements; [guard],
+   [stack_op], [next] and [extra_actions] are overwritten (last statement
+   wins), matching how at most one control-transferring statement is
+   meaningful per step. *)
+type stmt_effect = {
+  guard : Cst.expr option;
+  assignments : assignment list;
+  stack_op : stack_op;
+  next : string;
+  pre_actions : action list;
+  extra_actions : action list;
+}
+
+let empty_effect ~next =
+  {
+    guard = None;
+    assignments = [];
+    stack_op = StackNone;
+    next;
+    pre_actions = [];
+    extra_actions = [];
+  }
+
+let apply_simple_stmt ctx ~next_label ~source ~label eff (stmt : simple_stmt) =
   match stmt with
   | Assign { target; value; _ } ->
       let value_actions, value_entry, value =
         lower_expr ctx source label value
       in
-      let target_actions, entry, target =
+      let target_actions, _, target =
         lower_assign_target ctx source value_entry target
       in
-      pre_actions := !pre_actions @ target_actions @ value_actions;
       let assignment =
         match target with
         | VarTarget { name; _ } -> AssignVar (name, value)
         | SubscriptTarget { name; index; _ } -> AssignIndex (name, index, value)
       in
-      assignments := !assignments @ [ assignment ]
+      {
+        eff with
+        pre_actions = eff.pre_actions @ target_actions @ value_actions;
+        assignments = eff.assignments @ [ assignment ];
+      }
   | Await { cond; _ } ->
       let actions, _, cond = lower_expr ctx source label cond in
-      pre_actions := !pre_actions @ actions;
-      guard := Some cond
+      { eff with pre_actions = eff.pre_actions @ actions; guard = Some cond }
   | Call { name; args; _ } ->
       let pop_label = fresh_label ctx.label_counter in
       let args_actions, _, args = lower_expr_list ctx source label args.items in
-      pre_actions := !pre_actions @ args_actions;
-      stack_op_ref := StackPush (name, pop_label, args);
-      actual_next := "__call__";
-      let pop_source =
-        { source with description = "[return from " ^ name ^ "]" }
-      in
       let pop_action =
-        {
-          label = pop_label;
-          guard = None;
-          assignments = [];
-          pc_dest = PcNext next_label;
-          stack_op = StackDiscard;
-          source = pop_source;
-        }
+        make_action ~label:pop_label ~pc_dest:(PcNext next_label)
+          ~stack_op:StackDiscard
+          ~source:{ source with description = "[return from " ^ name ^ "]" }
+          ()
       in
-      extra_actions := [ pop_action ]
+      {
+        eff with
+        pre_actions = eff.pre_actions @ args_actions;
+        stack_op = StackPush (name, pop_label, args);
+        next = "__call__";
+        extra_actions = [ pop_action ];
+      }
   | Return { value; _ } ->
       let actions, _, value = lower_expr ctx source label value in
-      pre_actions := !pre_actions @ actions;
-      stack_op_ref := StackReturn value;
-      actual_next := "__return__"
-  | Break _ ->
-      let break_target =
-        match ctx.break_label with
-        | Some l -> l
-        | None -> failwith "break outside of loop"
-      in
-      actual_next := break_target
-  | Continue _ ->
-      let continue_target =
-        match ctx.continue_label with
-        | Some l -> l
-        | None -> failwith "continue outside of loop"
-      in
-      actual_next := continue_target
+      {
+        eff with
+        pre_actions = eff.pre_actions @ actions;
+        stack_op = StackReturn value;
+        next = "__return__";
+      }
+  | Break _ -> (
+      match ctx.break_label with
+      | Some l -> { eff with next = l }
+      | None -> failwith "break outside of loop")
+  | Continue _ -> (
+      match ctx.continue_label with
+      | Some l -> { eff with next = l }
+      | None -> failwith "continue outside of loop")
 
 (* ===== Step linearization ===== *)
 
@@ -220,135 +237,32 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
   match step with
   | EmptyStep { loc; _ } ->
       let source = make_source ~proc_name:ctx.proc_name ~description:";" ~loc in
-      let a =
-        {
-          label;
-          guard = None;
-          assignments = [];
-          pc_dest = PcNext next_label;
-          stack_op = StackNone;
-          source;
-        }
-      in
+      let a = make_action ~label ~pc_dest:(PcNext next_label) ~source () in
       { actions = [ a ]; entry = label; exit_label = next_label }
-  | SimpleStep { stmts; loc; _ } -> (
+  | SimpleStep { stmts; loc; _ } ->
       let source =
         make_source ~proc_name:ctx.proc_name
           ~description:(describe_simple_stmts ctx stmts)
           ~loc
       in
-      match stmts.items with
-      | [ Return { value; _ } ] ->
-          let pre_actions, entry, value = lower_expr ctx source label value in
-          let a =
-            {
-              label;
-              guard = None;
-              assignments = [];
-              pc_dest = PcNext "__return__";
-              stack_op = StackReturn value;
-              source;
-            }
-          in
-          { actions = pre_actions @ [ a ]; entry; exit_label = next_label }
-      | [ Break _ ] ->
-          let break_target =
-            match ctx.break_label with
-            | Some l -> l
-            | None -> failwith "break outside of loop"
-          in
-          let a =
-            {
-              label;
-              guard = None;
-              assignments = [];
-              pc_dest = PcNext break_target;
-              stack_op = StackNone;
-              source;
-            }
-          in
-          { actions = [ a ]; entry = label; exit_label = next_label }
-      | [ Continue _ ] ->
-          let continue_target =
-            match ctx.continue_label with
-            | Some l -> l
-            | None -> failwith "continue outside of loop"
-          in
-          let a =
-            {
-              label;
-              guard = None;
-              assignments = [];
-              pc_dest = PcNext continue_target;
-              stack_op = StackNone;
-              source;
-            }
-          in
-          { actions = [ a ]; entry = label; exit_label = next_label }
-      | [ Call { name; args; _ } ] ->
-          let pop_label = fresh_label ctx.label_counter in
-          let args_actions, entry, args =
-            lower_expr_list ctx source label args.items
-          in
-          let call_action =
-            {
-              label;
-              guard = None;
-              assignments = [];
-              pc_dest = PcNext "__call__";
-              stack_op = StackPush (name, pop_label, args);
-              source;
-            }
-          in
-          let pop_source =
-            { source with description = "[return from " ^ name ^ "]" }
-          in
-          let pop_action =
-            {
-              label = pop_label;
-              guard = None;
-              assignments = [];
-              pc_dest = PcNext next_label;
-              stack_op = StackDiscard;
-              source = pop_source;
-            }
-          in
-          {
-            actions = args_actions @ [ call_action; pop_action ];
-            entry;
-            exit_label = next_label;
-          }
-      | _ ->
-          let guard = ref None in
-          let assignments = ref [] in
-          let stack_op_ref = ref StackNone in
-          let actual_next = ref next_label in
-          let extra_actions = ref [] in
-          let pre_actions = ref [] in
-          List.iter
-            (fun stmt ->
-              linearize_simple_stmt ctx stmt ~guard ~assignments ~stack_op_ref
-                ~actual_next ~extra_actions ~pre_actions ~next_label ~source
-                ~label)
-            stmts.items;
-          let a =
-            {
-              label;
-              guard = !guard;
-              assignments = !assignments;
-              pc_dest = PcNext !actual_next;
-              stack_op = !stack_op_ref;
-              source;
-            }
-          in
-          {
-            actions = !pre_actions @ [ a ] @ !extra_actions;
-            entry =
-              (match !pre_actions with
-              | first :: _ -> first.label
-              | [] -> label);
-            exit_label = next_label;
-          })
+      let eff =
+        List.fold_left
+          (apply_simple_stmt ctx ~next_label ~source ~label)
+          (empty_effect ~next:next_label)
+          stmts.items
+      in
+      let a =
+        make_action ?guard:eff.guard ~assignments:eff.assignments
+          ~stack_op:eff.stack_op ~label ~pc_dest:(PcNext eff.next) ~source ()
+      in
+      {
+        actions = eff.pre_actions @ [ a ] @ eff.extra_actions;
+        entry =
+          (match eff.pre_actions with
+          | first :: _ -> first.label
+          | [] -> label);
+        exit_label = next_label;
+      }
   | BlockStep { stmt = While { cond; body; _ }; loc } ->
       linearize_while ctx cond body next_label loc
   | BlockStep { stmt = If { cond; body; else_branch; _ }; loc } ->
@@ -375,14 +289,9 @@ and linearize_while ctx cond body after_loop_label loc =
   in
   let body_compiled = linearize_body body_ctx body cond_entry ~loc in
   let check_action =
-    {
-      label = check_label;
-      guard = None;
-      assignments = [];
-      pc_dest = PcBranch (cond, body_compiled.entry, after_loop_label);
-      stack_op = StackNone;
-      source;
-    }
+    make_action ~label:check_label
+      ~pc_dest:(PcBranch (cond, body_compiled.entry, after_loop_label))
+      ~source ()
   in
   {
     actions = cond_actions @ [ check_action ] @ body_compiled.actions;
@@ -410,14 +319,9 @@ and linearize_if ctx cond body next_label loc else_branch =
     | None -> (next_label, [])
   in
   let check_action =
-    {
-      label = check_label;
-      guard = None;
-      assignments = [];
-      pc_dest = PcBranch (cond, body_compiled.entry, else_entry);
-      stack_op = StackNone;
-      source;
-    }
+    make_action ~label:check_label
+      ~pc_dest:(PcBranch (cond, body_compiled.entry, else_entry))
+      ~source ()
   in
   {
     actions =
@@ -435,16 +339,7 @@ and linearize_body ctx (steps : Cst.body) (continuation : string)
       let source =
         make_source ~proc_name:ctx.proc_name ~description:"[empty body]" ~loc
       in
-      let a =
-        {
-          label;
-          guard = None;
-          assignments = [];
-          pc_dest = PcNext continuation;
-          stack_op = StackNone;
-          source;
-        }
-      in
+      let a = make_action ~label ~pc_dest:(PcNext continuation) ~source () in
       { actions = [ a ]; entry = label; exit_label = continuation }
   | _ ->
       (* Backward pass only — alpha conversion already handled variable scoping *)
@@ -480,14 +375,9 @@ and linearize_var_step ctx step next_label =
       in
       let pre_actions, entry, value = lower_expr ctx source label value in
       let a =
-        {
-          label;
-          guard = None;
-          assignments = [ AssignVar (name, value) ];
-          pc_dest = PcNext next_label;
-          stack_op = StackNone;
-          source;
-        }
+        make_action
+          ~assignments:[ AssignVar (name, value) ]
+          ~label ~pc_dest:(PcNext next_label) ~source ()
       in
       { actions = pre_actions @ [ a ]; entry; exit_label = next_label }
   | _ -> failwith "linearize_var_step called on non-VarStep"
@@ -496,7 +386,7 @@ and linearize_var_step ctx step next_label =
 
 (* Parameter binding is not lowered to assignments here: the arguments stay
    in StackPush and Emit_tla writes them directly into the pushed frame. *)
-let resolve_call_target procs action =
+let resolve_call_target procs (action : action) =
   match action.stack_op with
   | StackPush (proc_name, _, args) ->
       let target_proc =
