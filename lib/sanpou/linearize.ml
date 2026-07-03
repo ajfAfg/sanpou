@@ -52,7 +52,7 @@ let rec lower_expr ctx source continuation (expr : expr) =
         lower_expr_list ctx source call_label args
       in
       let call_action =
-        make_action ~label:call_label ~pc_dest:(PcNext "__call__")
+        make_action ~label:call_label ~pc_dest:(PcCall name)
           ~stack_op:(StackPush (name, pop_label, args))
           ~source:{ source with description = "[call " ^ name ^ "]" }
           ()
@@ -128,7 +128,7 @@ type stmt_effect = {
   guard : Ast.expr option;
   assignments : assignment list;
   stack_op : stack_op;
-  next : string;
+  next : pc_dest;
   pre_actions : action list;
   extra_actions : action list;
 }
@@ -138,7 +138,7 @@ let empty_effect ~next =
     guard = None;
     assignments = [];
     stack_op = StackNone;
-    next;
+    next = PcNext next;
     pre_actions = [];
     extra_actions = [];
   }
@@ -178,7 +178,7 @@ let apply_simple_stmt ctx ~next_label ~source ~label eff (stmt : simple_stmt) =
         eff with
         pre_actions = eff.pre_actions @ args_actions;
         stack_op = StackPush (name, pop_label, args);
-        next = "__call__";
+        next = PcCall name;
         extra_actions = [ pop_action ];
       }
   | Return value ->
@@ -187,15 +187,15 @@ let apply_simple_stmt ctx ~next_label ~source ~label eff (stmt : simple_stmt) =
         eff with
         pre_actions = eff.pre_actions @ actions;
         stack_op = StackReturn value;
-        next = "__return__";
+        next = PcReturn;
       }
   | Break -> (
       match ctx.break_label with
-      | Some l -> { eff with next = l }
+      | Some l -> { eff with next = PcNext l }
       | None -> failwith "break outside of loop")
   | Continue -> (
       match ctx.continue_label with
-      | Some l -> { eff with next = l }
+      | Some l -> { eff with next = PcNext l }
       | None -> failwith "continue outside of loop")
 
 (* ===== Step linearization ===== *)
@@ -223,7 +223,7 @@ let rec linearize_step ctx (step : Ast.step) (next_label : string) : compiled =
       in
       let a =
         make_action ?guard:eff.guard ~assignments:eff.assignments
-          ~stack_op:eff.stack_op ~label ~pc_dest:(PcNext eff.next) ~source ()
+          ~stack_op:eff.stack_op ~label ~pc_dest:eff.next ~source ()
       in
       {
         actions = eff.pre_actions @ [ a ] @ eff.extra_actions;
@@ -352,21 +352,6 @@ and linearize_var_step ctx (step : Ast.step) next_label =
       { actions = pre_actions @ [ a ]; entry; exit_label = next_label }
   | _ -> failwith "linearize_var_step called on non-VarStep"
 
-(* ===== Resolve call targets ===== *)
-
-(* Parameter binding is not lowered to assignments here: the arguments stay
-   in StackPush and Emit_tla writes them directly into the pushed frame. *)
-let resolve_call_target procs (action : action) =
-  match action.stack_op with
-  | StackPush (proc_name, _, args) ->
-      let target_proc =
-        List.find (fun (p : proc_ir) -> p.proc_name = proc_name) procs
-      in
-      if List.length target_proc.params <> List.length args then
-        failwith ("arity mismatch when calling procedure " ^ proc_name);
-      { action with pc_dest = PcNext target_proc.entry_label }
-  | _ -> action
-
 (* ===== Module linearization ===== *)
 
 let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
@@ -441,8 +426,9 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
                 demangle;
               }
             in
-            let done_label = "Done" in
-            let compiled = linearize_body ctx body done_label ~loc:item.loc in
+            let compiled =
+              linearize_body ctx body Ir.done_label ~loc:item.loc
+            in
             Some
               {
                 proc_name = name;
@@ -461,13 +447,6 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
             Some { name; proc; fair; lo; hi; loc = item.loc }
         | _ -> None)
       m.items
-  in
-  (* Resolve call targets *)
-  let resolved_procs =
-    List.map
-      (fun (p : proc_ir) ->
-        { p with actions = List.map (resolve_call_target procs) p.actions })
-      procs
   in
   let var_infos =
     List.map
@@ -505,7 +484,7 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
     var_decls;
     local_var_decls;
     var_infos;
-    procs = resolved_procs;
+    procs;
     processes;
   }
 
