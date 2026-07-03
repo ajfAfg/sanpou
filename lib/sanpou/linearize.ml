@@ -1,25 +1,23 @@
 open Cst
 open Ir
 
-(* ===== Label generation ===== *)
-
-let fresh_label counter =
-  incr counter;
-  "L" ^ string_of_int !counter
-
 (* ===== Linearization context ===== *)
 
+(* The name generators are closures created once per module in
+   linearize_module; the mutable counters behind them never escape it. *)
 type ctx = {
   proc_name : string;
   proc_names : string list;
   break_label : string option;
   continue_label : string option;
-  label_counter : int ref;
-  temp_counter : int ref;
-  temp_var_infos : var_info list ref;
+  fresh_label : unit -> string;
+  fresh_temp_var : proc:string -> callee:string -> string;
+      (* returns a fresh temp var name and records its var_info *)
   demangle : string -> string;
       (* maps alpha-converted names back to source names for descriptions *)
 }
+
+let fresh_label ctx = ctx.fresh_label ()
 
 type compiled = { actions : action list; entry : string; exit_label : string }
 
@@ -36,20 +34,7 @@ let describe_simple_stmts ctx (stmts : simple_stmt comma_list) =
 
 let is_proc_call ctx name = List.mem name ctx.proc_names
 
-let fresh_temp_var ctx ~callee =
-  incr ctx.temp_counter;
-  let name = "callRet__" ^ string_of_int !(ctx.temp_counter) in
-  ctx.temp_var_infos :=
-    !(ctx.temp_var_infos)
-    @ [
-        {
-          tla_name = name;
-          original = name;
-          proc = Some ctx.proc_name;
-          kind = CallRet callee;
-        };
-      ];
-  name
+let fresh_temp_var ctx ~callee = ctx.fresh_temp_var ~proc:ctx.proc_name ~callee
 
 let rec lower_expr ctx source continuation expr =
   match expr with
@@ -64,31 +49,23 @@ let rec lower_expr ctx source continuation expr =
       let lhs_actions, lhs_entry, lhs = lower_expr ctx source rhs_entry r.lhs in
       (lhs_actions @ rhs_actions, lhs_entry, BinOp { r with lhs; rhs })
   | App r when is_proc_call ctx r.name ->
-      let call_label = fresh_label ctx.label_counter in
-      let pop_label = fresh_label ctx.label_counter in
+      let call_label = fresh_label ctx in
+      let pop_label = fresh_label ctx in
       let temp = fresh_temp_var ctx ~callee:r.name in
       let args_actions, args_entry, args =
         lower_expr_list ctx source call_label r.args.items
       in
       let call_action =
-        {
-          label = call_label;
-          guard = None;
-          assignments = [];
-          pc_dest = PcNext "__call__";
-          stack_op = StackPush (r.name, pop_label, args);
-          source = { source with description = "[call " ^ r.name ^ "]" };
-        }
+        make_action ~label:call_label ~pc_dest:(PcNext "__call__")
+          ~stack_op:(StackPush (r.name, pop_label, args))
+          ~source:{ source with description = "[call " ^ r.name ^ "]" }
+          ()
       in
       let pop_action =
-        {
-          label = pop_label;
-          guard = None;
-          assignments = [];
-          pc_dest = PcNext continuation;
-          stack_op = StackPopAssign temp;
-          source = { source with description = "[return from " ^ r.name ^ "]" };
-        }
+        make_action ~label:pop_label ~pc_dest:(PcNext continuation)
+          ~stack_op:(StackPopAssign temp)
+          ~source:{ source with description = "[return from " ^ r.name ^ "]" }
+          ()
       in
       ( args_actions @ [ call_action; pop_action ],
         args_entry,
@@ -198,7 +175,7 @@ let apply_simple_stmt ctx ~next_label ~source ~label eff (stmt : simple_stmt) =
       let actions, _, cond = lower_expr ctx source label cond in
       { eff with pre_actions = eff.pre_actions @ actions; guard = Some cond }
   | Call { name; args; _ } ->
-      let pop_label = fresh_label ctx.label_counter in
+      let pop_label = fresh_label ctx in
       let args_actions, _, args = lower_expr_list ctx source label args.items in
       let pop_action =
         make_action ~label:pop_label ~pc_dest:(PcNext next_label)
@@ -233,7 +210,7 @@ let apply_simple_stmt ctx ~next_label ~source ~label eff (stmt : simple_stmt) =
 (* ===== Step linearization ===== *)
 
 let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
-  let label = fresh_label ctx.label_counter in
+  let label = fresh_label ctx in
   match step with
   | EmptyStep { loc; _ } ->
       let source = make_source ~proc_name:ctx.proc_name ~description:";" ~loc in
@@ -270,7 +247,7 @@ let rec linearize_step ctx (step : Cst.step) (next_label : string) : compiled =
   | VarStep _ -> failwith "VarStep should be handled in linearize_body"
 
 and linearize_while ctx cond body after_loop_label loc =
-  let check_label = fresh_label ctx.label_counter in
+  let check_label = fresh_label ctx in
   let source =
     make_source ~proc_name:ctx.proc_name
       ~description:
@@ -300,7 +277,7 @@ and linearize_while ctx cond body after_loop_label loc =
   }
 
 and linearize_if ctx cond body next_label loc else_branch =
-  let check_label = fresh_label ctx.label_counter in
+  let check_label = fresh_label ctx in
   let source =
     make_source ~proc_name:ctx.proc_name
       ~description:
@@ -335,7 +312,7 @@ and linearize_body ctx (steps : Cst.body) (continuation : string)
   (* [loc] is the enclosing construct's location, used when the body is empty *)
   match steps with
   | [] ->
-      let label = fresh_label ctx.label_counter in
+      let label = fresh_label ctx in
       let source =
         make_source ~proc_name:ctx.proc_name ~description:"[empty body]" ~loc
       in
@@ -363,7 +340,7 @@ and linearize_body ctx (steps : Cst.body) (continuation : string)
         compiled rest
 
 and linearize_var_step ctx step next_label =
-  let label = fresh_label ctx.label_counter in
+  let label = fresh_label ctx in
   match step with
   | VarStep { name; value; loc; _ } ->
       let source =
@@ -402,8 +379,20 @@ let resolve_call_target procs (action : action) =
 let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
   let m = am.cst in
   let label_counter = ref 0 in
+  let fresh_label () =
+    incr label_counter;
+    "L" ^ string_of_int !label_counter
+  in
   let temp_counter = ref 0 in
   let temp_var_infos = ref [] in
+  let fresh_temp_var ~proc ~callee =
+    incr temp_counter;
+    let name = "callRet__" ^ string_of_int !temp_counter in
+    temp_var_infos :=
+      !temp_var_infos
+      @ [ { tla_name = name; original = name; proc = Some proc; kind = CallRet callee } ];
+    name
+  in
   let demangle name =
     match
       List.find_opt
@@ -447,9 +436,8 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
                 proc_names;
                 break_label = None;
                 continue_label = None;
-                label_counter;
-                temp_counter;
-                temp_var_infos;
+                fresh_label;
+                fresh_temp_var;
                 demangle;
               }
             in
