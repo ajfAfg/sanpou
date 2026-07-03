@@ -5,38 +5,38 @@ open Config
 (* ===== AST expression → TLA+ expression ===== *)
 
 let binop_to_tla = function
-  | Ast.Plus -> "+"
-  | Ast.Minus -> "-"
-  | Ast.Mult -> "*"
-  | Ast.Lt -> "<"
-  | Ast.LtEq -> "<="
-  | Ast.GtEq -> ">="
-  | Ast.Eq -> "="
-  | Ast.Neq -> "/="
-  | Ast.And -> "/\\"
-  | Ast.Or -> "\\/"
+  | Generic_ast.Plus -> "+"
+  | Generic_ast.Minus -> "-"
+  | Generic_ast.Mult -> "*"
+  | Generic_ast.Lt -> "<"
+  | Generic_ast.LtEq -> "<="
+  | Generic_ast.GtEq -> ">="
+  | Generic_ast.Eq -> "="
+  | Generic_ast.Neq -> "/="
+  | Generic_ast.And -> "/\\"
+  | Generic_ast.Or -> "\\/"
 
 let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
   match e.desc with
-  | Ast.IntLit value -> TInt value
-  | Ast.BoolLit value -> TBool value
-  | Ast.Var i ->
+  | Generic_ast.IntLit value -> TInt value
+  | Generic_ast.BoolLit value -> TBool value
+  | Generic_ast.Var i ->
       (* Locals live in the top stack frame; globals are plain variables *)
       if List.mem i.name local_vars then
         TDot (THead (TSubscript (TId "stack", TId "self")), i.name)
       else TId i.name
-  | Ast.Self -> TId "self"
-  | Ast.UnOp (Ast.Neg, rhs) -> (
+  | Generic_ast.Self -> TId "self"
+  | Generic_ast.UnOp (Generic_ast.Neg, rhs) -> (
       match rhs.desc with
-      | Ast.IntLit value -> TInt (-value)
+      | Generic_ast.IntLit value -> TInt (-value)
       | _ -> TParens (TBinOp ("-", TInt 0, expr_to_tla local_vars rhs)))
-  | Ast.BinOp (op, lhs, rhs) ->
+  | Generic_ast.BinOp (op, lhs, rhs) ->
       TParens
         (TBinOp
            ( binop_to_tla op,
              expr_to_tla local_vars lhs,
              expr_to_tla local_vars rhs ))
-  | Ast.Builtin (b, args) -> (
+  | Generic_ast.Builtin (b, args) -> (
       match (b, args) with
       | Builtin.Globally, [ e ] -> TGlobally (expr_to_tla local_vars e)
       | Builtin.Finally, [ e ] -> TFinally (expr_to_tla local_vars e)
@@ -49,17 +49,18 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
       | Builtin.Concat, [ lhs; rhs ] ->
           TConcat (expr_to_tla local_vars lhs, expr_to_tla local_vars rhs)
       | _ -> assert false (* arity enforced by Typing *))
-  | Ast.App (Normalized_ast.Fun name, args) ->
+  | Generic_ast.App (Normalized_ast.Fun name, args) ->
       TApp (name, List.map (expr_to_tla local_vars) args)
-  | Ast.Subscript (lhs, index) ->
+  | Generic_ast.Subscript (lhs, index) ->
       TSubscript (expr_to_tla local_vars lhs, expr_to_tla local_vars index)
-  | Ast.MapInit { binder; lo; hi; value } ->
+  | Generic_ast.MapInit { binder; lo; hi; value } ->
       TFuncMap
         ( binder.name,
           TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi),
           expr_to_tla local_vars value )
-  | Ast.Tuple elems -> TSeqLit (List.map (expr_to_tla local_vars) elems)
-  | Ast.Sequence elems -> TSeqLit (List.map (expr_to_tla local_vars) elems)
+  | Generic_ast.Tuple elems -> TSeqLit (List.map (expr_to_tla local_vars) elems)
+  | Generic_ast.Sequence elems ->
+      TSeqLit (List.map (expr_to_tla local_vars) elems)
 
 (* Module-level expressions have no local vars *)
 let expr_to_tla_global = expr_to_tla []

@@ -17,7 +17,7 @@ type compiled = { actions : action list; entry : string; exit_label : string }
 
 (* ===== Source info generation ===== *)
 
-let make_source ~proc_name ~description ~(loc : Ast.loc) =
+let make_source ~proc_name ~description ~(loc : Generic_ast.loc) =
   { proc_name; description; line = loc.line; col = loc.col }
 
 let pretty_expr =
@@ -56,15 +56,16 @@ let empty_effect ~next =
 let apply_simple_stmt ctx ~next_label ~source eff
     (stmt : Normalized_ast.simple_stmt) =
   match stmt.desc with
-  | Ast.Assign (target, value) ->
+  | Generic_ast.Assign (target, value) ->
       let assignment =
         match target with
-        | Ast.VarTarget i -> AssignVar (i.name, value)
-        | Ast.SubscriptTarget (i, index) -> AssignIndex (i.name, index, value)
+        | Generic_ast.VarTarget i -> AssignVar (i.name, value)
+        | Generic_ast.SubscriptTarget (i, index) ->
+            AssignIndex (i.name, index, value)
       in
       { eff with assignments = eff.assignments @ [ assignment ] }
-  | Ast.Await cond -> { eff with guard = Some cond }
-  | Ast.Call (name, args) ->
+  | Generic_ast.Await cond -> { eff with guard = Some cond }
+  | Generic_ast.Call (name, args) ->
       let pop_label = fresh_label ctx in
       let pop_action =
         make_action ~label:pop_label ~pc_dest:(PcNext next_label)
@@ -78,13 +79,13 @@ let apply_simple_stmt ctx ~next_label ~source eff
         next = PcCall name;
         extra_actions = [ pop_action ];
       }
-  | Ast.Return value ->
+  | Generic_ast.Return value ->
       { eff with stack_op = StackReturn value; next = PcReturn }
-  | Ast.Break -> (
+  | Generic_ast.Break -> (
       match ctx.break_label with
       | Some l -> { eff with next = PcNext l }
       | None -> failwith "break outside of loop")
-  | Ast.Continue -> (
+  | Generic_ast.Continue -> (
       match ctx.continue_label with
       | Some l -> { eff with next = PcNext l }
       | None -> failwith "continue outside of loop")
@@ -232,7 +233,7 @@ and linearize_if ctx cond body next_label loc else_body =
   }
 
 and linearize_body ctx (steps : Normalized_ast.body) (continuation : string)
-    ~(loc : Ast.loc) : compiled =
+    ~(loc : Generic_ast.loc) : compiled =
   (* [loc] is the enclosing construct's location, used when the body is empty *)
   match steps with
   | [] ->
@@ -297,7 +298,8 @@ let rec local_var_infos proc (steps : Normalized_ast.body) : var_info list =
    drops the unused return value and parks the process at Done. Synthesizing
    it here keeps Emit_tla a pure IR -> TLA+ pass and lets Source_map read
    wrapper actions like any others. *)
-let wrapper_of_process ~process_name ~root_proc ~(loc : Ast.loc) : proc_ir =
+let wrapper_of_process ~process_name ~root_proc ~(loc : Generic_ast.loc) :
+    proc_ir =
   let entry_label = "__w_" ^ process_name ^ "_entry__" in
   let discard_label = "__w_" ^ process_name ^ "_discard__" in
   let entry_action =

@@ -1,4 +1,4 @@
-open Sanpou.Ast
+open Sanpou.Generic_ast
 
 (* Trailing-comma markers are not represented in the AST; the [tc] parameters
    below are kept so call sites read like the surface syntax. *)

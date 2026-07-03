@@ -7,26 +7,26 @@
    calls a procedure is unrepresentable and expressions can be lowered
    without threading a continuation. *)
 
-type callee = Fun of Ast.id [@@deriving show, eq]
+type callee = Fun of Generic_ast.id [@@deriving show, eq]
 
 let callee_name (Fun name) = name
 
-type expr = (Resolved_ast.ident, callee) Ast.expr
-type assign_target = (Resolved_ast.ident, callee) Ast.assign_target
-type simple_stmt = (Resolved_ast.ident, callee) Ast.simple_stmt
+type expr = (Resolved_ast.ident, callee) Generic_ast.expr
+type assign_target = (Resolved_ast.ident, callee) Generic_ast.assign_target
+type simple_stmt = (Resolved_ast.ident, callee) Generic_ast.simple_stmt
 
-let equal_expr = Ast.equal_expr Resolved_ast.equal_ident equal_callee
-let pp_expr = Ast.pp_expr Resolved_ast.pp_ident pp_callee
+let equal_expr = Generic_ast.equal_expr Resolved_ast.equal_ident equal_callee
+let pp_expr = Generic_ast.pp_expr Resolved_ast.pp_ident pp_callee
 
 let equal_simple_stmt =
-  Ast.equal_simple_stmt Resolved_ast.equal_ident equal_callee
+  Generic_ast.equal_simple_stmt Resolved_ast.equal_ident equal_callee
 
-let pp_simple_stmt = Ast.pp_simple_stmt Resolved_ast.pp_ident pp_callee
+let pp_simple_stmt = Generic_ast.pp_simple_stmt Resolved_ast.pp_ident pp_callee
 
-(* The step layer is this stage's own rather than [Ast]'s: normalization
+(* The step layer is this stage's own rather than [Generic_ast]'s: normalization
    introduces [CallBindStep], and [While] gains the steps re-executed
    before every evaluation of its condition. *)
-type step = step_desc Ast.node
+type step = step_desc Generic_ast.node
 
 and step_desc =
   | SimpleStep of simple_stmt list
@@ -35,7 +35,7 @@ and step_desc =
   | VarStep of Resolved_ast.ident * expr
   | CallBindStep of {
       bind : Resolved_ast.ident;
-      callee : Ast.id;
+      callee : Generic_ast.id;
       args : expr list;
     }
 (* a procedure call hoisted out of an expression; [bind] is the
@@ -53,30 +53,30 @@ and body = step list [@@deriving show, eq]
 (* ===== Module layer ===== *)
 
 type proc_def = {
-  name : Ast.id;
+  name : Generic_ast.id;
   params : Resolved_ast.ident list;
   body : body;
-  loc : Ast.loc;
+  loc : Generic_ast.loc;
 }
 [@@deriving show, eq]
 
 type process_def = {
-  name : Ast.id;
-  proc : Ast.id;
+  name : Generic_ast.id;
+  proc : Generic_ast.id;
   fair : bool;
   lo : expr;
   hi : expr;
-  loc : Ast.loc;
+  loc : Generic_ast.loc;
 }
 [@@deriving show, eq]
 
 (* Items arrive partitioned by kind, so consumers never scan a flat item
    list. Module-level expressions are call-free by construction. *)
 type module_def = {
-  name : Ast.id;
-  const_defs : (Ast.id * expr) list;
-  fun_defs : (Ast.id * Ast.id list * expr) list;
-  var_decls : (Ast.id * expr) list;
+  name : Generic_ast.id;
+  const_defs : (Generic_ast.id * expr) list;
+  fun_defs : (Generic_ast.id * Generic_ast.id list * expr) list;
+  var_decls : (Generic_ast.id * expr) list;
   procs : proc_def list;
   processes : process_def list;
 }

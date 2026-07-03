@@ -1,4 +1,4 @@
-open Sanpou.Ast
+open Sanpou.Generic_ast
 open Sanpou.Ir
 
 let loc0 = { line = 0; col = 0 }

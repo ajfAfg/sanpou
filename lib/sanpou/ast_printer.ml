@@ -1,4 +1,4 @@
-open Ast
+open Generic_ast
 
 (* ===== Pretty printer (canonical formatting) =====
 

@@ -57,7 +57,7 @@ let make_action ?guard ?(assignments = []) ?(stack_op = StackNone) ~label
 
 type proc_ir = {
   proc_name : string;
-  params : Ast.id list;
+  params : Generic_ast.id list;
   actions : action list;
   entry_label : string;
 }
@@ -68,7 +68,7 @@ type process_ir = {
   fair : bool;
   lo : Normalized_ast.expr;
   hi : Normalized_ast.expr;
-  loc : Ast.loc;
+  loc : Generic_ast.loc;
   wrapper : proc_ir;
       (* synthetic proc that pushes the root call's frame and discards its
          return value; synthesized by Linearize, never a callee *)

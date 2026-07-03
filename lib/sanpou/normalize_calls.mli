@@ -4,6 +4,6 @@
     call where no procedure frame exists — module-level expressions,
     map-initializer bodies — raises [Error]. *)
 
-exception Error of string * Ast.loc
+exception Error of string * Generic_ast.loc
 
 val normalize : Resolved_ast.program -> Normalized_ast.program

@@ -2,7 +2,7 @@
     alpha-convert, linearize and emit, with every failure surfaced as a located
     diagnostic. *)
 
-type diagnostic = { loc : Ast.loc; message : string }
+type diagnostic = { loc : Generic_ast.loc; message : string }
 type output = { tla_module : Tla.Tla_ast.tla_module; source_map : Source_map.t }
 
 val parse : string -> (Surface_ast.program, diagnostic) result

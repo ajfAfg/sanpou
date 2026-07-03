@@ -1,4 +1,4 @@
-open Sanpou.Ast
+open Sanpou.Generic_ast
 
 let loc0 = { line = 0; col = 0 }
 let node desc = { desc; loc = loc0 }

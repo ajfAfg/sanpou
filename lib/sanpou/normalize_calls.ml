@@ -1,4 +1,4 @@
-open Ast
+open Generic_ast
 
 (* ===== Call normalization: resolved AST → normalized AST =====
 
@@ -14,7 +14,7 @@ open Ast
    under a map-initializer binder they are rejected with a located
    [Error]. *)
 
-exception Error of string * Ast.loc
+exception Error of string * Generic_ast.loc
 
 let error message loc = raise (Error (message, loc))
 
