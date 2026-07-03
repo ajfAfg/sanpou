@@ -18,7 +18,10 @@ type var_entry = {
 type t = { module_name : string; entries : entry list; vars : var_entry list }
 
 let extract (ir : Ir.module_ir) : t =
-  let action_entries =
+  let wrapper_procs =
+    List.map (fun (p : Ir.process_ir) -> p.wrapper) ir.processes
+  in
+  let entries =
     List.concat_map
       (fun (proc : Ir.proc_ir) ->
         List.map
@@ -31,30 +34,7 @@ let extract (ir : Ir.module_ir) : t =
               col = action.source.col;
             })
           proc.actions)
-      ir.procs
-  in
-  (* Process wrapper actions are synthesized later in Emit_tla, so their
-     source-map entries are synthesized here from the process declarations. *)
-  let wrapper_entries =
-    List.concat_map
-      (fun (p : Ir.process_ir) ->
-        [
-          {
-            label = Ir.wrapper_entry_label p.name;
-            proc_name = p.name;
-            description = "[process " ^ p.name ^ " starts " ^ p.proc ^ "]";
-            line = p.loc.line;
-            col = p.loc.col;
-          };
-          {
-            label = Ir.wrapper_discard_label p.name;
-            proc_name = p.name;
-            description = "[process " ^ p.name ^ " finished]";
-            line = p.loc.line;
-            col = p.loc.col;
-          };
-        ])
-      ir.processes
+      (ir.procs @ wrapper_procs)
   in
   let vars =
     List.map
@@ -72,11 +52,7 @@ let extract (ir : Ir.module_ir) : t =
         })
       ir.var_infos
   in
-  {
-    module_name = ir.name;
-    entries = action_entries @ wrapper_entries;
-    vars;
-  }
+  { module_name = ir.name; entries; vars }
 
 (* ===== JSON serialization ===== *)
 
