@@ -45,18 +45,18 @@ let cfg_properties config =
 let bool_to_upper_string b = if b then "TRUE" else "FALSE"
 
 let to_cfg_string config =
-  let lines =
-    ref
-      [
-        "SPECIFICATION Spec";
-        "";
-        "CHECK_DEADLOCK " ^ bool_to_upper_string config.checks.deadlock;
-      ]
+  let property_lines =
+    match cfg_properties config with
+    | [] -> []
+    | properties ->
+        ("" :: "PROPERTIES" :: List.map (fun property -> "    " ^ property) properties)
   in
-  let properties = cfg_properties config in
-  if properties <> [] then (
-    lines := !lines @ [ ""; "PROPERTIES" ];
-    List.iter
-      (fun property -> lines := !lines @ [ "    " ^ property ])
-      properties);
-  String.concat "\n" !lines ^ "\n"
+  let lines =
+    [
+      "SPECIFICATION Spec";
+      "";
+      "CHECK_DEADLOCK " ^ bool_to_upper_string config.checks.deadlock;
+    ]
+    @ property_lines
+  in
+  String.concat "\n" lines ^ "\n"

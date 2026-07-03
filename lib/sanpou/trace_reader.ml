@@ -86,70 +86,93 @@ let parse_module_name line =
     if name <> "" && name.[0] <> '_' then Some name else None
   else None
 
+(* Folded over the input lines; [steps_rev] and [current_vars] accumulate in
+   reverse. *)
+type parse_state = {
+  is_deadlock : bool;
+  module_name : string option;
+  steps_rev : trace_step list;
+  current_step : (int * step_header) option;
+  current_vars : state_var list;
+  in_state_block : bool;
+  continuation_value : bool;
+}
+
+let initial_state =
+  {
+    is_deadlock = false;
+    module_name = None;
+    steps_rev = [];
+    current_step = None;
+    current_vars = [];
+    in_state_block = false;
+    continuation_value = false;
+  }
+
+let flush_step st =
+  match st.current_step with
+  | Some (step_num, header) ->
+      {
+        st with
+        steps_rev =
+          { step_num; header; state = List.rev st.current_vars }
+          :: st.steps_rev;
+        current_step = None;
+        current_vars = [];
+      }
+  | None -> st
+
+let extend_last_value line st =
+  match st.current_vars with
+  | last :: rest ->
+      let extended_value = last.value ^ " " ^ String.trim line in
+      { st with current_vars = { last with value = extended_value } :: rest }
+  | [] -> st
+
+let parse_state_line st line =
+  match st.current_step with
+  | None -> (
+      (* First line in block is the header *)
+      match parse_header line with
+      | Some (step_num, header) -> { st with current_step = Some (step_num, header) }
+      | None -> st)
+  | Some _ -> (
+      if st.continuation_value then
+        (* This line continues a multi-line value *)
+        match st.current_vars with
+        | _ :: _ -> extend_last_value line st
+        | [] -> { st with continuation_value = String.trim line <> "" }
+      else
+        match parse_state_var line with
+        | Some var ->
+            {
+              st with
+              current_vars = var :: st.current_vars;
+              continuation_value = false;
+            }
+        | None ->
+            (* Could be a continuation of the previous value *)
+            if String.trim line <> "" then extend_last_value line st else st)
+
+let parse_line st line =
+  let st =
+    match parse_module_name line with
+    | Some name -> { st with module_name = Some name } (* keep the last match *)
+    | None -> st
+  in
+  if starts_with "@!@!@STARTMSG 2114" line then { st with is_deadlock = true }
+  else if starts_with "@!@!@STARTMSG 2217" line then
+    { (flush_step st) with in_state_block = true; continuation_value = false }
+  else if starts_with "@!@!@ENDMSG 2217" line then
+    { st with in_state_block = false; continuation_value = false }
+  else if st.in_state_block then parse_state_line st line
+  else st
+
 let parse (input : string) : trace =
   let lines = String.split_on_char '\n' input in
-  let is_deadlock = ref false in
-  let module_name = ref None in
-  let steps = ref [] in
-  let current_step = ref None in
-  let current_vars = ref [] in
-  let in_state_block = ref false in
-  let continuation_value = ref false in
-  let flush_step () =
-    match !current_step with
-    | Some (step_num, header) ->
-        steps :=
-          !steps @ [ { step_num; header; state = List.rev !current_vars } ];
-        current_step := None;
-        current_vars := []
-    | None -> ()
-  in
-  List.iter
-    (fun line ->
-      (match parse_module_name line with
-      | Some name -> module_name := Some name (* keep the last match *)
-      | None -> ());
-      if starts_with "@!@!@STARTMSG 2114" line then is_deadlock := true
-      else if starts_with "@!@!@STARTMSG 2217" line then (
-        flush_step ();
-        in_state_block := true;
-        continuation_value := false)
-      else if starts_with "@!@!@ENDMSG 2217" line then (
-        in_state_block := false;
-        continuation_value := false)
-      else if !in_state_block then
-        if !current_step = None then
-          (* First line in block is the header *)
-          match parse_header line with
-          | Some (step_num, header) -> current_step := Some (step_num, header)
-          | None -> ()
-        else if !continuation_value then (
-          (* This line continues a multi-line value *)
-          match !current_vars with
-          | last :: rest ->
-              let extended_value = last.value ^ " " ^ String.trim line in
-              current_vars := { last with value = extended_value } :: rest
-          | [] ->
-              ();
-              (* Check if this line still has a continuation (no /\ prefix on next) *)
-              continuation_value := not (String.length (String.trim line) = 0))
-        else
-          match parse_state_var line with
-          | Some var ->
-              current_vars := var :: !current_vars;
-              (* Heuristic: if value ends with >> that's complete;
-                 if it has unbalanced << it continues *)
-              continuation_value := false
-          | None -> (
-              if
-                (* Could be a continuation of previous value *)
-                String.trim line <> "" && !current_vars <> []
-              then
-                match !current_vars with
-                | last :: rest ->
-                    let extended_value = last.value ^ " " ^ String.trim line in
-                    current_vars := { last with value = extended_value } :: rest
-                | [] -> ()))
-    lines;
-  flush_step ();
-  { is_deadlock = !is_deadlock; steps = !steps; module_name = !module_name }
+  let st = flush_step (List.fold_left parse_line initial_state lines) in
+  {
+    is_deadlock = st.is_deadlock;
+    steps = List.rev st.steps_rev;
+    module_name = st.module_name;
+  }

@@ -44,24 +44,24 @@ let to_string v = to_string_indent 4 v
 
 (* ===== Deserialization ===== *)
 
-let skip_ws s pos =
-  let len = String.length s in
-  let p = ref pos in
-  while
-    !p < len && (s.[!p] = ' ' || s.[!p] = '\t' || s.[!p] = '\n' || s.[!p] = '\r')
-  do
-    incr p
-  done;
-  !p
+(* Parsers take a position and return (value, next position) *)
+
+let rec skip_ws s pos =
+  if
+    pos < String.length s
+    && (s.[pos] = ' ' || s.[pos] = '\t' || s.[pos] = '\n' || s.[pos] = '\r')
+  then skip_ws s (pos + 1)
+  else pos
 
 let parse_string_value s pos =
   (* pos should point to opening '"' *)
-  let buf = Buffer.create 32 in
-  let p = ref (pos + 1) in
   let len = String.length s in
-  while !p < len && s.[!p] <> '"' do
-    if s.[!p] = '\\' && !p + 1 < len then (
-      (match s.[!p + 1] with
+  let buf = Buffer.create 32 in
+  let rec go p =
+    if p >= len || s.[p] = '"' then (Buffer.contents buf, p + 1)
+      (* p + 1 skips the closing quote *)
+    else if s.[p] = '\\' && p + 1 < len then (
+      (match s.[p + 1] with
       | '"' -> Buffer.add_char buf '"'
       | '\\' -> Buffer.add_char buf '\\'
       | 'n' -> Buffer.add_char buf '\n'
@@ -70,22 +70,20 @@ let parse_string_value s pos =
       | c ->
           Buffer.add_char buf '\\';
           Buffer.add_char buf c);
-      p := !p + 2)
+      go (p + 2))
     else (
-      Buffer.add_char buf s.[!p];
-      incr p)
-  done;
-  (* skip closing quote *)
-  (Buffer.contents buf, !p + 1)
+      Buffer.add_char buf s.[p];
+      go (p + 1))
+  in
+  go (pos + 1)
 
 let parse_int_value s pos =
   let len = String.length s in
-  let start = pos in
-  let p = ref pos in
-  while !p < len && s.[!p] >= '0' && s.[!p] <= '9' do
-    incr p
-  done;
-  (int_of_string (String.sub s start (!p - start)), !p)
+  let rec digits_end p =
+    if p < len && s.[p] >= '0' && s.[p] <= '9' then digits_end (p + 1) else p
+  in
+  let p = digits_end pos in
+  (int_of_string (String.sub s pos (p - pos)), p)
 
 let rec parse_value s pos =
   let p = skip_ws s pos in
@@ -107,33 +105,37 @@ let rec parse_value s pos =
         failwith (Printf.sprintf "Json.parse: unexpected char '%c' at %d" c p)
 
 and parse_array s pos =
-  let items = ref [] in
-  let p = ref (skip_ws s pos) in
   let len = String.length s in
-  while !p < len && s.[!p] <> ']' do
-    let v, next = parse_value s !p in
-    items := !items @ [ v ];
-    let next = skip_ws s next in
-    if next < len && s.[next] = ',' then p := skip_ws s (next + 1)
-    else p := next
-  done;
-  (Array !items, !p + 1)
+  let rec items acc p =
+    if p < len && s.[p] <> ']' then
+      let v, next = parse_value s p in
+      let next = skip_ws s next in
+      let p =
+        if next < len && s.[next] = ',' then skip_ws s (next + 1) else next
+      in
+      items (v :: acc) p
+    else (List.rev acc, p)
+  in
+  let elems, p = items [] (skip_ws s pos) in
+  (Array elems, p + 1)
 
 and parse_object s pos =
-  let fields = ref [] in
-  let p = ref (skip_ws s pos) in
   let len = String.length s in
-  while !p < len && s.[!p] <> '}' do
-    let key, next = parse_string_value s !p in
-    let next = skip_ws s next in
-    let next = if next < len && s.[next] = ':' then next + 1 else next in
-    let v, next = parse_value s next in
-    fields := !fields @ [ (key, v) ];
-    let next = skip_ws s next in
-    if next < len && s.[next] = ',' then p := skip_ws s (next + 1)
-    else p := next
-  done;
-  (Object !fields, !p + 1)
+  let rec fields acc p =
+    if p < len && s.[p] <> '}' then
+      let key, next = parse_string_value s p in
+      let next = skip_ws s next in
+      let next = if next < len && s.[next] = ':' then next + 1 else next in
+      let v, next = parse_value s next in
+      let next = skip_ws s next in
+      let p =
+        if next < len && s.[next] = ',' then skip_ws s (next + 1) else next
+      in
+      fields ((key, v) :: acc) p
+    else (List.rev acc, p)
+  in
+  let fs, p = fields [] (skip_ws s pos) in
+  (Object fs, p + 1)
 
 let parse s =
   let s = String.trim s in
