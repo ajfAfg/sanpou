@@ -1,0 +1,13 @@
+[tools]
+java = "openjdk-26"
+
+[tasks.compile]
+usage = 'arg "<file>" help="PlusCal を含む .tla ファイル"'
+run = 'java -cp tla2tools.jar pcal.trans "${usage_file}"'
+
+[tasks.model-check]
+usage = '''
+flag "--config <config>" help="TLC の設定ファイル (.cfg)"
+arg "<file>" help="モデル検査する .tla ファイル"
+'''
+run = 'java -jar tla2tools.jar -config "${usage_config}" "${usage_file}"'

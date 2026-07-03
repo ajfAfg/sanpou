@@ -88,6 +88,19 @@ let () =
                 \  }\n\
                 \  process ps = main in 1..2;\n\
                 \  }");
+          test_case "proc call return value" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn fact(y) {\n\
+                \    if (y == 0) { return 1; } else {\n\
+                \      var ans = y * fact(y - 1);\n\
+                \      return ans;\n\
+                \    }\n\
+                \  }\n\
+                \  fn main() { x = fact(5); return (); }\n\
+                \  process ps = main in 1..1;\n\
+                \  }");
           test_case "local var" `Quick (fun () ->
               check_ok
                 "mod m {\n\

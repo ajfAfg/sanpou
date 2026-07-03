@@ -8,6 +8,7 @@ let cl1 x = { items = [ x ]; commas = [] }
 let intlit v = IntLit { t = n; value = v }
 let boollit v = BoolLit { t = n; value = v }
 let var s = Var { t = n; name = s }
+let app f args = App { name_t = n; name = f; lp = n; args; rp = n }
 
 let assign x e =
   Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }
@@ -326,6 +327,45 @@ let () =
               match push_action.pc_dest with
               | PcNext l -> check string "resolved" bar.entry_label l
               | _ -> fail "expected PcNext");
+          test_case "call expression captures return value" `Quick (fun () ->
+              let m =
+                make_module "m"
+                  [
+                    make_proc "bar" [ simple_step (cl1 (return_ (intlit 42))) ];
+                    make_proc "foo"
+                      [
+                        var_step "x" (app "bar" cl0);
+                        simple_step (cl1 (return_ (var "x")));
+                      ];
+                    make_process "ps" "foo" (intlit 1) (intlit 1);
+                  ]
+              in
+              let ir = linearize_one (make_alpha_module m [ "x" ]) in
+              check bool "temp local" true
+                (List.mem "callRet__1" ir.local_var_decls);
+              let foo = find_proc ir "foo" in
+              let capture_action =
+                List.find
+                  (fun (a : action) ->
+                    match a.stack_op with
+                    | StackPopAssign _ -> true
+                    | _ -> false)
+                  foo.actions
+              in
+              (match capture_action.stack_op with
+              | StackPopAssign "callRet__1" -> ()
+              | _ -> fail "expected StackPopAssign callRet__1");
+              let assign_action =
+                List.find
+                  (fun (a : action) ->
+                    match a.assignments with
+                    | [ AssignVar ("x", Var { name = "callRet__1"; _ }) ] ->
+                        true
+                    | _ -> false)
+                  foo.actions
+              in
+              check bool "assigns captured return" true
+                (assign_action.stack_op = StackNone));
         ] );
       ( "var_step",
         [

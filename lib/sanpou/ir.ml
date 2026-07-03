@@ -15,6 +15,7 @@ type stack_op =
     (* procedure name, return label, arguments *)
   | StackReturn of Cst.expr (* return value *)
   | StackDiscard (* pop return value after call *)
+  | StackPopAssign of string (* assign return value, then pop *)
 
 type pc_dest = PcNext of string | PcBranch of Cst.expr * string * string
 
