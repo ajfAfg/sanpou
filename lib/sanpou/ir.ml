@@ -7,6 +7,22 @@ type source_info = {
   col : int;
 }
 
+(* ===== Variable table (TLA name -> source name) ===== *)
+
+type var_kind = Global | Param | Local | CallRet of string (* callee proc *)
+
+type var_info = {
+  tla_name : string;
+  original : string;
+  proc : string option; (* owning procedure; None for module-level vars *)
+  kind : var_kind;
+}
+
+(* ===== Process wrapper labels (shared by emit_tla and source_map) ===== *)
+
+let wrapper_entry_label process_name = "__w_" ^ process_name ^ "_entry__"
+let wrapper_discard_label process_name = "__w_" ^ process_name ^ "_discard__"
+
 (* ===== Action IR ===== *)
 
 type stack_op =
@@ -45,6 +61,7 @@ type process_ir = {
   fair : bool;
   lo : Cst.expr;
   hi : Cst.expr;
+  loc : Cst.loc;
 }
 
 type module_ir = {
@@ -53,6 +70,7 @@ type module_ir = {
   fun_defs : (string * string list * Cst.expr) list;
   var_decls : (string * Cst.expr) list;
   local_var_decls : string list;
+  var_infos : var_info list;
   procs : proc_ir list;
   processes : process_ir list;
 }

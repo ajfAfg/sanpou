@@ -64,18 +64,31 @@ let cmd_trace file outdir =
     exit 1);
   let input = read_all file in
   let trace = Sanpou.Trace_reader.parse input in
-  (* Find source map file(s) in outdir *)
-  let files = Sys.readdir outdir in
-  let smap =
-    Array.fold_left
-      (fun acc f ->
-        if Filename.check_suffix f ".sourcemap.json" then
-          let path = Filename.concat outdir f in
-          let json = read_all path in
-          acc @ Sanpou.Source_map.from_json json
-        else acc)
-      [] files
+  (* Load only the source map of the module actually checked: label names
+     (L1, L2, ...) collide across modules, so merging several source maps
+     would mix up descriptions. *)
+  let module_name =
+    match trace.module_name with
+    | Some name -> name
+    | None -> Filename.remove_extension (Filename.basename file)
   in
+  let smap_path = Filename.concat outdir (module_name ^ ".sourcemap.json") in
+  if not (Sys.file_exists smap_path) then (
+    let candidates =
+      Sys.readdir outdir |> Array.to_list
+      |> List.filter (fun f -> Filename.check_suffix f ".sourcemap.json")
+    in
+    Printf.eprintf "Error: source map '%s' not found for module '%s'.\n"
+      smap_path module_name;
+    (match candidates with
+    | [] -> ()
+    | _ ->
+        Printf.eprintf "Available source maps in '%s': %s\n" outdir
+          (String.concat ", " candidates));
+    Printf.eprintf
+      "Run 'sanpou compile <file.snp> -o %s' first to generate it.\n" outdir;
+    exit 1);
+  let smap = Sanpou.Source_map.from_json (read_all smap_path) in
   print_string (Sanpou.Trace_printer.render trace smap)
 
 let () =

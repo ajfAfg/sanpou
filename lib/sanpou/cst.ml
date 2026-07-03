@@ -152,6 +152,7 @@ type item =
       semi_t : trivia;
     }
   | ProcDef of {
+      loc : loc;
       fn_t : trivia;
       name_t : trivia;
       name : id;
@@ -163,6 +164,7 @@ type item =
       rb : trivia;
     }
   | Process of {
+      loc : loc;
       fair_t : trivia option;
       process_t : trivia;
       name_t : trivia;

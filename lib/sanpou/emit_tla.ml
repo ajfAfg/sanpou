@@ -84,19 +84,13 @@ type process_wrapper = { process : process_ir; proc : proc_ir }
 let wrapper_proc_name (process : process_ir) =
   "__process_" ^ process.name ^ "_wrapper__"
 
-let wrapper_entry_label (process : process_ir) =
-  "__w_" ^ process.name ^ "_entry__"
-
-let wrapper_discard_label (process : process_ir) =
-  "__w_" ^ process.name ^ "_discard__"
-
-let make_wrapper_source proc_name description =
-  { proc_name; description; line = 0; col = 0 }
+let make_wrapper_source proc_name description (loc : Cst.loc) =
+  { proc_name; description; line = loc.line; col = loc.col }
 
 let wrapper_of_process (process : process_ir) : process_wrapper =
   let proc_name = wrapper_proc_name process in
-  let entry_label = wrapper_entry_label process in
-  let discard_label = wrapper_discard_label process in
+  let entry_label = Ir.wrapper_entry_label process.name in
+  let discard_label = Ir.wrapper_discard_label process.name in
   let entry_action =
     {
       label = entry_label;
@@ -107,7 +101,8 @@ let wrapper_of_process (process : process_ir) : process_wrapper =
       source =
         make_wrapper_source proc_name
           ("[wrapper call " ^ process.proc ^ " for process " ^ process.name
-         ^ "]");
+         ^ "]")
+          process.loc;
     }
   in
   let discard_action =
@@ -119,7 +114,8 @@ let wrapper_of_process (process : process_ir) : process_wrapper =
       stack_op = StackDiscard;
       source =
         make_wrapper_source proc_name
-          ("[wrapper discard return for process " ^ process.name ^ "]");
+          ("[wrapper discard return for process " ^ process.name ^ "]")
+          process.loc;
     }
   in
   {

@@ -2,23 +2,37 @@ open Cst
 
 (* ===== Alpha conversion: CST → CST with unique variable names ===== *)
 
-type alpha_module = { cst : Cst.module_def; local_vars : string list }
+(* BinderVar = MapInit binder: never becomes a TLA state variable, but is
+   still needed to demangle descriptions *)
+type rename_kind = ParamVar | LocalVar | BinderVar
+
+type rename = {
+  tla_name : string;
+  original : string;
+  proc : string;
+  kind : rename_kind;
+}
+
+type alpha_module = { cst : Cst.module_def; renames : rename list }
 
 type alpha_state = {
   var_name_counter : int ref;
-  state_local_vars : string list ref;
+  renames : rename list ref;
+  current_proc : string ref;
 }
 
-let create_state () = { var_name_counter = ref 0; state_local_vars = ref [] }
+let create_state () =
+  { var_name_counter = ref 0; renames = ref []; current_proc = ref "" }
 
 let fresh_var_name st base =
   incr st.var_name_counter;
   base ^ "__" ^ string_of_int !(st.var_name_counter)
 
-let collect_local_var st name =
-  st.state_local_vars := name :: !(st.state_local_vars)
+let collect_rename st ~original ~tla_name ~kind =
+  st.renames :=
+    { tla_name; original; proc = !(st.current_proc); kind } :: !(st.renames)
 
-let get_local_vars st = List.rev !(st.state_local_vars)
+let get_renames st = List.rev !(st.renames)
 
 let resolve env name =
   match List.assoc_opt name env with Some n -> n | None -> name
@@ -50,6 +64,7 @@ let rec alpha_expr env st = function
         }
   | MapInit r ->
       let binder' = fresh_var_name st r.binder in
+      collect_rename st ~original:r.binder ~tla_name:binder' ~kind:BinderVar;
       let env' = (r.binder, binder') :: env in
       MapInit
         {
@@ -144,7 +159,7 @@ and alpha_body st env steps =
   | [] -> []
   | VarStep r :: rest ->
       let tla_name = fresh_var_name st r.name in
-      collect_local_var st tla_name;
+      collect_rename st ~original:r.name ~tla_name ~kind:LocalVar;
       let alpha_value = alpha_expr env st r.value in
       let new_env = (r.name, tla_name) :: env in
       VarStep { r with name = tla_name; value = alpha_value }
@@ -160,11 +175,13 @@ let transform_module (m : Cst.module_def) : alpha_module =
       (fun (item : Cst.item) ->
         match item with
         | ProcDef r ->
+            st.current_proc := r.name;
             let env_rev, params_rev =
               List.fold_left
                 (fun (env_acc, params_acc) (comma, param) ->
                   let fresh = fresh_var_name st param in
-                  collect_local_var st fresh;
+                  collect_rename st ~original:param ~tla_name:fresh
+                    ~kind:ParamVar;
                   ((param, fresh) :: env_acc, (comma, fresh) :: params_acc))
                 ([], []) r.params.items
             in
@@ -174,7 +191,7 @@ let transform_module (m : Cst.module_def) : alpha_module =
         | _ -> item)
       m.items
   in
-  { cst = { m with items }; local_vars = get_local_vars st }
+  { cst = { m with items }; renames = get_renames st }
 
 (* ===== Public API ===== *)
 
