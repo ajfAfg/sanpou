@@ -58,53 +58,44 @@ let display_var_name (smap : Source_map.t) (tla_name : string) : string =
    and quoted strings. Returns None on malformed input. *)
 let split_top_level (inner : string) : string list option =
   let n = String.length inner in
-  let elems = ref [] in
   let buf = Buffer.create 16 in
-  let depth = ref 0 in
-  let in_string = ref false in
-  let error = ref false in
-  let i = ref 0 in
-  while !i < n && not !error do
-    let c = inner.[!i] in
-    if !in_string then (
-      Buffer.add_char buf c;
-      if c = '"' then in_string := false;
-      incr i)
-    else if c = '"' then (
-      Buffer.add_char buf c;
-      in_string := true;
-      incr i)
-    else if c = '<' && !i + 1 < n && inner.[!i + 1] = '<' then (
-      Buffer.add_string buf "<<";
-      incr depth;
-      i := !i + 2)
-    else if c = '>' && !i + 1 < n && inner.[!i + 1] = '>' then (
-      Buffer.add_string buf ">>";
-      decr depth;
-      if !depth < 0 then error := true;
-      i := !i + 2)
-    else if c = '[' || c = '(' || c = '{' then (
-      Buffer.add_char buf c;
-      incr depth;
-      incr i)
-    else if c = ']' || c = ')' || c = '}' then (
-      Buffer.add_char buf c;
-      decr depth;
-      if !depth < 0 then error := true;
-      incr i)
-    else if c = ',' && !depth = 0 then (
-      elems := String.trim (Buffer.contents buf) :: !elems;
-      Buffer.clear buf;
-      incr i)
-    else (
-      Buffer.add_char buf c;
-      incr i)
-  done;
-  if !error || !in_string || !depth <> 0 then None
-  else
-    let last = String.trim (Buffer.contents buf) in
-    let elems = if last = "" && !elems = [] then [] else last :: !elems in
-    Some (List.rev elems)
+  (* [acc] holds the completed elements in reverse *)
+  let rec go acc ~depth ~in_string i =
+    if i >= n then
+      if in_string || depth <> 0 then None
+      else
+        let last = String.trim (Buffer.contents buf) in
+        let elems = if last = "" && acc = [] then [] else last :: acc in
+        Some (List.rev elems)
+    else
+      let c = inner.[i] in
+      if in_string then (
+        Buffer.add_char buf c;
+        go acc ~depth ~in_string:(c <> '"') (i + 1))
+      else if c = '"' then (
+        Buffer.add_char buf c;
+        go acc ~depth ~in_string:true (i + 1))
+      else if c = '<' && i + 1 < n && inner.[i + 1] = '<' then (
+        Buffer.add_string buf "<<";
+        go acc ~depth:(depth + 1) ~in_string (i + 2))
+      else if c = '>' && i + 1 < n && inner.[i + 1] = '>' then (
+        Buffer.add_string buf ">>";
+        if depth = 0 then None else go acc ~depth:(depth - 1) ~in_string (i + 2))
+      else if c = '[' || c = '(' || c = '{' then (
+        Buffer.add_char buf c;
+        go acc ~depth:(depth + 1) ~in_string (i + 1))
+      else if c = ']' || c = ')' || c = '}' then (
+        Buffer.add_char buf c;
+        if depth = 0 then None else go acc ~depth:(depth - 1) ~in_string (i + 1))
+      else if c = ',' && depth = 0 then (
+        let elem = String.trim (Buffer.contents buf) in
+        Buffer.clear buf;
+        go (elem :: acc) ~depth ~in_string (i + 1))
+      else (
+        Buffer.add_char buf c;
+        go acc ~depth ~in_string (i + 1))
+  in
+  go [] ~depth:0 ~in_string:false 0
 
 (* Split the top-level elements of a TLC tuple value "<<a, b, c>>".
    Returns None when the string is not in tuple form (e.g. a function over a
@@ -268,51 +259,39 @@ let render_deadlock_summary (trace : trace) (smap : Source_map.t) : string =
       match pc_var with
       | None -> "Deadlock: unable to determine process states"
       | Some pc ->
-          let buf = Buffer.create 128 in
-          Buffer.add_string buf "DEADLOCK — all processes blocked:\n";
-          (* pc value looks like <<"L25", "__w_workers_entry__">> *)
-          (* Parse out individual labels *)
+          (* pc value looks like <<"L25", "__w_workers_entry__">>;
+             parse out individual labels *)
           let pc_str = pc.value in
-          let labels = ref [] in
           let re = Str.regexp {|"[A-Za-z_][A-Za-z0-9_]*"|} in
-          let pos = ref 0 in
-          (try
-             while true do
-               let _ = Str.search_forward re pc_str !pos in
-               let m = Str.matched_string pc_str in
-               let label = String.sub m 1 (String.length m - 2) in
-               labels := !labels @ [ label ];
-               pos := Str.match_end ()
-             done
-           with Not_found -> ());
-          List.iteri
-            (fun i label ->
-              let pid = i + 1 in
-              if label = "Done" then
-                Buffer.add_string buf
-                  (Printf.sprintf "  process %d: finished\n" pid)
-              else
-                match find_source_info smap label with
-                | Some entry ->
-                    Buffer.add_string buf
-                      (Printf.sprintf "  process %d (%s): %s  [line %d]\n" pid
-                         entry.proc_name entry.description entry.line)
-                | None ->
-                    Buffer.add_string buf
-                      (Printf.sprintf "  process %d: at %s\n" pid label))
-            !labels;
-          Buffer.contents buf)
+          let rec collect_labels acc pos =
+            match Str.search_forward re pc_str pos with
+            | _ ->
+                let m = Str.matched_string pc_str in
+                let label = String.sub m 1 (String.length m - 2) in
+                collect_labels (label :: acc) (Str.match_end ())
+            | exception Not_found -> List.rev acc
+          in
+          let labels = collect_labels [] 0 in
+          let process_line i label =
+            let pid = i + 1 in
+            if label = "Done" then
+              Printf.sprintf "  process %d: finished\n" pid
+            else
+              match find_source_info smap label with
+              | Some entry ->
+                  Printf.sprintf "  process %d (%s): %s  [line %d]\n" pid
+                    entry.proc_name entry.description entry.line
+              | None -> Printf.sprintf "  process %d: at %s\n" pid label
+          in
+          "DEADLOCK — all processes blocked:\n"
+          ^ String.concat "" (List.mapi process_line labels))
 
 let render (trace : trace) (smap : Source_map.t) : string =
-  let buf = Buffer.create 512 in
-  let prev_state = ref [] in
-  List.iter
-    (fun step ->
-      Buffer.add_string buf (render_step ~prev_state:!prev_state step smap);
-      Buffer.add_char buf '\n';
-      Buffer.add_char buf '\n';
-      prev_state := step.state)
-    trace.steps;
-  if trace.is_deadlock then
-    Buffer.add_string buf (render_deadlock_summary trace smap);
-  Buffer.contents buf
+  let rec render_steps prev_state = function
+    | [] -> []
+    | step :: rest ->
+        (render_step ~prev_state step smap ^ "\n\n")
+        :: render_steps step.state rest
+  in
+  String.concat "" (render_steps [] trace.steps)
+  ^ if trace.is_deadlock then render_deadlock_summary trace smap else ""
