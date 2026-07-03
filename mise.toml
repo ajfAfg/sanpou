@@ -1,6 +1,22 @@
 [tools]
 java = "openjdk-26"
 
+[vars]
+# Pinned TLA+ tools release (https://github.com/tlaplus/tlaplus/releases).
+# Bump deliberately; do not track the latest release automatically.
+tla2tools_version = "v1.7.4"
+
+[env]
+# E2E tests (test/sanpou/test_e2e.ml) run TLC only when these are set.
+# tools = true evaluates the template after mise's tools are on PATH,
+# so `which java` resolves to the mise-installed Java.
+SANPOU_JAVA = { value = "{{ exec(command='which java') }}", tools = true }
+SANPOU_TLA2TOOLS_JAR = "{{ config_root }}/tla2tools.jar"
+
+[tasks.download-tla2tools]
+description = "Download the pinned tla2tools.jar into the project root"
+run = 'curl -fsSL -o "{{ config_root }}/tla2tools.jar" "https://github.com/tlaplus/tlaplus/releases/download/{{ vars.tla2tools_version }}/tla2tools.jar"'
+
 [tasks.compile]
 usage = 'arg "<file>" help="PlusCal を含む .tla ファイル"'
 run = 'java -cp tla2tools.jar pcal.trans "${usage_file}"'
