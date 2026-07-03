@@ -6,6 +6,7 @@
   test_ast_printer
   test_typing
   test_alpha_convert
+  test_normalize_calls
   test_linearize
   test_trace
   test_e2e)
