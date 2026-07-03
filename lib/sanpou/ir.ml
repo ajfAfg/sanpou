@@ -18,11 +18,6 @@ type var_info = {
   kind : var_kind;
 }
 
-(* ===== Process wrapper labels (shared by emit_tla and source_map) ===== *)
-
-let wrapper_entry_label process_name = "__w_" ^ process_name ^ "_entry__"
-let wrapper_discard_label process_name = "__w_" ^ process_name ^ "_discard__"
-
 (* The terminal pc value; not an action label. *)
 let done_label = "Done"
 
@@ -74,6 +69,9 @@ type process_ir = {
   lo : Resolved_ast.expr;
   hi : Resolved_ast.expr;
   loc : Ast.loc;
+  wrapper : proc_ir;
+      (* synthetic proc that pushes the root call's frame and discards its
+         return value; synthesized by Linearize, never a callee *)
 }
 
 type module_ir = {

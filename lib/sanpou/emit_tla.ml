@@ -64,48 +64,6 @@ let rec expr_to_tla local_vars (e : Resolved_ast.expr) =
 (* Module-level expressions have no local vars *)
 let expr_to_tla_global = expr_to_tla []
 
-type process_wrapper = { process : process_ir; proc : proc_ir }
-
-let wrapper_proc_name (process : process_ir) =
-  "__process_" ^ process.name ^ "_wrapper__"
-
-let make_wrapper_source proc_name description (loc : Ast.loc) =
-  { proc_name; description; line = loc.line; col = loc.col }
-
-let wrapper_of_process (process : process_ir) : process_wrapper =
-  let proc_name = wrapper_proc_name process in
-  let entry_label = Ir.wrapper_entry_label process.name in
-  let discard_label = Ir.wrapper_discard_label process.name in
-  let entry_action =
-    make_action ~label:entry_label ~pc_dest:(PcCall process.proc)
-      ~stack_op:(StackPush (process.proc, discard_label, []))
-      ~source:
-        (make_wrapper_source proc_name
-           ("[wrapper call " ^ process.proc ^ " for process " ^ process.name
-          ^ "]")
-           process.loc)
-      ()
-  in
-  let discard_action =
-    make_action ~label:discard_label ~pc_dest:(PcNext Ir.done_label)
-      ~stack_op:StackDiscard
-      ~source:
-        (make_wrapper_source proc_name
-           ("[wrapper discard return for process " ^ process.name ^ "]")
-           process.loc)
-      ()
-  in
-  {
-    process;
-    proc =
-      {
-        proc_name;
-        params = [];
-        actions = [ entry_action; discard_action ];
-        entry_label;
-      };
-  }
-
 (* ===== UNCHANGED computation ===== *)
 
 let compute_unchanged (ir : module_ir) (action : action) : string list =
@@ -336,26 +294,19 @@ let proc_set_decls (ir : module_ir) : tla_decl list =
   in
   [ DOpDef ("ProcSet", [], TCup parts); DSeparator ]
 
-let wrapper_for process_wrappers (p : process_ir) =
-  List.find
-    (fun (wrapper : process_wrapper) -> wrapper.process.name = p.name)
-    process_wrappers
-
-let init_decls process_wrappers (ir : module_ir) : tla_decl list =
+let init_decls (ir : module_ir) : tla_decl list =
   let pc_init =
     match ir.processes with
     | [ single ] ->
-        let wrapper = wrapper_for process_wrappers single in
-        TFuncMap ("self", TId "ProcSet", TStr wrapper.proc.entry_label)
+        TFuncMap ("self", TId "ProcSet", TStr single.wrapper.entry_label)
     | _ ->
         let cases =
           List.map
             (fun (p : process_ir) ->
-              let wrapper = wrapper_for process_wrappers p in
               ( TIn
                   ( TId "self",
                     TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi) ),
-                TStr wrapper.proc.entry_label ))
+                TStr p.wrapper.entry_label ))
             ir.processes
         in
         TFuncMap ("self", TId "ProcSet", TCase cases)
@@ -395,7 +346,7 @@ let termination_decls : tla_decl list =
     DSeparator;
   ]
 
-let next_decls config process_wrappers (ir : module_ir) : tla_decl list =
+let next_decls config (ir : module_ir) : tla_decl list =
   let procedure_disjuncts =
     if ir.procs <> [] then
       let proc_disj =
@@ -410,15 +361,13 @@ let next_decls config process_wrappers (ir : module_ir) : tla_decl list =
   in
   let process_disjuncts =
     List.map
-      (fun (wrapper : process_wrapper) ->
+      (fun (p : process_ir) ->
         TParens
           (TExists
              ( "self",
-               TRange
-                 ( expr_to_tla_global wrapper.process.lo,
-                   expr_to_tla_global wrapper.process.hi ),
-               TApp (wrapper.proc.proc_name, [ TId "self" ]) )))
-      process_wrappers
+               TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi),
+               TApp (p.wrapper.proc_name, [ TId "self" ]) )))
+      ir.processes
   in
   let termination_disjuncts =
     if config.checks.termination then [ TId "Terminating" ] else []
@@ -435,15 +384,13 @@ let next_decls config process_wrappers (ir : module_ir) : tla_decl list =
       DSeparator;
     ]
 
-let spec_decls process_wrappers (ir : module_ir) : tla_decl list =
+let spec_decls (ir : module_ir) : tla_decl list =
   let fairness_conjuncts =
     List.concat_map
-      (fun (wrapper : process_wrapper) ->
-        if wrapper.process.fair then
+      (fun (p : process_ir) ->
+        if p.fair then
           let process_range =
-            TRange
-              ( expr_to_tla_global wrapper.process.lo,
-                expr_to_tla_global wrapper.process.hi )
+            TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi)
           in
           let fairness_for proc_name =
             TParens
@@ -452,12 +399,12 @@ let spec_decls process_wrappers (ir : module_ir) : tla_decl list =
                    process_range,
                    TApp ("WF_vars", [ TApp (proc_name, [ TId "self" ]) ]) ))
           in
-          fairness_for wrapper.proc.proc_name
+          fairness_for p.wrapper.proc_name
           :: List.map
                (fun (proc : proc_ir) -> fairness_for proc.proc_name)
                ir.procs
         else [])
-      process_wrappers
+      ir.processes
   in
   [
     DOpDef
@@ -471,8 +418,9 @@ let spec_decls process_wrappers (ir : module_ir) : tla_decl list =
   ]
 
 let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
-  let process_wrappers = List.map wrapper_of_process ir.processes in
-  let wrapper_procs = List.map (fun wrapper -> wrapper.proc) process_wrappers in
+  let wrapper_procs =
+    List.map (fun (p : process_ir) -> p.wrapper) ir.processes
+  in
   let all_runtime_procs = ir.procs @ wrapper_procs in
   let proc_entry_labels =
     List.map
@@ -505,10 +453,10 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
         header_decls ir;
         const_and_fun_decls ir;
         proc_set_decls ir;
-        init_decls process_wrappers ir;
+        init_decls ir;
         runtime_proc_decls proc_entry_labels frame_fields ir all_runtime_procs;
-        next_decls config process_wrappers ir;
-        spec_decls process_wrappers ir;
+        next_decls config ir;
+        spec_decls ir;
       ]
   in
   { name = ir.name; body }

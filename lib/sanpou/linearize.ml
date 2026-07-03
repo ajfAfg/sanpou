@@ -363,6 +363,40 @@ let rec local_idents (steps : Resolved_ast.body) : Resolved_ast.ident list =
       | SimpleStep _ | EmptyStep -> [])
     steps
 
+(* Each process runs its root procedure through a synthetic wrapper proc: the
+   wrapper's entry action pushes the initial frame, and its discard action
+   drops the unused return value and parks the process at Done. Synthesizing
+   it here keeps Emit_tla a pure IR -> TLA+ pass and lets Source_map read
+   wrapper actions like any others. *)
+let wrapper_of_process ~process_name ~root_proc ~(loc : Ast.loc) : proc_ir =
+  let entry_label = "__w_" ^ process_name ^ "_entry__" in
+  let discard_label = "__w_" ^ process_name ^ "_discard__" in
+  let entry_action =
+    make_action ~label:entry_label ~pc_dest:(PcCall root_proc)
+      ~stack_op:(StackPush (root_proc, discard_label, []))
+      ~source:
+        (make_source ~proc_name:process_name
+           ~description:
+             ("[process " ^ process_name ^ " starts " ^ root_proc ^ "]")
+           ~loc)
+      ()
+  in
+  let discard_action =
+    make_action ~label:discard_label ~pc_dest:(PcNext Ir.done_label)
+      ~stack_op:StackDiscard
+      ~source:
+        (make_source ~proc_name:process_name
+           ~description:("[process " ^ process_name ^ " finished]")
+           ~loc)
+      ()
+  in
+  {
+    proc_name = "__process_" ^ process_name ^ "_wrapper__";
+    params = [];
+    actions = [ entry_action; discard_action ];
+    entry_label;
+  }
+
 let linearize_module (m : Resolved_ast.module_def) : module_ir =
   let label_counter = ref 0 in
   let fresh_label () =
@@ -442,7 +476,18 @@ let linearize_module (m : Resolved_ast.module_def) : module_ir =
       (fun (item : Resolved_ast.item) ->
         match item.desc with
         | Process { name; proc; fair; lo; hi } ->
-            Some { name; proc; fair; lo; hi; loc = item.loc }
+            Some
+              {
+                name;
+                proc;
+                fair;
+                lo;
+                hi;
+                loc = item.loc;
+                wrapper =
+                  wrapper_of_process ~process_name:name ~root_proc:proc
+                    ~loc:item.loc;
+              }
         | _ -> None)
       m.items
   in
