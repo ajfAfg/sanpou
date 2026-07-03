@@ -13,10 +13,7 @@ let await_ e = node (Await e)
 let simple_step stmts = node (SimpleStep stmts)
 let var_step name value = node (VarStep (name, value))
 let while_block cond body = node (BlockStep (While { cond; body }))
-
-let if_block cond body =
-  node (BlockStep (If { cond; body; else_body = None }))
-
+let if_block cond body = node (BlockStep (If { cond; body; else_body = None }))
 let make_proc name body = node (ProcDef { name; params = []; body })
 let make_module items = { mod_name = "m"; items; mod_loc = loc0 }
 let make_program modules = modules
@@ -35,20 +32,23 @@ let get_proc_body (m : Sanpou.Resolved_ast.module_def) proc_name =
 
 (* Renamed [var] bindings of a body, in pre-order (the old rename table,
    read back from the tree). *)
-let rec var_step_idents (steps : Sanpou.Resolved_ast.body) : Sanpou.Resolved_ast.ident list =
+let rec var_step_idents (steps : Sanpou.Resolved_ast.body) :
+    Sanpou.Resolved_ast.ident list =
   List.concat_map
     (fun (step : Sanpou.Resolved_ast.step) ->
       match step.desc with
       | VarStep (i, _) -> [ i ]
       | BlockStep (While { body; _ }) -> var_step_idents body
-      | BlockStep (If { body; else_body; _ }) ->
+      | BlockStep (If { body; else_body; _ }) -> (
           var_step_idents body
-          @ (match else_body with Some b -> var_step_idents b | None -> [])
+          @ match else_body with Some b -> var_step_idents b | None -> [])
       | SimpleStep _ | EmptyStep -> [])
     steps
 
 let local_names m proc_name =
-  List.map (fun (i : Sanpou.Resolved_ast.ident) -> i.name) (var_step_idents (get_proc_body m proc_name))
+  List.map
+    (fun (i : Sanpou.Resolved_ast.ident) -> i.name)
+    (var_step_idents (get_proc_body m proc_name))
 
 let extract_var_name (e : Sanpou.Resolved_ast.expr) =
   match e.desc with Var i -> i.name | _ -> failwith "expected Var"
@@ -117,7 +117,8 @@ let () =
               let m = transform_one prog in
               let body = get_proc_body m "foo" in
               check bool "value" true
-                (Sanpou.Resolved_ast.equal_expr (intlit 42) (extract_var_step_value (List.hd body))));
+                (Sanpou.Resolved_ast.equal_expr (intlit 42)
+                   (extract_var_step_value (List.hd body))));
           test_case "usage after var uses new name" `Quick (fun () ->
               let prog =
                 make_program
@@ -215,9 +216,13 @@ let () =
               let m = transform_one prog in
               let idents = var_step_idents (get_proc_body m "foo") in
               check (list string) "locals" [ "x__1"; "y__2" ]
-                (List.map (fun (i : Sanpou.Resolved_ast.ident) -> i.name) idents);
+                (List.map
+                   (fun (i : Sanpou.Resolved_ast.ident) -> i.name)
+                   idents);
               check (list string) "originals" [ "x"; "y" ]
-                (List.map (fun (i : Sanpou.Resolved_ast.ident) -> i.original) idents));
+                (List.map
+                   (fun (i : Sanpou.Resolved_ast.ident) -> i.original)
+                   idents));
           test_case "no var steps no locals" `Quick (fun () ->
               let prog =
                 make_program
@@ -354,7 +359,8 @@ let () =
               match (List.hd m.items).desc with
               | ConstDef { name; value } ->
                   check string "name" "c" name;
-                  check bool "value" true (Sanpou.Resolved_ast.equal_expr (intlit 1) value)
+                  check bool "value" true
+                    (Sanpou.Resolved_ast.equal_expr (intlit 1) value)
               | _ -> fail "expected ConstDef");
           test_case "var decl unchanged" `Quick (fun () ->
               let vd = node (VarDecl { name = "v"; value = intlit 0 }) in

@@ -56,9 +56,7 @@ let test_v2_roundtrip () =
       (fun (v : Source_map.var_entry) -> v.tla_name = "callRet__1")
       parsed.vars
   in
-  Alcotest.(check bool)
-    "kind callret" true
-    (cr.kind = Source_map.CallRet "fact")
+  Alcotest.(check bool) "kind callret" true (cr.kind = Source_map.CallRet "fact")
 
 let test_v1_backcompat () =
   let v1_json =
@@ -91,7 +89,8 @@ let test_module_name_absent () =
 
 let test_split_flat () =
   Alcotest.(check (option (list string)))
-    "flat" (Some [ "1"; "2"; "3" ])
+    "flat"
+    (Some [ "1"; "2"; "3" ])
     (Trace_printer.split_tuple_elements "<<1, 2, 3>>")
 
 let test_split_nested () =
@@ -130,11 +129,7 @@ let test_record_fields () =
   Alcotest.(check (option (list (pair string string))))
     "reordered with strings"
     (Some
-       [
-         ("ans__2", "0");
-         ("return_pc", "\"L7\"");
-         ("procedure", "\"fact\"");
-       ])
+       [ ("ans__2", "0"); ("return_pc", "\"L7\""); ("procedure", "\"fact\"") ])
     (Trace_printer.split_record_fields
        "[ans__2 |-> 0, return_pc |-> \"L7\", procedure |-> \"fact\"]");
   Alcotest.(check (option (list (pair string string))))
@@ -171,8 +166,8 @@ let test_render_frame_locals () =
   (* [ans] is a raw TLC value string: unassigned fields hold "__null__" *)
   let fact_frame ~x ~ans ~call_ret =
     Printf.sprintf
-      "[x__1 |-> %d, ans__2 |-> %s, callRet__1 |-> %d, return_pc |-> \
-       \"L11\", procedure |-> \"fact\"]"
+      "[x__1 |-> %d, ans__2 |-> %s, callRet__1 |-> %d, return_pc |-> \"L11\", \
+       procedure |-> \"fact\"]"
       x ans call_ret
   in
   let null = "\"__null__\"" in

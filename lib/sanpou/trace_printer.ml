@@ -212,29 +212,28 @@ let render_local_lines (smap : Source_map.t) ~prev_state
                       | _ ->
                           Some
                             (Printf.sprintf "  %s = %s"
-                               (display_var_name smap k)
-                               (display_field_value v)))
+                               (display_var_name smap k) (display_field_value v)))
                     visible
               | None -> context_line ())
           | _ -> context_line ()))
 
 (* ===== Step rendering ===== *)
 
-let render_var_lines (smap : Source_map.t) (vars : state_var list) :
-    string list =
+let render_var_lines (smap : Source_map.t) (vars : state_var list) : string list
+    =
   List.map
     (fun v ->
       Printf.sprintf "  %s = %s" (display_var_name smap v.var_name) v.value)
     vars
 
-let render_step ~prev_state (step : trace_step) (smap : Source_map.t) : string
-    =
+let render_step ~prev_state (step : trace_step) (smap : Source_map.t) : string =
   let header_str = render_header step.header smap in
   let global_lines =
     match step.header with
     | InitialPredicate ->
         render_var_lines smap (filter_user_vars smap step.state)
-    | Action _ -> render_var_lines smap (changed_vars smap prev_state step.state)
+    | Action _ ->
+        render_var_lines smap (changed_vars smap prev_state step.state)
   in
   let local_lines =
     match step.header with
@@ -274,8 +273,7 @@ let render_deadlock_summary (trace : trace) (smap : Source_map.t) : string =
           let labels = collect_labels [] 0 in
           let process_line i label =
             let pid = i + 1 in
-            if label = "Done" then
-              Printf.sprintf "  process %d: finished\n" pid
+            if label = "Done" then Printf.sprintf "  process %d: finished\n" pid
             else
               match find_source_info smap label with
               | Some entry ->

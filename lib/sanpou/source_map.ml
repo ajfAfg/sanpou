@@ -70,15 +70,14 @@ let var_entry_to_json (v : var_entry) : Json.t =
   Json.Object
     (("tla", Json.String v.tla_name)
      :: ("name", Json.String v.original)
-     :: (match v.proc with
-        | Some p -> [ ("proc", Json.String p) ]
-        | None -> [])
-    @ (match v.kind with
-      | Global -> [ ("kind", Json.String "global") ]
-      | Param -> [ ("kind", Json.String "param") ]
-      | Local -> [ ("kind", Json.String "local") ]
-      | CallRet callee ->
-          [ ("kind", Json.String "callret"); ("callee", Json.String callee) ]))
+     :: (match v.proc with Some p -> [ ("proc", Json.String p) ] | None -> [])
+    @
+    match v.kind with
+    | Global -> [ ("kind", Json.String "global") ]
+    | Param -> [ ("kind", Json.String "param") ]
+    | Local -> [ ("kind", Json.String "local") ]
+    | CallRet callee ->
+        [ ("kind", Json.String "callret"); ("callee", Json.String callee) ])
 
 let to_json (smap : t) : string =
   Json.to_string
@@ -111,8 +110,7 @@ let var_entry_of_json (v : Json.t) : var_entry =
       | "global" -> Global
       | "param" -> Param
       | "local" -> Local
-      | "callret" ->
-          CallRet (Json.to_string_value (Json.field "callee" v))
+      | "callret" -> CallRet (Json.to_string_value (Json.field "callee" v))
       | other -> failwith ("Source_map: unknown var kind " ^ other));
   }
 
@@ -126,6 +124,5 @@ let from_json (s : string) : t =
       {
         module_name = Json.to_string_value (Json.field "module" v);
         entries = List.map entry_of_json (Json.to_array (Json.field "labels" v));
-        vars =
-          List.map var_entry_of_json (Json.to_array (Json.field "vars" v));
+        vars = List.map var_entry_of_json (Json.to_array (Json.field "vars" v));
       }

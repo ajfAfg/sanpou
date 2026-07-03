@@ -1,6 +1,6 @@
-(** Hindley-Milner type inference over the AST. [check] returns unit on
-    success and raises [Type_error] otherwise; no type information is
-    attached to the tree. *)
+(** Hindley-Milner type inference over the AST. [check] returns unit on success
+    and raises [Type_error] otherwise; no type information is attached to the
+    tree. *)
 
 type ty
 (** An inferred type; render with [string_of_ty]. *)
@@ -18,6 +18,6 @@ type type_error =
 
 exception Type_error of type_error * Ast.loc
 
-val check : Ast.id Ast.program -> unit
+val check : Surface_ast.program -> unit
 val string_of_ty : ty -> string
 val string_of_type_error : type_error -> string

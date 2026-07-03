@@ -21,7 +21,28 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
    (or_expr > and_expr > comparison_expr > add_expr > mult_expr), so no
    %left declarations are needed. *)
 
-%start <Ast.id Ast.program> program
+%start <Surface_ast.program> program
+
+(* Menhir type inference is disabled (see dune), so every symbol — including
+   the standard-library instances — is typed by hand. *)
+%type <Surface_ast.module_def list> list(module_def)
+%type <Surface_ast.module_def> module_def
+%type <Surface_ast.item list> list(item)
+%type <Surface_ast.item> item
+%type <Surface_ast.body> body list(step) else_clause
+%type <Surface_ast.body option> option(else_clause)
+%type <Surface_ast.step> step
+%type <Surface_ast.simple_stmt> simple_stmt
+%type <Surface_ast.simple_stmt list> separated_nonempty_list(COMMA, simple_stmt)
+%type <Surface_ast.assign_target> assign_target
+%type <Surface_ast.block_stmt> block_stmt
+%type <Surface_ast.expr> expr or_expr and_expr comparison_expr add_expr
+%type <Surface_ast.expr> mult_expr postfix_expr primary_expr
+%type <Surface_ast.expr list> separated_nonempty_list(COMMA, expr)
+%type <Surface_ast.expr list> loption(separated_nonempty_list(COMMA, expr))
+%type <Ast.id list> separated_nonempty_list(COMMA, ID)
+%type <Ast.id list> loption(separated_nonempty_list(COMMA, ID))
+%type <unit option> option(FAIR) option(SEMI)
 %%
 
 program:

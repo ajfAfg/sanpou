@@ -143,10 +143,14 @@ lib/
   sanpou/      Compiler core
     lexer.mll      Lexer (ocamllex)
     parser.mly     Parser (Menhir)
-    ast.ml         Abstract Syntax Tree (AST)
+    ast.ml         Abstract Syntax Tree (AST), parameterized by stage
+    surface_ast.ml Surface-stage AST instantiation (as parsed)
     ast_printer.ml AST pretty printer
     builtin.ml     Built-in function registry
-    alpha_convert.ml  Alpha conversion pass
+    typing.ml      Hindley-Milner type checking
+    alpha_convert.ml  Alpha conversion and callee resolution pass
+    resolved_ast.ml   Resolved-stage AST instantiation (renamed idents, Fun/Proc callees)
+    ir.ml             Action IR shared by linearize and emit
     linearize.ml      AST → action IR lowering
     emit_tla.ml       Action IR → TLA+ AST
     compile.ml        Pipeline driver with located diagnostics
