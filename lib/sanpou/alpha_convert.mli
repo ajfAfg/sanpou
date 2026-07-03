@@ -3,4 +3,4 @@
     TLA-safe name. Each [Resolved_ast.ident] keeps its source name in
     [original], so no rename table needs to travel with the tree. *)
 
-val transform : Ast.id Ast.program -> Resolved_ast.program
+val transform : Surface_ast.program -> Resolved_ast.program

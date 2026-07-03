@@ -6,11 +6,18 @@ open Ast
    procedure body) gets a unique TLA-safe name; each variable position in
    the result carries a [Resolved_ast.ident] pairing that name with the
    source name for display, so no rename table needs to travel with the
-   tree. Module-level expressions are not renamed and convert verbatim. *)
+   tree. Module-level expressions are not renamed and convert verbatim.
 
-type state = { var_name_counter : int ref }
+   Applied callees are resolved at the same time: a name in application
+   position becomes [Proc] when the module defines a procedure by that name
+   and [Fun] otherwise, so downstream passes never consult a name table. *)
 
-let create_state () = { var_name_counter = ref 0 }
+type state = { var_name_counter : int ref; proc_names : id list }
+
+let create_state proc_names = { var_name_counter = ref 0; proc_names }
+
+let resolve_callee st name : Resolved_ast.callee =
+  if List.mem name st.proc_names then Proc name else Fun name
 
 let fresh st name : Resolved_ast.ident =
   incr st.var_name_counter;
@@ -25,8 +32,8 @@ let resolve env name : Resolved_ast.ident =
 
 (* ===== Expression alpha conversion ===== *)
 
-let rec alpha_expr env st (e : id expr) : Resolved_ast.expr =
-  let desc : Resolved_ast.ident expr_desc =
+let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
+  let desc : (Resolved_ast.ident, Resolved_ast.callee) expr_desc =
     match e.desc with
     | IntLit v -> IntLit v
     | BoolLit b -> BoolLit b
@@ -35,7 +42,8 @@ let rec alpha_expr env st (e : id expr) : Resolved_ast.expr =
     | UnOp (op, rhs) -> UnOp (op, alpha_expr env st rhs)
     | BinOp (op, lhs, rhs) ->
         BinOp (op, alpha_expr env st lhs, alpha_expr env st rhs)
-    | App (name, args) -> App (name, List.map (alpha_expr env st) args)
+    | App (name, args) ->
+        App (resolve_callee st name, List.map (alpha_expr env st) args)
     | Builtin (b, args) -> Builtin (b, List.map (alpha_expr env st) args)
     | Subscript (lhs, index) ->
         Subscript (alpha_expr env st lhs, alpha_expr env st index)
@@ -55,20 +63,21 @@ let rec alpha_expr env st (e : id expr) : Resolved_ast.expr =
   { desc; loc = e.loc }
 
 let alpha_assign_target env st :
-    id assign_target -> Resolved_ast.assign_target = function
+    Surface_ast.assign_target -> Resolved_ast.assign_target = function
   | VarTarget name -> VarTarget (resolve env name)
   | SubscriptTarget (name, index) ->
       SubscriptTarget (resolve env name, alpha_expr env st index)
 
 (* ===== Step and body alpha conversion ===== *)
 
-let rec alpha_step st env (step : id step) : Resolved_ast.step =
-  let desc : Resolved_ast.ident step_desc =
+let rec alpha_step st env (step : Surface_ast.step) : Resolved_ast.step =
+  let desc : (Resolved_ast.ident, Resolved_ast.callee) step_desc =
     match step.desc with
     | SimpleStep stmts ->
-        let alpha_simple_stmt (stmt : id simple_stmt) : Resolved_ast.simple_stmt
-            =
-          let desc : Resolved_ast.ident simple_stmt_desc =
+        let alpha_simple_stmt (stmt : Surface_ast.simple_stmt) :
+            Resolved_ast.simple_stmt =
+          let desc : (Resolved_ast.ident, Resolved_ast.callee) simple_stmt_desc
+              =
             match stmt.desc with
             | Assign (target, value) ->
                 Assign
@@ -89,8 +98,9 @@ let rec alpha_step st env (step : id step) : Resolved_ast.step =
   in
   { desc; loc = step.loc }
 
-and alpha_block_stmt st env : id block_stmt -> Resolved_ast.ident block_stmt =
-  function
+and alpha_block_stmt st env :
+    Surface_ast.block_stmt ->
+    (Resolved_ast.ident, Resolved_ast.callee) block_stmt = function
   | While { cond; body } ->
       While { cond = alpha_expr env st cond; body = alpha_body st env body }
   | If { cond; body; else_body } ->
@@ -101,7 +111,7 @@ and alpha_block_stmt st env : id block_stmt -> Resolved_ast.ident block_stmt =
           else_body = Option.map (alpha_body st env) else_body;
         }
 
-and alpha_body st env (steps : id body) : Resolved_ast.body =
+and alpha_body st env (steps : Surface_ast.body) : Resolved_ast.body =
   match steps with
   | [] -> []
   | { desc = VarStep (name, value); loc } :: rest ->
@@ -114,15 +124,21 @@ and alpha_body st env (steps : id body) : Resolved_ast.body =
 
 (* ===== Module transformation ===== *)
 
-let transform_module (m : id module_def) : Resolved_ast.module_def =
-  let st = create_state () in
+let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
+  let proc_names =
+    List.filter_map
+      (fun (item : Surface_ast.item) ->
+        match item.desc with ProcDef { name; _ } -> Some name | _ -> None)
+      m.items
+  in
+  let st = create_state proc_names in
   (* Module-level expressions are never renamed; their names display as
      themselves. *)
-  let plain = Ast.map_expr Resolved_ast.ident in
+  let plain = Ast.map_expr Resolved_ast.ident (resolve_callee st) in
   let items =
     List.map
-      (fun (item : id item) ->
-        let desc : Resolved_ast.ident item_desc =
+      (fun (item : Surface_ast.item) ->
+        let desc : (Resolved_ast.ident, Resolved_ast.callee) item_desc =
           match item.desc with
           | ConstDef { name; value } -> ConstDef { name; value = plain value }
           | FunDef { name; params; body_expr } ->
@@ -149,5 +165,5 @@ let transform_module (m : id module_def) : Resolved_ast.module_def =
 
 (* ===== Public API ===== *)
 
-let transform (prog : id program) : Resolved_ast.program =
+let transform (prog : Surface_ast.program) : Resolved_ast.program =
   List.map transform_module prog

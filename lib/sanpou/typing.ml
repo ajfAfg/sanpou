@@ -185,7 +185,7 @@ let infer_indexed_access fresh_tyvar ~collection_loc ~index_loc collection_ty
 let rec infer_sequence_literal fresh_tyvar env elems =
   let elem_ty = fresh_tyvar () in
   List.iter
-    (fun (elem : id expr) ->
+    (fun (elem : Surface_ast.expr) ->
       unify elem.loc elem_ty (infer_expr fresh_tyvar env elem))
     elems;
   TySeq elem_ty
@@ -198,7 +198,7 @@ and infer_app fresh_tyvar env loc fn_ty args : ty =
   unify loc fn_ty (TyFun (arg_tys, ret_ty));
   ret_ty
 
-and infer_expr fresh_tyvar (env : tyenv) (e : id expr) : ty =
+and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
   match e.desc with
   | IntLit _ -> TyInt
   | BoolLit _ -> TyBool
@@ -257,7 +257,7 @@ type proc_ctx = {
 
 (* Statement-level errors (assignment targets, break/continue) point at the
    statement's own location; expression errors point at the expression. *)
-let check_simple_stmt (ctx : proc_ctx) (stmt : id simple_stmt) : unit =
+let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
   let loc = stmt.loc in
   match stmt.desc with
   | Assign (target, value) -> (
@@ -292,14 +292,14 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : id simple_stmt) : unit =
   | Await cond ->
       unify cond.loc (infer_expr ctx.fresh_tyvar ctx.env cond) TyBool
 
-let rec check_body (ctx : proc_ctx) (steps : id body) : unit =
+let rec check_body (ctx : proc_ctx) (steps : Surface_ast.body) : unit =
   match steps with
   | [] -> ()
   | step :: rest -> check_body (check_step ctx step) rest
 
 (* Returns the context for the following steps: VarStep extends it, every
    other step leaves it unchanged. *)
-and check_step (ctx : proc_ctx) (step : id step) : proc_ctx =
+and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
   match step.desc with
   | EmptyStep -> ctx
   | SimpleStep stmts ->
@@ -327,7 +327,7 @@ and check_step (ctx : proc_ctx) (step : id step) : proc_ctx =
 
 (* ===== Check a module ===== *)
 
-let check_module (m : id module_def) : unit =
+let check_module (m : Surface_ast.module_def) : unit =
   let tyvar_counter = ref 0 in
   let fresh_tyvar () =
     let v = !tyvar_counter in
@@ -336,7 +336,7 @@ let check_module (m : id module_def) : unit =
   in
   let _env =
     List.fold_left
-      (fun env (item : id item) ->
+      (fun env (item : Surface_ast.item) ->
         match item.desc with
         | ConstDef { name; value } ->
             let ty = infer_expr fresh_tyvar env value in
@@ -370,7 +370,7 @@ let check_module (m : id module_def) : unit =
                   | TyScheme ([], ty) ->
                       if
                         List.exists
-                          (fun (item : id item) ->
+                          (fun (item : Surface_ast.item) ->
                             match item.desc with
                             | VarDecl { name; _ } -> name = id
                             | _ -> false)
@@ -404,7 +404,7 @@ let check_module (m : id module_def) : unit =
 
 (* ===== Check a program ===== *)
 
-let check (prog : id program) : unit = List.iter check_module prog
+let check (prog : Surface_ast.program) : unit = List.iter check_module prog
 
 (* ===== Pretty printing for error messages ===== *)
 

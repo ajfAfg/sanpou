@@ -12,7 +12,7 @@ let pretty_roundtrip input =
   Alcotest.(check bool)
     ("pretty roundtrip of: " ^ printed)
     true
-    (Sanpou.Ast.equal_program Sanpou.Ast.equal_id ast reparsed)
+    (Sanpou.Ast.equal_program Sanpou.Ast.equal_id Sanpou.Ast.equal_id ast reparsed)
 
 let pretty_prints input expected =
   Alcotest.(check string)

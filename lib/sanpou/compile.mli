@@ -9,7 +9,7 @@ type output = {
   source_map : Source_map.t;
 }
 
-val parse : string -> (Ast.id Ast.program, diagnostic) result
+val parse : string -> (Surface_ast.program, diagnostic) result
 (** Parse source text; lexical and syntax errors become diagnostics. *)
 
 val compile : ?config:Config.t -> string -> (output list, diagnostic) result

@@ -7,7 +7,6 @@ open Ir
    linearize_module; the mutable counters behind them never escape it. *)
 type ctx = {
   proc_name : string;
-  proc_names : string list;
   break_label : string option;
   continue_label : string option;
   fresh_label : unit -> string;
@@ -24,10 +23,15 @@ type compiled = { actions : action list; entry : string; exit_label : string }
 let make_source ~proc_name ~description ~(loc : Ast.loc) =
   { proc_name; description; line = loc.line; col = loc.col }
 
-let describe_simple_stmts (stmts : Resolved_ast.simple_stmt list) =
-  String.concat ", " (List.map (Ast_printer.pretty_simple_stmt Resolved_ast.display) stmts)
+let pretty_expr =
+  Ast_printer.pretty_expr Resolved_ast.display Resolved_ast.callee_name
 
-let is_proc_call ctx name = List.mem name ctx.proc_names
+let describe_simple_stmts (stmts : Resolved_ast.simple_stmt list) =
+  String.concat ", "
+    (List.map
+       (Ast_printer.pretty_simple_stmt Resolved_ast.display
+          Resolved_ast.callee_name)
+       stmts)
 
 let fresh_temp_var ctx ~callee = ctx.fresh_temp_var ~proc:ctx.proc_name ~callee
 
@@ -41,7 +45,7 @@ let rec lower_expr ctx source continuation (expr : Resolved_ast.expr) =
       let rhs_actions, rhs_entry, rhs = lower_expr ctx source continuation rhs in
       let lhs_actions, lhs_entry, lhs = lower_expr ctx source rhs_entry lhs in
       (lhs_actions @ rhs_actions, lhs_entry, { expr with desc = BinOp (op, lhs, rhs) })
-  | App (name, args) when is_proc_call ctx name ->
+  | App (Resolved_ast.Proc name, args) ->
       let call_label = fresh_label ctx in
       let pop_label = fresh_label ctx in
       let temp = fresh_temp_var ctx ~callee:name in
@@ -63,11 +67,11 @@ let rec lower_expr ctx source continuation (expr : Resolved_ast.expr) =
       ( args_actions @ [ call_action; pop_action ],
         args_entry,
         { expr with desc = Var (Resolved_ast.ident temp) } )
-  | App (name, args) ->
+  | App ((Resolved_ast.Fun _ as callee), args) ->
       let actions, entry, args =
         lower_expr_list ctx source continuation args
       in
-      (actions, entry, { expr with desc = App (name, args) })
+      (actions, entry, { expr with desc = App (callee, args) })
   | Builtin (b, args) ->
       let actions, entry, args =
         lower_expr_list ctx source continuation args
@@ -245,7 +249,7 @@ and linearize_while ctx cond body after_loop_label loc =
   let check_label = fresh_label ctx in
   let source =
     make_source ~proc_name:ctx.proc_name
-      ~description:("while (" ^ Ast_printer.pretty_expr Resolved_ast.display cond ^ ") [check]")
+      ~description:("while (" ^ pretty_expr cond ^ ") [check]")
       ~loc
   in
   let cond_actions, cond_entry, cond = lower_expr ctx source check_label cond in
@@ -272,7 +276,7 @@ and linearize_if ctx cond body next_label loc else_body =
   let check_label = fresh_label ctx in
   let source =
     make_source ~proc_name:ctx.proc_name
-      ~description:("if (" ^ Ast_printer.pretty_expr Resolved_ast.display cond ^ ") [check]")
+      ~description:("if (" ^ pretty_expr cond ^ ") [check]")
       ~loc
   in
   let cond_actions, cond_entry, cond = lower_expr ctx source check_label cond in
@@ -335,7 +339,7 @@ and linearize_var_step ctx (step : Resolved_ast.step) next_label =
       let source =
         make_source ~proc_name:ctx.proc_name
           ~description:
-            ("var " ^ i.original ^ " = " ^ Ast_printer.pretty_expr Resolved_ast.display value)
+            ("var " ^ i.original ^ " = " ^ pretty_expr value)
           ~loc:step.loc
       in
       let pre_actions, entry, value = lower_expr ctx source label value in
@@ -413,12 +417,6 @@ let linearize_module (m : Resolved_ast.module_def) : module_ir =
       @ [ { tla_name = name; original = name; proc = Some proc; kind = CallRet callee } ];
     name
   in
-  let proc_names =
-    List.filter_map
-      (fun (item : Resolved_ast.item) ->
-        match item.desc with ProcDef { name; _ } -> Some name | _ -> None)
-      m.items
-  in
   let const_defs =
     List.filter_map
       (fun (item : Resolved_ast.item) ->
@@ -451,7 +449,6 @@ let linearize_module (m : Resolved_ast.module_def) : module_ir =
             let ctx =
               {
                 proc_name = name;
-                proc_names;
                 break_label = None;
                 continue_label = None;
                 fresh_label;

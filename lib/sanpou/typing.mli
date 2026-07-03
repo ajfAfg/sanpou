@@ -18,6 +18,6 @@ type type_error =
 
 exception Type_error of type_error * Ast.loc
 
-val check : Ast.id Ast.program -> unit
+val check : Surface_ast.program -> unit
 val string_of_ty : ty -> string
 val string_of_type_error : type_error -> string
