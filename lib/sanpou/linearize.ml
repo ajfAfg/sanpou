@@ -71,6 +71,11 @@ let rec lower_expr ctx source continuation (expr : expr) =
         lower_expr_list ctx source continuation args
       in
       (actions, entry, { expr with desc = App (name, args) })
+  | Builtin (b, args) ->
+      let actions, entry, args =
+        lower_expr_list ctx source continuation args
+      in
+      (actions, entry, { expr with desc = Builtin (b, args) })
   | Subscript (lhs, index) ->
       let index_actions, index_entry, index =
         lower_expr ctx source continuation index

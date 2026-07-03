@@ -34,8 +34,8 @@ let prec (e : expr) =
   | BinOp (op, _, _) -> binop_prec op
   | Subscript _ -> 6
   | UnOp _ -> 7
-  | IntLit _ | BoolLit _ | Var _ | Self | App _ | MapInit _ | Tuple _
-  | Sequence _ -> 8
+  | IntLit _ | BoolLit _ | Var _ | Self | App _ | Builtin _ | MapInit _
+  | Tuple _ | Sequence _ -> 8
 
 (* [rename] maps identifiers back to their display names (e.g. undoing
    alpha conversion). It applies only to variable positions, never to
@@ -57,6 +57,10 @@ let rec pretty_expr ?(rename = Fun.id) (e : expr) =
       at level lhs ^ " " ^ binop_str op ^ " " ^ at (level + 1) rhs
   | App (name, args) ->
       name ^ "(" ^ String.concat ", " (List.map (pretty_expr ~rename) args) ^ ")"
+  | Builtin (b, args) ->
+      Builtin.name b ^ "("
+      ^ String.concat ", " (List.map (pretty_expr ~rename) args)
+      ^ ")"
   | Subscript (lhs, index) -> at 6 lhs ^ "[" ^ pretty_expr ~rename index ^ "]"
   | MapInit { binder; lo; hi; value } ->
       "{ " ^ rename binder ^ " in " ^ pretty_expr ~rename lo ^ ".."

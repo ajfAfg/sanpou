@@ -125,7 +125,10 @@ primary_expr:
   | FALSE { mk $startpos (BoolLit false) }
   | SELF { mk $startpos Self }
   | name=ID LPAREN args=separated_list(COMMA, expr) RPAREN
-      { mk $startpos (App (name, args)) }
+      { mk $startpos
+          (match Builtin.of_name name with
+          | Some b -> Builtin (b, args)
+          | None -> App (name, args)) }
   | name=ID { mk $startpos (Var name) }
   | LBRACE binder=ID IN lo=expr DOTDOT hi=expr COLON value=expr option(SEMI) RBRACE
       { mk $startpos (MapInit { binder; lo; hi; value }) }

@@ -36,34 +36,19 @@ let rec expr_to_tla local_vars (e : Ast.expr) =
            ( binop_to_tla op,
              expr_to_tla local_vars lhs,
              expr_to_tla local_vars rhs ))
-  | Ast.App ("globally", args) -> (
-      match args with
-      | [ e ] -> TGlobally (expr_to_tla local_vars e)
-      | _ -> failwith "globally takes exactly one argument")
-  | Ast.App ("finally", args) -> (
-      match args with
-      | [ e ] -> TFinally (expr_to_tla local_vars e)
-      | _ -> failwith "finally takes exactly one argument")
-  | Ast.App ("head", args) -> (
-      match args with
-      | [ e ] -> THead (expr_to_tla local_vars e)
-      | _ -> failwith "head takes exactly one argument")
-  | Ast.App ("tail", args) -> (
-      match args with
-      | [ e ] -> TTail (expr_to_tla local_vars e)
-      | _ -> failwith "tail takes exactly one argument")
-  | Ast.App ("append", args) -> (
-      match args with
-      | [ seq; value ] ->
+  | Ast.Builtin (b, args) -> (
+      match (b, args) with
+      | Builtin.Globally, [ e ] -> TGlobally (expr_to_tla local_vars e)
+      | Builtin.Finally, [ e ] -> TFinally (expr_to_tla local_vars e)
+      | Builtin.Head, [ e ] -> THead (expr_to_tla local_vars e)
+      | Builtin.Tail, [ e ] -> TTail (expr_to_tla local_vars e)
+      | Builtin.Append, [ seq; value ] ->
           TApp
             ( "Append",
               [ expr_to_tla local_vars seq; expr_to_tla local_vars value ] )
-      | _ -> failwith "append takes exactly two arguments")
-  | Ast.App ("concat", args) -> (
-      match args with
-      | [ lhs; rhs ] ->
+      | Builtin.Concat, [ lhs; rhs ] ->
           TConcat (expr_to_tla local_vars lhs, expr_to_tla local_vars rhs)
-      | _ -> failwith "concat takes exactly two arguments")
+      | _ -> assert false (* arity enforced by Typing *))
   | Ast.App (name, args) ->
       TApp (name, List.map (expr_to_tla local_vars) args)
   | Ast.Subscript (lhs, index) ->
