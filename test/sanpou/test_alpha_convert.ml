@@ -4,10 +4,10 @@ let n = ""
 let loc0 = { line = 0; col = 0 }
 let cl0 = { items = []; commas = [] }
 let cl1 x = { items = [ x ]; commas = [] }
-let intlit v = IntLit { t = n; value = v }
-let boollit v = BoolLit { t = n; value = v }
-let var s = Var { t = n; name = s }
-let binop op l r = BinOp { lhs = l; op_t = n; op; rhs = r }
+let intlit v = IntLit { loc = loc0; t = n; value = v }
+let boollit v = BoolLit { loc = loc0; t = n; value = v }
+let var s = Var { loc = loc0; t = n; name = s }
+let binop op l r = BinOp { loc = loc0; lhs = l; op_t = n; op; rhs = r }
 
 let assign x e =
   Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }

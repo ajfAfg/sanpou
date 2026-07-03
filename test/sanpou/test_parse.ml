@@ -1,22 +1,24 @@
 open Sanpou.Cst
 
 let n = ""
+let loc0 = { line = 0; col = 0 }
 let cl0 = { items = []; commas = [] }
 let cl1 x = { items = [ x ]; commas = [] }
 let cl2 x y = { items = [ x; y ]; commas = [ n ] }
 let cl3 x y z = { items = [ x; y; z ]; commas = [ n; n ] }
-let intlit v = IntLit { t = n; value = v }
-let boollit v = BoolLit { t = n; value = v }
-let var s = Var { t = n; name = s }
-let self_ = Self { t = n }
-let unop op r = UnOp { op_t = n; op; rhs = r }
-let binop op l r = BinOp { lhs = l; op_t = n; op; rhs = r }
-let app f args = App { name_t = n; name = f; lp = n; args; rp = n }
-let subscript lhs index = Subscript { lhs; lb_t = n; index; rb_t = n }
+let intlit v = IntLit { loc = loc0; t = n; value = v }
+let boollit v = BoolLit { loc = loc0; t = n; value = v }
+let var s = Var { loc = loc0; t = n; name = s }
+let self_ = Self { loc = loc0; t = n }
+let unop op r = UnOp { loc = loc0; op_t = n; op; rhs = r }
+let binop op l r = BinOp { loc = loc0; lhs = l; op_t = n; op; rhs = r }
+let app f args = App { loc = loc0; name_t = n; name = f; lp = n; args; rp = n }
+let subscript lhs index = Subscript { loc = loc0; lhs; lb_t = n; index; rb_t = n }
 
 let map_init binder lo hi value =
   MapInit
     {
+      loc = loc0;
       lb = n;
       binder_t = n;
       binder;
@@ -30,9 +32,9 @@ let map_init binder lo hi value =
       rb = n;
     }
 
-let tuple elems tc = Tuple { lp = n; elems; trailing_comma = tc; rp = n }
-let sequence elems tc = Sequence { lb = n; elems; trailing_comma = tc; rb = n }
-let paren e = Paren { lp = n; inner = e; rp = n }
+let tuple elems tc = Tuple { loc = loc0; lp = n; elems; trailing_comma = tc; rp = n }
+let sequence elems tc = Sequence { loc = loc0; lb = n; elems; trailing_comma = tc; rb = n }
+let paren e = Paren { loc = loc0; lp = n; inner = e; rp = n }
 
 let assign x e =
   Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }

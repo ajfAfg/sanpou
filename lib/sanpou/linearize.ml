@@ -69,7 +69,7 @@ let rec lower_expr ctx source continuation expr =
       in
       ( args_actions @ [ call_action; pop_action ],
         args_entry,
-        Var { t = r.name_t; name = temp } )
+        Var { loc = r.loc; t = r.name_t; name = temp } )
   | App r ->
       let actions, entry, args =
         lower_expr_list ctx source continuation r.args.items

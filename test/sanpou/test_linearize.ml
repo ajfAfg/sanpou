@@ -5,10 +5,10 @@ let n = ""
 let loc0 = { line = 0; col = 0 }
 let cl0 = { items = []; commas = [] }
 let cl1 x = { items = [ x ]; commas = [] }
-let intlit v = IntLit { t = n; value = v }
-let boollit v = BoolLit { t = n; value = v }
-let var s = Var { t = n; name = s }
-let app f args = App { name_t = n; name = f; lp = n; args; rp = n }
+let intlit v = IntLit { loc = loc0; t = n; value = v }
+let boollit v = BoolLit { loc = loc0; t = n; value = v }
+let var s = Var { loc = loc0; t = n; name = s }
+let app f args = App { loc = loc0; name_t = n; name = f; lp = n; args; rp = n }
 
 let assign x e =
   Assign { target = VarTarget { name_t = n; name = x }; eq_t = n; value = e }
@@ -17,7 +17,7 @@ let call_ f = Call { name_t = n; name = f; lp = n; args = cl0; rp = n }
 let return_ e = Return { t = n; value = e }
 let break_ = Break { t = n }
 let await_ e = Await { t = n; cond = e }
-let tuple0 = Tuple { lp = n; elems = cl0; trailing_comma = None; rp = n }
+let tuple0 = Tuple { loc = loc0; lp = n; elems = cl0; trailing_comma = None; rp = n }
 let simple_step stmts = SimpleStep { loc = loc0; stmts; semi_t = n }
 let empty_step = EmptyStep { loc = loc0; semi_t = n }
 
