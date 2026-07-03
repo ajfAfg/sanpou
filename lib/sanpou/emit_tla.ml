@@ -162,18 +162,14 @@ let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
     (action : action) : tla_decl =
   let to_tla = cst_to_tla local_vars in
   let self = TId "self" in
-  let conjuncts = ref [] in
-  let add c = conjuncts := !conjuncts @ [ c ] in
   let stack_self = TSubscript (TId "stack", self) in
   let stack_head = THead stack_self in
-  let pc_dest_val () =
-    match action.pc_dest with
-    | PcNext l -> TStr l
-    | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f)
+  let pc_test_conjunct =
+    TBinOp ("=", TSubscript (TId "pc", self), TStr action.label)
   in
-  let set_pc v = add (TBinOp ("=", TPrimed (TId "pc"), TExcept (TId "pc", [ ([ SubSel self ], v) ]))) in
-  add (TBinOp ("=", TSubscript (TId "pc", self), TStr action.label));
-  (match action.guard with Some g -> add (to_tla g) | None -> ());
+  let guard_conjuncts =
+    match action.guard with Some g -> [ to_tla g ] | None -> []
+  in
   (* Split assignments: globals become their own conjuncts, locals become
      EXCEPT updates of the top frame folded into stack'. *)
   let local_updates =
@@ -188,27 +184,30 @@ let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
         | _ -> None)
       action.assignments
   in
-  List.iter
-    (function
-      | AssignVar (var, expr) when not (List.mem var local_vars) ->
-          add (TBinOp ("=", TPrimed (TId var), to_tla expr))
-      | AssignIndex (var, index, expr) when not (List.mem var local_vars) ->
-          add
-            (TBinOp
-               ( "=",
-                 TPrimed (TId var),
-                 TExcept (TId var, [ ([ SubSel (to_tla index) ], to_tla expr) ])
-               ))
-      | _ -> ())
-    action.assignments;
+  let global_assign_conjuncts =
+    List.filter_map
+      (function
+        | AssignVar (var, expr) when not (List.mem var local_vars) ->
+            Some (TBinOp ("=", TPrimed (TId var), to_tla expr))
+        | AssignIndex (var, index, expr) when not (List.mem var local_vars) ->
+            Some
+              (TBinOp
+                 ( "=",
+                   TPrimed (TId var),
+                   TExcept
+                     (TId var, [ ([ SubSel (to_tla index) ], to_tla expr) ]) ))
+        | _ -> None)
+      action.assignments
+  in
   let base =
     if local_updates = [] then stack_self
     else TExcept (stack_self, local_updates)
   in
-  (* The new value of stack[self], if the action touches the stack at all *)
-  let new_stack_self =
+  (* The new value of stack[self] (if the action touches the stack at all),
+     plus any extra conjunct the stack operation contributes. *)
+  let new_stack_self, stack_op_conjuncts =
     match action.stack_op with
-    | StackNone -> if local_updates = [] then None else Some base
+    | StackNone -> ((if local_updates = [] then None else Some base), [])
     | StackPush (proc_name, return_label, args) ->
         let params, other_fields = List.assoc proc_name frame_fields in
         (* Bind params to args (evaluated in the caller's frame, unprimed).
@@ -233,44 +232,67 @@ let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
             @ bind params args
             @ List.map (fun v -> (v, null_value)) other_fields)
         in
-        Some (TConcat (TSeqLit [ frame ], base))
+        (Some (TConcat (TSeqLit [ frame ], base)), [])
     | StackReturn retval ->
         (* Replace the departing frame with a record carrying only the return
            value; the caller's pop action consumes it. *)
-        Some
-          (TConcat
-             (TSeqLit [ TRecord [ ("value", to_tla retval) ] ], TTail base))
-    | StackDiscard -> Some (TTail base)
+        ( Some
+            (TConcat
+               (TSeqLit [ TRecord [ ("value", to_tla retval) ] ], TTail base)),
+          [] )
+    | StackDiscard -> (Some (TTail base), [])
     | StackPopAssign var ->
         if List.mem var local_vars then
           (* After Tail the caller's frame is element 1 *)
-          Some
-            (TExcept
-               ( TTail base,
-                 [
-                   ( [ SubSel (TInt 1); FieldSel var ],
-                     TDot (stack_head, "value") );
-                 ] ))
-        else (
-          add (TBinOp ("=", TPrimed (TId var), TDot (stack_head, "value")));
-          Some (TTail base))
+          ( Some
+              (TExcept
+                 ( TTail base,
+                   [
+                     ( [ SubSel (TInt 1); FieldSel var ],
+                       TDot (stack_head, "value") );
+                   ] )),
+            [] )
+        else
+          ( Some (TTail base),
+            [ TBinOp ("=", TPrimed (TId var), TDot (stack_head, "value")) ] )
   in
-  (match new_stack_self with
-  | Some v ->
-      add
-        (TBinOp
-           ( "=",
-             TPrimed (TId "stack"),
-             TExcept (TId "stack", [ ([ SubSel self ], v) ]) ))
-  | None -> ());
-  (match action.stack_op with
-  | StackPush (proc_name, _, _) ->
-      set_pc (TStr (List.assoc proc_name proc_entry_labels))
-  | StackReturn _ -> set_pc (TDot (stack_head, "return_pc"))
-  | StackDiscard | StackPopAssign _ | StackNone -> set_pc (pc_dest_val ()));
-  let unchanged = compute_unchanged ir action in
-  if unchanged <> [] then add (TUnchanged (List.map (fun v -> TId v) unchanged));
-  DOpDef (action.label, [ "self" ], TConj (Block, !conjuncts))
+  let stack_conjuncts =
+    match new_stack_self with
+    | Some v ->
+        [
+          TBinOp
+            ( "=",
+              TPrimed (TId "stack"),
+              TExcept (TId "stack", [ ([ SubSel self ], v) ]) );
+        ]
+    | None -> []
+  in
+  let set_pc v =
+    TBinOp
+      ("=", TPrimed (TId "pc"), TExcept (TId "pc", [ ([ SubSel self ], v) ]))
+  in
+  let pc_conjunct =
+    match action.stack_op with
+    | StackPush (proc_name, _, _) ->
+        set_pc (TStr (List.assoc proc_name proc_entry_labels))
+    | StackReturn _ -> set_pc (TDot (stack_head, "return_pc"))
+    | StackDiscard | StackPopAssign _ | StackNone ->
+        set_pc
+          (match action.pc_dest with
+          | PcNext l -> TStr l
+          | PcBranch (cond, t, f) -> TIf (to_tla cond, TStr t, TStr f))
+  in
+  let unchanged_conjuncts =
+    match compute_unchanged ir action with
+    | [] -> []
+    | unchanged -> [ TUnchanged (List.map (fun v -> TId v) unchanged) ]
+  in
+  let conjuncts =
+    (pc_test_conjunct :: guard_conjuncts)
+    @ global_assign_conjuncts @ stack_op_conjuncts @ stack_conjuncts
+    @ (pc_conjunct :: unchanged_conjuncts)
+  in
+  DOpDef (action.label, [ "self" ], TConj (Block, conjuncts))
 
 let proc_to_decls proc_entry_labels frame_fields local_vars (ir : module_ir)
     (proc : proc_ir) : tla_decl list =
@@ -294,13 +316,179 @@ let proc_to_decls proc_entry_labels frame_fields local_vars (ir : module_ir)
   in
   action_decls @ [ disj ]
 
-let add_process_next add_next process proc_name =
-  add_next
-    (TParens
-       (TExists
-          ( "self",
-            TRange (cst_to_tla_global process.lo, cst_to_tla_global process.hi),
-            TApp (proc_name, [ TId "self" ]) )))
+(* ===== Module sections =====
+   Each section function returns the tla_decls it contributes (including its
+   trailing separators); generate_module concatenates them in order. *)
+
+let header_decls (ir : module_ir) : tla_decl list =
+  let global_vars = List.map fst ir.var_decls in
+  let all_tla_vars = ("pc" :: global_vars) @ [ "stack" ] in
+  [
+    DExtends [ "TLC"; "Sequences"; "Integers" ];
+    DSeparator;
+    DVariables all_tla_vars;
+    DSeparator;
+    DOpDef ("vars", [], TSeqLit (List.map (fun v -> TId v) all_tla_vars));
+    DSeparator;
+  ]
+
+let const_and_fun_decls (ir : module_ir) : tla_decl list =
+  let with_trailing_sep = function
+    | [] -> []
+    | decls -> decls @ [ DSeparator ]
+  in
+  with_trailing_sep
+    (List.map
+       (fun (name, expr) -> DOpDef (name, [], cst_to_tla_global expr))
+       ir.const_defs)
+  @ with_trailing_sep
+      (List.map
+         (fun (name, params, expr) ->
+           DOpDef (name, params, cst_to_tla_global expr))
+         ir.fun_defs)
+
+let proc_set_decls (ir : module_ir) : tla_decl list =
+  let parts =
+    List.map
+      (fun (p : process_ir) ->
+        TParens (TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi)))
+      ir.processes
+  in
+  [ DOpDef ("ProcSet", [], TCup parts); DSeparator ]
+
+let wrapper_for process_wrappers (p : process_ir) =
+  List.find
+    (fun (wrapper : process_wrapper) -> wrapper.process.name = p.name)
+    process_wrappers
+
+let init_decls process_wrappers (ir : module_ir) : tla_decl list =
+  let pc_init =
+    match ir.processes with
+    | [ single ] ->
+        let wrapper = wrapper_for process_wrappers single in
+        TFuncMap ("self", TId "ProcSet", TStr wrapper.proc.entry_label)
+    | _ ->
+        let cases =
+          List.map
+            (fun (p : process_ir) ->
+              let wrapper = wrapper_for process_wrappers p in
+              ( TIn
+                  ( TId "self",
+                    TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi) ),
+                TStr wrapper.proc.entry_label ))
+            ir.processes
+        in
+        TFuncMap ("self", TId "ProcSet", TCase cases)
+  in
+  let conjuncts =
+    List.map
+      (fun (name, expr) -> TBinOp ("=", TId name, cst_to_tla_global expr))
+      ir.var_decls
+    @ [
+        TBinOp
+          ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit []));
+        TBinOp ("=", TId "pc", pc_init);
+      ]
+  in
+  [ DOpDef ("Init", [], TConj (Block, conjuncts)); DSeparator ]
+
+let runtime_proc_decls proc_entry_labels frame_fields (ir : module_ir)
+    all_runtime_procs : tla_decl list =
+  List.concat_map
+    (fun proc ->
+      proc_to_decls proc_entry_labels frame_fields ir.local_var_decls ir proc
+      @ [ DSeparator ])
+    all_runtime_procs
+
+let termination_decls : tla_decl list =
+  let all_done =
+    TForall
+      ( "self",
+        TId "ProcSet",
+        TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr "Done") )
+  in
+  [
+    DOpDef
+      ("Terminating", [], TConj (Block, [ all_done; TUnchangedExpr (TId "vars") ]));
+    DSeparator;
+    DOpDef ("Termination", [], TFinally all_done);
+    DSeparator;
+  ]
+
+let next_decls config process_wrappers (ir : module_ir) : tla_decl list =
+  let procedure_disjuncts =
+    if ir.procs <> [] then
+      let proc_disj =
+        TDisj
+          ( Inline,
+            List.map
+              (fun (p : proc_ir) -> TApp (p.proc_name, [ TId "self" ]))
+              ir.procs )
+      in
+      [ TParens (TExists ("self", TId "ProcSet", proc_disj)) ]
+    else []
+  in
+  let process_disjuncts =
+    List.map
+      (fun (wrapper : process_wrapper) ->
+        TParens
+          (TExists
+             ( "self",
+               TRange
+                 ( cst_to_tla_global wrapper.process.lo,
+                   cst_to_tla_global wrapper.process.hi ),
+               TApp (wrapper.proc.proc_name, [ TId "self" ]) )))
+      process_wrappers
+  in
+  let termination_disjuncts =
+    if config.checks.termination then [ TId "Terminating" ] else []
+  in
+  (if config.checks.termination then termination_decls else [])
+  @ [
+      DOpDef
+        ( "Next",
+          [],
+          TDisj
+            ( Block,
+              procedure_disjuncts @ process_disjuncts @ termination_disjuncts
+            ) );
+      DSeparator;
+    ]
+
+let spec_decls process_wrappers (ir : module_ir) : tla_decl list =
+  let fairness_conjuncts =
+    List.concat_map
+      (fun (wrapper : process_wrapper) ->
+        if wrapper.process.fair then
+          let process_range =
+            TRange
+              ( cst_to_tla_global wrapper.process.lo,
+                cst_to_tla_global wrapper.process.hi )
+          in
+          let fairness_for proc_name =
+            TParens
+              (TForall
+                 ( "self",
+                   process_range,
+                   TApp ("WF_vars", [ TApp (proc_name, [ TId "self" ]) ]) ))
+          in
+          fairness_for wrapper.proc.proc_name
+          :: List.map
+               (fun (proc : proc_ir) -> fairness_for proc.proc_name)
+               ir.procs
+        else [])
+      process_wrappers
+  in
+  [
+    DOpDef
+      ( "Spec",
+        [],
+        TConj
+          ( Inline,
+            [ TId "Init"; TBoxAction (TId "Next", TId "vars") ]
+            @ fairness_conjuncts ) );
+    DSeparator;
+  ]
 
 let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
   let process_wrappers = List.map wrapper_of_process ir.processes in
@@ -331,158 +519,16 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
         (p.proc_name, (p.params, other_fields)))
       ir.procs
   in
-  let decls = ref [] in
-  let add d = decls := !decls @ [ d ] in
-  let add_sep () = add DSeparator in
-  add (DExtends [ "TLC"; "Sequences"; "Integers" ]);
-  add_sep ();
-  let global_vars = List.map fst ir.var_decls in
-  let all_tla_vars = ("pc" :: global_vars) @ [ "stack" ] in
-  add (DVariables all_tla_vars);
-  add_sep ();
-  add (DOpDef ("vars", [], TSeqLit (List.map (fun v -> TId v) all_tla_vars)));
-  add_sep ();
-  List.iter
-    (fun (name, expr) -> add (DOpDef (name, [], cst_to_tla_global expr)))
-    ir.const_defs;
-  if ir.const_defs <> [] then add_sep ();
-  List.iter
-    (fun (name, params, expr) ->
-      add (DOpDef (name, params, cst_to_tla_global expr)))
-    ir.fun_defs;
-  if ir.fun_defs <> [] then add_sep ();
-  let proc_set_parts =
-    List.map
-      (fun (p : process_ir) ->
-        TParens (TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi)))
-      ir.processes
+  let body =
+    List.concat
+      [
+        header_decls ir;
+        const_and_fun_decls ir;
+        proc_set_decls ir;
+        init_decls process_wrappers ir;
+        runtime_proc_decls proc_entry_labels frame_fields ir all_runtime_procs;
+        next_decls config process_wrappers ir;
+        spec_decls process_wrappers ir;
+      ]
   in
-  add (DOpDef ("ProcSet", [], TCup proc_set_parts));
-  add_sep ();
-  let init_conjuncts = ref [] in
-  let add_init c = init_conjuncts := !init_conjuncts @ [ c ] in
-  List.iter
-    (fun (name, expr) ->
-      add_init (TBinOp ("=", TId name, cst_to_tla_global expr)))
-    ir.var_decls;
-  add_init
-    (TBinOp ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit [])));
-  (match ir.processes with
-  | [ single ] ->
-      let wrapper =
-        List.find
-          (fun (wrapper : process_wrapper) ->
-            wrapper.process.name = single.name)
-          process_wrappers
-      in
-      add_init
-        (TBinOp
-           ( "=",
-             TId "pc",
-             TFuncMap ("self", TId "ProcSet", TStr wrapper.proc.entry_label) ))
-  | _ ->
-      let cases =
-        List.map
-          (fun (p : process_ir) ->
-            let wrapper =
-              List.find
-                (fun (candidate : process_wrapper) ->
-                  candidate.process.name = p.name)
-                process_wrappers
-            in
-            ( TIn
-                ( TId "self",
-                  TRange (cst_to_tla_global p.lo, cst_to_tla_global p.hi) ),
-              TStr wrapper.proc.entry_label ))
-          ir.processes
-      in
-      add_init
-        (TBinOp ("=", TId "pc", TFuncMap ("self", TId "ProcSet", TCase cases))));
-  add (DOpDef ("Init", [], TConj (Block, !init_conjuncts)));
-  add_sep ();
-  List.iter
-    (fun proc ->
-      List.iter add
-        (proc_to_decls proc_entry_labels frame_fields ir.local_var_decls ir
-           proc);
-      add_sep ())
-    all_runtime_procs;
-  let procedure_procs = ir.procs in
-  let next_disj = ref [] in
-  let add_next d = next_disj := !next_disj @ [ d ] in
-  (if procedure_procs <> [] then
-     let proc_disj =
-       TDisj
-         ( Inline,
-           List.map
-             (fun (p : proc_ir) -> TApp (p.proc_name, [ TId "self" ]))
-             procedure_procs )
-     in
-     add_next (TParens (TExists ("self", TId "ProcSet", proc_disj))));
-  List.iter
-    (fun (wrapper : process_wrapper) ->
-      add_process_next add_next wrapper.process wrapper.proc.proc_name)
-    process_wrappers;
-  if config.checks.termination then add_next (TId "Terminating");
-  if config.checks.termination then (
-    add
-      (DOpDef
-         ( "Terminating",
-           [],
-           TConj
-             ( Block,
-               [
-                 TForall
-                   ( "self",
-                     TId "ProcSet",
-                     TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr "Done")
-                   );
-                 TUnchangedExpr (TId "vars");
-               ] ) ));
-    add_sep ();
-    add
-      (DOpDef
-         ( "Termination",
-           [],
-           TFinally
-             (TForall
-                ( "self",
-                  TId "ProcSet",
-                  TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr "Done")
-                )) ));
-    add_sep ());
-  add (DOpDef ("Next", [], TDisj (Block, !next_disj)));
-  add_sep ();
-  let fairness_conjuncts =
-    List.concat_map
-      (fun (wrapper : process_wrapper) ->
-        if wrapper.process.fair then
-          let process_range =
-            TRange
-              ( cst_to_tla_global wrapper.process.lo,
-                cst_to_tla_global wrapper.process.hi )
-          in
-          let fairness_for proc_name =
-            TParens
-              (TForall
-                 ( "self",
-                   process_range,
-                   TApp ("WF_vars", [ TApp (proc_name, [ TId "self" ]) ]) ))
-          in
-          fairness_for wrapper.proc.proc_name
-          :: List.map
-               (fun (proc : proc_ir) -> fairness_for proc.proc_name)
-               ir.procs
-        else [])
-      process_wrappers
-  in
-  add
-    (DOpDef
-       ( "Spec",
-         [],
-         TConj
-           ( Inline,
-             [ TId "Init"; TBoxAction (TId "Next", TId "vars") ]
-             @ fairness_conjuncts ) ));
-  add_sep ();
-  { name = ir.name; body = !decls }
+  { name = ir.name; body }

@@ -418,61 +418,72 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
       (function ProcDef { name; _ } -> Some name | _ -> None)
       m.items
   in
-  let const_defs = ref [] in
-  let fun_defs = ref [] in
-  let var_decls = ref [] in
-  let procs = ref [] in
-  let processes = ref [] in
-  List.iter
-    (fun (item : Cst.item) ->
-      match item with
-      | ConstDef { name; value; _ } ->
-          const_defs := !const_defs @ [ (name, value) ]
-      | FunDef { name; params; body_expr; _ } ->
-          fun_defs :=
-            !fun_defs @ [ (name, List.map snd params.items, body_expr) ]
-      | VarDecl { name; value; _ } ->
-          var_decls := !var_decls @ [ (name, value) ]
-      | ProcDef { name; params; body; loc; _ } ->
-          let ctx =
-            {
-              proc_name = name;
-              proc_names;
-              break_label = None;
-              continue_label = None;
-              label_counter;
-              temp_counter;
-              temp_var_infos;
-              demangle;
-            }
-          in
-          let done_label = "Done" in
-          let compiled = linearize_body ctx body done_label ~loc in
-          let proc =
-            {
-              proc_name = name;
-              params = List.map snd params.items;
-              actions = compiled.actions;
-              entry_label = compiled.entry;
-            }
-          in
-          procs := !procs @ [ proc ]
-      | Process { name; proc; fair_t; lo; hi; loc; _ } ->
-          processes :=
-            !processes
-            @ [ { name; proc; fair = Option.is_some fair_t; lo; hi; loc } ])
-    m.items;
+  let const_defs =
+    List.filter_map
+      (function
+        | ConstDef { name; value; _ } -> Some (name, value) | _ -> None)
+      m.items
+  in
+  let fun_defs =
+    List.filter_map
+      (function
+        | FunDef { name; params; body_expr; _ } ->
+            Some (name, List.map snd params.items, body_expr)
+        | _ -> None)
+      m.items
+  in
+  let var_decls =
+    List.filter_map
+      (function VarDecl { name; value; _ } -> Some (name, value) | _ -> None)
+      m.items
+  in
+  let procs =
+    List.filter_map
+      (function
+        | ProcDef { name; params; body; loc; _ } ->
+            let ctx =
+              {
+                proc_name = name;
+                proc_names;
+                break_label = None;
+                continue_label = None;
+                label_counter;
+                temp_counter;
+                temp_var_infos;
+                demangle;
+              }
+            in
+            let done_label = "Done" in
+            let compiled = linearize_body ctx body done_label ~loc in
+            Some
+              {
+                proc_name = name;
+                params = List.map snd params.items;
+                actions = compiled.actions;
+                entry_label = compiled.entry;
+              }
+        | _ -> None)
+      m.items
+  in
+  let processes =
+    List.filter_map
+      (function
+        | Process { name; proc; fair_t; lo; hi; loc; _ } ->
+            Some { name; proc; fair = Option.is_some fair_t; lo; hi; loc }
+        | _ -> None)
+      m.items
+  in
   (* Resolve call targets *)
   let resolved_procs =
     List.map
       (fun (p : proc_ir) ->
-        { p with actions = List.map (resolve_call_target !procs) p.actions })
-      !procs
+        { p with actions = List.map (resolve_call_target procs) p.actions })
+      procs
   in
   let var_infos =
     List.map
       (fun (name, _) -> { tla_name = name; original = name; proc = None; kind = Global })
-      !var_decls
+      var_decls
     @ List.filter_map
         (fun (r : Alpha_convert.rename) ->
           match r.kind with
@@ -500,13 +511,13 @@ let linearize_module (am : Alpha_convert.alpha_module) : module_ir =
   in
   {
     name = m.mod_name;
-    const_defs = !const_defs;
-    fun_defs = !fun_defs;
-    var_decls = !var_decls;
+    const_defs;
+    fun_defs;
+    var_decls;
     local_var_decls;
     var_infos;
     procs = resolved_procs;
-    processes = !processes;
+    processes;
   }
 
 (* ===== Public API ===== *)
