@@ -2,17 +2,8 @@
     success and raises [Type_error] otherwise; no type information is
     attached to the tree. *)
 
-type tyvar = int
-
-type ty =
-  | TyInt
-  | TyBool
-  | TyUnit
-  | TyTuple of ty list
-  | TySeq of ty
-  | TyMap of ty * ty
-  | TyVar of tyvar
-  | TyFun of ty list * ty
+type ty
+(** An inferred type; render with [string_of_ty]. *)
 
 type type_error =
   | Type_clash of ty * ty
