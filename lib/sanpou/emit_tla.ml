@@ -94,31 +94,23 @@ let wrapper_of_process (process : process_ir) : process_wrapper =
   let entry_label = Ir.wrapper_entry_label process.name in
   let discard_label = Ir.wrapper_discard_label process.name in
   let entry_action =
-    {
-      label = entry_label;
-      guard = None;
-      assignments = [];
-      pc_dest = PcNext "__call__";
-      stack_op = StackPush (process.proc, discard_label, []);
-      source =
-        make_wrapper_source proc_name
-          ("[wrapper call " ^ process.proc ^ " for process " ^ process.name
-         ^ "]")
-          process.loc;
-    }
+    make_action ~label:entry_label ~pc_dest:(PcNext "__call__")
+      ~stack_op:(StackPush (process.proc, discard_label, []))
+      ~source:
+        (make_wrapper_source proc_name
+           ("[wrapper call " ^ process.proc ^ " for process " ^ process.name
+          ^ "]")
+           process.loc)
+      ()
   in
   let discard_action =
-    {
-      label = discard_label;
-      guard = None;
-      assignments = [];
-      pc_dest = PcNext "Done";
-      stack_op = StackDiscard;
-      source =
-        make_wrapper_source proc_name
-          ("[wrapper discard return for process " ^ process.name ^ "]")
-          process.loc;
-    }
+    make_action ~label:discard_label ~pc_dest:(PcNext "Done")
+      ~stack_op:StackDiscard
+      ~source:
+        (make_wrapper_source proc_name
+           ("[wrapper discard return for process " ^ process.name ^ "]")
+           process.loc)
+      ()
   in
   {
     process;
