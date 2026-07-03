@@ -150,6 +150,8 @@ lib/
     typing.ml      Hindley-Milner type checking
     alpha_convert.ml  Alpha conversion and callee resolution pass
     resolved_ast.ml   Resolved-stage AST instantiation (renamed idents, Fun/Proc callees)
+    normalize_calls.ml  Call normalization pass (procedure calls out of expressions)
+    normalized_ast.ml   Call-normalized AST (call-free expressions, CallBindStep)
     ir.ml             Action IR shared by linearize and emit
     linearize.ml      AST → action IR lowering
     emit_tla.ml       Action IR → TLA+ AST
