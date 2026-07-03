@@ -16,7 +16,7 @@ let binop_to_tla = function
   | Ast.And -> "/\\"
   | Ast.Or -> "\\/"
 
-let rec expr_to_tla local_vars (e : Resolved_ast.expr) =
+let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
   match e.desc with
   | Ast.IntLit value -> TInt value
   | Ast.BoolLit value -> TBool value
@@ -49,11 +49,8 @@ let rec expr_to_tla local_vars (e : Resolved_ast.expr) =
       | Builtin.Concat, [ lhs; rhs ] ->
           TConcat (expr_to_tla local_vars lhs, expr_to_tla local_vars rhs)
       | _ -> assert false (* arity enforced by Typing *))
-  | Ast.App (callee, args) ->
-      (* Proc callees never survive Linearize inside procedure bodies; both
-         kinds map to a same-named TLA+ operator application. *)
-      TApp
-        (Resolved_ast.callee_name callee, List.map (expr_to_tla local_vars) args)
+  | Ast.App (Normalized_ast.Fun name, args) ->
+      TApp (name, List.map (expr_to_tla local_vars) args)
   | Ast.Subscript (lhs, index) ->
       TSubscript (expr_to_tla local_vars lhs, expr_to_tla local_vars index)
   | Ast.MapInit { binder; lo; hi; value } ->

@@ -3,7 +3,8 @@ let parse input =
 
 let compile ?(config = Sanpou.Config.default) ast =
   Sanpou.Typing.check ast;
-  ast |> Sanpou.Alpha_convert.transform |> Sanpou.Linearize.linearize
+  ast |> Sanpou.Alpha_convert.transform |> Sanpou.Normalize_calls.normalize
+  |> Sanpou.Linearize.linearize
   |> List.map (Sanpou.Emit_tla.generate_module ~config)
 
 let has_substring needle haystack =

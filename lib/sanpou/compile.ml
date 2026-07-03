@@ -30,13 +30,17 @@ let compile ?config (source : string) : (output list, diagnostic) result =
       match Typing.check prog with
       | exception Typing.Type_error (err, loc) ->
           Error { loc; message = Typing.string_of_type_error err }
-      | () ->
-          let irs = Alpha_convert.transform prog |> Linearize.linearize in
-          Ok
-            (List.map
-               (fun ir ->
-                 {
-                   tla_module = Emit_tla.generate_module ?config ir;
-                   source_map = Source_map.extract ir;
-                 })
-               irs))
+      | () -> (
+          match Alpha_convert.transform prog |> Normalize_calls.normalize with
+          | exception Normalize_calls.Error (message, loc) ->
+              Error { loc; message }
+          | normalized ->
+              let irs = Linearize.linearize normalized in
+              Ok
+                (List.map
+                   (fun ir ->
+                     {
+                       tla_module = Emit_tla.generate_module ?config ir;
+                       source_map = Source_map.extract ir;
+                     })
+                   irs)))

@@ -25,26 +25,26 @@ let done_label = "Done"
 
 type stack_op =
   | StackNone
-  | StackPush of string * string * Resolved_ast.expr list
+  | StackPush of string * string * Normalized_ast.expr list
     (* procedure name, return label, arguments *)
-  | StackReturn of Resolved_ast.expr (* return value *)
+  | StackReturn of Normalized_ast.expr (* return value *)
   | StackDiscard (* pop return value after call *)
   | StackPopAssign of string (* assign return value, then pop *)
 
 (* Where control goes after the action; fully determines pc'. *)
 type pc_dest =
   | PcNext of string
-  | PcBranch of Resolved_ast.expr * string * string
+  | PcBranch of Normalized_ast.expr * string * string
   | PcCall of string (* enter the named procedure at its entry label *)
   | PcReturn (* jump to the top frame's return_pc *)
 
 type assignment =
-  | AssignVar of string * Resolved_ast.expr
-  | AssignIndex of string * Resolved_ast.expr * Resolved_ast.expr
+  | AssignVar of string * Normalized_ast.expr
+  | AssignIndex of string * Normalized_ast.expr * Normalized_ast.expr
 
 type action = {
   label : string;
-  guard : Resolved_ast.expr option;
+  guard : Normalized_ast.expr option;
   assignments : assignment list;
   pc_dest : pc_dest;
   stack_op : stack_op;
@@ -66,8 +66,8 @@ type process_ir = {
   name : string;
   proc : string;
   fair : bool;
-  lo : Resolved_ast.expr;
-  hi : Resolved_ast.expr;
+  lo : Normalized_ast.expr;
+  hi : Normalized_ast.expr;
   loc : Ast.loc;
   wrapper : proc_ir;
       (* synthetic proc that pushes the root call's frame and discards its
@@ -76,9 +76,9 @@ type process_ir = {
 
 type module_ir = {
   name : string;
-  const_defs : (string * Resolved_ast.expr) list;
-  fun_defs : (string * string list * Resolved_ast.expr) list;
-  var_decls : (string * Resolved_ast.expr) list;
+  const_defs : (string * Normalized_ast.expr) list;
+  fun_defs : (string * string list * Normalized_ast.expr) list;
+  var_decls : (string * Normalized_ast.expr) list;
   local_var_decls : string list;
   var_infos : var_info list;
   procs : proc_ir list;
