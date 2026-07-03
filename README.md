@@ -145,9 +145,11 @@ lib/
     parser.mly     Parser (Menhir)
     ast.ml         Abstract Syntax Tree (AST)
     ast_printer.ml AST pretty printer
+    builtin.ml     Built-in function registry
     alpha_convert.ml  Alpha conversion pass
     linearize.ml      AST → action IR lowering
     emit_tla.ml       Action IR → TLA+ AST
+    compile.ml        Pipeline driver with located diagnostics
     config.ml         Sidecar config parser and TLC .cfg generator
     source_map.ml  Label ↔ source line mapping
     trace_reader.ml  TLC output parser
