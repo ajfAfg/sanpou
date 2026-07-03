@@ -23,7 +23,9 @@ let if_block cond body = node (BlockStep (If { cond; body; else_body = None }))
 let make_proc name body = node (ProcDef { name; params = []; body })
 let make_var name value = node (VarDecl { name; value })
 let make_const name value = node (ConstDef { name; value })
-let make_fundef name params body_expr = node (FunDef { name; params; body_expr })
+
+let make_fundef name params body_expr =
+  node (FunDef { name; params; body_expr })
 
 let make_process ?(fair = false) name proc lo hi =
   node (Process { name; proc; fair; lo; hi })
@@ -281,7 +283,10 @@ let () =
                 List.find
                   (fun (a : action) ->
                     match a.assignments with
-                    | [ AssignVar ("x", { desc = Var { name = "callRet__1"; _ }; _ }) ] ->
+                    | [
+                     AssignVar
+                       ("x", { desc = Var { name = "callRet__1"; _ }; _ });
+                    ] ->
                         true
                     | _ -> false)
                   foo.actions
@@ -313,7 +318,8 @@ let () =
                 | AssignIndex _ -> failwith "expected AssignVar"
               in
               check string "name" "x" name;
-              check bool "value" true (Sanpou.Resolved_ast.equal_expr (intlit 42) value));
+              check bool "value" true
+                (Sanpou.Resolved_ast.equal_expr (intlit 42) value));
         ] );
       ( "module_items",
         [
@@ -455,7 +461,9 @@ let () =
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               match entry.guard with
-              | Some g -> check bool "guard" true (Sanpou.Resolved_ast.equal_expr (boollit true) g)
+              | Some g ->
+                  check bool "guard" true
+                    (Sanpou.Resolved_ast.equal_expr (boollit true) g)
               | None -> fail "expected guard");
         ] );
     ]

@@ -5,11 +5,7 @@
    error-reporting path. *)
 
 type diagnostic = { loc : Ast.loc; message : string }
-
-type output = {
-  tla_module : Tla.Tla_ast.tla_module;
-  source_map : Source_map.t;
-}
+type output = { tla_module : Tla.Tla_ast.tla_module; source_map : Source_map.t }
 
 let loc_of_position (pos : Lexing.position) : Ast.loc =
   { line = pos.pos_lnum; col = pos.pos_cnum - pos.pos_bol + 1 }

@@ -8,7 +8,6 @@ let equal_loc _ _ = true
    location. Semantics live in the *_desc variants; [loc] never influences
    the meaning of the tree. *)
 type 'a node = { desc : 'a; loc : loc } [@@deriving show, eq]
-
 type id = string [@@deriving show, eq]
 
 type binop = Plus | Minus | Mult | Lt | LtEq | GtEq | Eq | Neq | And | Or

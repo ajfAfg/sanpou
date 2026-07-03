@@ -312,7 +312,9 @@ let () =
               let has s = has_in s tla in
               has "VARIABLES pc, g, stack";
               has "x__1 |-> \"__null__\"";
-              has "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT ![1].x__1 = 5]]";
+              has
+                "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT \
+                 ![1].x__1 = 5]]";
               has "g' = Head(stack[self]).x__1");
           Alcotest.test_case "shadowing module var" `Quick (fun () ->
               let ast =
@@ -327,7 +329,9 @@ let () =
               let tla = Tla.Tla_printer.render (List.hd modules) in
               let has s = has_in s tla in
               has "VARIABLES pc, x, stack";
-              has "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT ![1].x__1 = 42]]");
+              has
+                "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT \
+                 ![1].x__1 = 42]]");
           Alcotest.test_case "nested shadowing" `Quick (fun () ->
               let ast =
                 parse
@@ -409,14 +413,24 @@ let () =
               | Ok _ -> Alcotest.fail "expected one module"
               | Error _ -> Alcotest.fail "expected success");
           Alcotest.test_case "type error becomes a diagnostic" `Quick (fun () ->
-              let src = "mod m {\n  var g = 0;\n  fn foo() {\n    g = true;\n    return ();\n  }\n  process ps = foo in 1..1;\n}\n" in
+              let src =
+                "mod m {\n\
+                \  var g = 0;\n\
+                \  fn foo() {\n\
+                \    g = true;\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                 }\n"
+              in
               match Sanpou.Compile.compile src with
               | Error { loc; message } ->
                   Alcotest.(check int) "line" 4 loc.line;
                   Alcotest.(check bool)
                     "mentions unification" true
                     (String.length message > 0
-                    && Str.string_match (Str.regexp ".*cannot unify") message 0)
+                    && Str.string_match (Str.regexp ".*cannot unify") message 0
+                    )
               | Ok _ -> Alcotest.fail "expected a type error");
           Alcotest.test_case "syntax error becomes a diagnostic" `Quick
             (fun () ->

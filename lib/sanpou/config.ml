@@ -49,7 +49,8 @@ let to_cfg_string config =
     match cfg_properties config with
     | [] -> []
     | properties ->
-        ("" :: "PROPERTIES" :: List.map (fun property -> "    " ^ property) properties)
+        "" :: "PROPERTIES"
+        :: List.map (fun property -> "    " ^ property) properties
   in
   let lines =
     [

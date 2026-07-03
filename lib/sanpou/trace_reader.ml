@@ -115,8 +115,7 @@ let flush_step st =
       {
         st with
         steps_rev =
-          { step_num; header; state = List.rev st.current_vars }
-          :: st.steps_rev;
+          { step_num; header; state = List.rev st.current_vars } :: st.steps_rev;
         current_step = None;
         current_vars = [];
       }
@@ -134,7 +133,8 @@ let parse_state_line st line =
   | None -> (
       (* First line in block is the header *)
       match parse_header line with
-      | Some (step_num, header) -> { st with current_step = Some (step_num, header) }
+      | Some (step_num, header) ->
+          { st with current_step = Some (step_num, header) }
       | None -> st)
   | Some _ -> (
       if st.continuation_value then

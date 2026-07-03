@@ -227,7 +227,8 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       let param_tys, ret_ty = builtin_signature fresh_tyvar b in
       if List.length param_tys <> List.length args then
         type_error
-          (Arity_mismatch (Builtin.name b, List.length param_tys, List.length args))
+          (Arity_mismatch
+             (Builtin.name b, List.length param_tys, List.length args))
           e.loc;
       infer_app fresh_tyvar env e.loc (TyFun (param_tys, ret_ty)) args
   | Subscript (lhs, index) ->
@@ -344,8 +345,9 @@ let check_module (m : Surface_ast.module_def) : unit =
         | FunDef { name; params; body_expr } ->
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
-              List.map2 (fun pname pty -> (pname, tysc_of_ty pty)) params
-                param_tys
+              List.map2
+                (fun pname pty -> (pname, tysc_of_ty pty))
+                params param_tys
             in
             let body_ty = infer_expr fresh_tyvar (param_env @ env) body_expr in
             let fn_ty = TyFun (param_tys, body_ty) in
@@ -356,8 +358,9 @@ let check_module (m : Surface_ast.module_def) : unit =
         | ProcDef { name = proc_name; params; body } ->
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
-              List.map2 (fun pname pty -> (pname, tysc_of_ty pty)) params
-                param_tys
+              List.map2
+                (fun pname pty -> (pname, tysc_of_ty pty))
+                params param_tys
             in
             let return_ty = fresh_tyvar () in
             let fn_ty = TyFun (param_tys, return_ty) in

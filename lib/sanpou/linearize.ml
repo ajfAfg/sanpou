@@ -42,9 +42,13 @@ let rec lower_expr ctx source continuation (expr : Resolved_ast.expr) =
       let actions, entry, rhs = lower_expr ctx source continuation rhs in
       (actions, entry, { expr with desc = UnOp (op, rhs) })
   | BinOp (op, lhs, rhs) ->
-      let rhs_actions, rhs_entry, rhs = lower_expr ctx source continuation rhs in
+      let rhs_actions, rhs_entry, rhs =
+        lower_expr ctx source continuation rhs
+      in
       let lhs_actions, lhs_entry, lhs = lower_expr ctx source rhs_entry lhs in
-      (lhs_actions @ rhs_actions, lhs_entry, { expr with desc = BinOp (op, lhs, rhs) })
+      ( lhs_actions @ rhs_actions,
+        lhs_entry,
+        { expr with desc = BinOp (op, lhs, rhs) } )
   | App (Resolved_ast.Proc name, args) ->
       let call_label = fresh_label ctx in
       let pop_label = fresh_label ctx in
@@ -68,14 +72,10 @@ let rec lower_expr ctx source continuation (expr : Resolved_ast.expr) =
         args_entry,
         { expr with desc = Var (Resolved_ast.ident temp) } )
   | App ((Resolved_ast.Fun _ as callee), args) ->
-      let actions, entry, args =
-        lower_expr_list ctx source continuation args
-      in
+      let actions, entry, args = lower_expr_list ctx source continuation args in
       (actions, entry, { expr with desc = App (callee, args) })
   | Builtin (b, args) ->
-      let actions, entry, args =
-        lower_expr_list ctx source continuation args
-      in
+      let actions, entry, args = lower_expr_list ctx source continuation args in
       (actions, entry, { expr with desc = Builtin (b, args) })
   | Subscript (lhs, index) ->
       let index_actions, index_entry, index =
@@ -149,7 +149,8 @@ let empty_effect ~next =
     extra_actions = [];
   }
 
-let apply_simple_stmt ctx ~next_label ~source ~label eff (stmt : Resolved_ast.simple_stmt) =
+let apply_simple_stmt ctx ~next_label ~source ~label eff
+    (stmt : Resolved_ast.simple_stmt) =
   match stmt.desc with
   | Assign (target, value) ->
       let value_actions, value_entry, value =
@@ -206,7 +207,8 @@ let apply_simple_stmt ctx ~next_label ~source ~label eff (stmt : Resolved_ast.si
 
 (* ===== Step linearization ===== *)
 
-let rec linearize_step ctx (step : Resolved_ast.step) (next_label : string) : compiled =
+let rec linearize_step ctx (step : Resolved_ast.step) (next_label : string) :
+    compiled =
   let label = fresh_label ctx in
   match step.desc with
   | EmptyStep ->
@@ -234,9 +236,7 @@ let rec linearize_step ctx (step : Resolved_ast.step) (next_label : string) : co
       {
         actions = eff.pre_actions @ [ a ] @ eff.extra_actions;
         entry =
-          (match eff.pre_actions with
-          | first :: _ -> first.label
-          | [] -> label);
+          (match eff.pre_actions with first :: _ -> first.label | [] -> label);
         exit_label = next_label;
       }
   | BlockStep (While { cond; body }) ->
@@ -338,8 +338,7 @@ and linearize_var_step ctx (step : Resolved_ast.step) next_label =
   | VarStep (i, value) ->
       let source =
         make_source ~proc_name:ctx.proc_name
-          ~description:
-            ("var " ^ i.original ^ " = " ^ pretty_expr value)
+          ~description:("var " ^ i.original ^ " = " ^ pretty_expr value)
           ~loc:step.loc
       in
       let pre_actions, entry, value = lower_expr ctx source label value in
@@ -361,9 +360,9 @@ let rec local_idents (steps : Resolved_ast.body) : Resolved_ast.ident list =
       match step.desc with
       | VarStep (i, _) -> [ i ]
       | BlockStep (While { body; _ }) -> local_idents body
-      | BlockStep (If { body; else_body; _ }) ->
+      | BlockStep (If { body; else_body; _ }) -> (
           local_idents body
-          @ (match else_body with Some b -> local_idents b | None -> [])
+          @ match else_body with Some b -> local_idents b | None -> [])
       | SimpleStep _ | EmptyStep -> [])
     steps
 
@@ -414,7 +413,14 @@ let linearize_module (m : Resolved_ast.module_def) : module_ir =
     let name = "callRet__" ^ string_of_int !temp_counter in
     temp_var_infos :=
       !temp_var_infos
-      @ [ { tla_name = name; original = name; proc = Some proc; kind = CallRet callee } ];
+      @ [
+          {
+            tla_name = name;
+            original = name;
+            proc = Some proc;
+            kind = CallRet callee;
+          };
+        ];
     name
   in
   let const_defs =
@@ -461,7 +467,8 @@ let linearize_module (m : Resolved_ast.module_def) : module_ir =
             Some
               {
                 proc_name = name;
-                params = List.map (fun (p : Resolved_ast.ident) -> p.name) params;
+                params =
+                  List.map (fun (p : Resolved_ast.ident) -> p.name) params;
                 actions = compiled.actions;
                 entry_label = compiled.entry;
               }
@@ -493,7 +500,8 @@ let linearize_module (m : Resolved_ast.module_def) : module_ir =
   in
   let var_infos =
     List.map
-      (fun (name, _) -> { tla_name = name; original = name; proc = None; kind = Global })
+      (fun (name, _) ->
+        { tla_name = name; original = name; proc = None; kind = Global })
       var_decls
     @ List.concat_map
         (fun (item : Resolved_ast.item) ->

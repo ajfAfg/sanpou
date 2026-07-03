@@ -1,6 +1,6 @@
-(** Hindley-Milner type inference over the AST. [check] returns unit on
-    success and raises [Type_error] otherwise; no type information is
-    attached to the tree. *)
+(** Hindley-Milner type inference over the AST. [check] returns unit on success
+    and raises [Type_error] otherwise; no type information is attached to the
+    tree. *)
 
 type ty
 (** An inferred type; render with [string_of_ty]. *)

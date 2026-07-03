@@ -14,7 +14,6 @@ type ident = { name : Ast.id; original : Ast.id } [@@deriving show, eq]
    leaves untouched (module-level bindings) and compiler-synthesized
    temporaries. *)
 let ident name = { name; original = name }
-
 let display i = i.original
 
 (* Which kind of definition an applied name refers to. Functions are pure

@@ -41,7 +41,8 @@ let prec (e : ('n, 'c) expr) =
   | Subscript _ -> 6
   | UnOp _ -> 7
   | IntLit _ | BoolLit _ | Var _ | Self | App _ | Builtin _ | MapInit _
-  | Tuple _ | Sequence _ -> 8
+  | Tuple _ | Sequence _ ->
+      8
 
 let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
   let at level e' =
@@ -66,19 +67,28 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       Builtin.name b ^ "("
       ^ String.concat ", " (List.map (pretty_expr name_of callee_of) args)
       ^ ")"
-  | Subscript (lhs, index) -> at 6 lhs ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
+  | Subscript (lhs, index) ->
+      at 6 lhs ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
   | MapInit { binder; lo; hi; value } ->
-      "{ " ^ name_of binder ^ " in " ^ pretty_expr name_of callee_of lo ^ ".."
-      ^ pretty_expr name_of callee_of hi ^ ": "
+      "{ " ^ name_of binder ^ " in "
+      ^ pretty_expr name_of callee_of lo
+      ^ ".."
+      ^ pretty_expr name_of callee_of hi
+      ^ ": "
       ^ pretty_expr name_of callee_of value
       ^ " }"
   | Tuple elems -> (
       match elems with
       | [] -> "()"
       | [ e ] -> "(" ^ pretty_expr name_of callee_of e ^ ",)"
-      | es -> "(" ^ String.concat ", " (List.map (pretty_expr name_of callee_of) es) ^ ")")
+      | es ->
+          "("
+          ^ String.concat ", " (List.map (pretty_expr name_of callee_of) es)
+          ^ ")")
   | Sequence elems ->
-      "[" ^ String.concat ", " (List.map (pretty_expr name_of callee_of) elems) ^ "]"
+      "["
+      ^ String.concat ", " (List.map (pretty_expr name_of callee_of) elems)
+      ^ "]"
 
 let pretty_assign_target name_of callee_of = function
   | VarTarget n -> name_of n
@@ -88,7 +98,9 @@ let pretty_assign_target name_of callee_of = function
 let pretty_simple_stmt name_of callee_of (stmt : ('n, 'c) simple_stmt) =
   match stmt.desc with
   | Assign (target, value) ->
-      pretty_assign_target name_of callee_of target ^ " = " ^ pretty_expr name_of callee_of value
+      pretty_assign_target name_of callee_of target
+      ^ " = "
+      ^ pretty_expr name_of callee_of value
   | Call (name, args) ->
       name ^ "("
       ^ String.concat ", " (List.map (pretty_expr name_of callee_of) args)
@@ -102,20 +114,27 @@ let rec pretty_step name_of callee_of indent (step : ('n, 'c) step) =
   match step.desc with
   | SimpleStep stmts ->
       indent
-      ^ String.concat ", " (List.map (pretty_simple_stmt name_of callee_of) stmts)
+      ^ String.concat ", "
+          (List.map (pretty_simple_stmt name_of callee_of) stmts)
       ^ ";\n"
   | EmptyStep -> indent ^ ";\n"
   | BlockStep stmt -> pretty_block_stmt name_of callee_of indent stmt
   | VarStep (n, value) ->
-      indent ^ "var " ^ name_of n ^ " = " ^ pretty_expr name_of callee_of value ^ ";\n"
+      indent ^ "var " ^ name_of n ^ " = "
+      ^ pretty_expr name_of callee_of value
+      ^ ";\n"
 
 and pretty_block_stmt name_of callee_of indent = function
   | While { cond; body } ->
-      indent ^ "while (" ^ pretty_expr name_of callee_of cond ^ ") {\n"
+      indent ^ "while ("
+      ^ pretty_expr name_of callee_of cond
+      ^ ") {\n"
       ^ pretty_body name_of callee_of (indent ^ "  ") body
       ^ indent ^ "}\n"
   | If { cond; body; else_body } -> (
-      indent ^ "if (" ^ pretty_expr name_of callee_of cond ^ ") {\n"
+      indent ^ "if ("
+      ^ pretty_expr name_of callee_of cond
+      ^ ") {\n"
       ^ pretty_body name_of callee_of (indent ^ "  ") body
       ^ indent ^ "}"
       ^
@@ -132,12 +151,17 @@ and pretty_body name_of callee_of indent steps =
 let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
   match item.desc with
   | ConstDef { name; value } ->
-      indent ^ "def " ^ name ^ " = " ^ pretty_expr name_of callee_of value ^ ";\n"
+      indent ^ "def " ^ name ^ " = "
+      ^ pretty_expr name_of callee_of value
+      ^ ";\n"
   | FunDef { name; params; body_expr } ->
       indent ^ "def " ^ name ^ "(" ^ String.concat ", " params ^ ") = "
-      ^ pretty_expr name_of callee_of body_expr ^ ";\n"
+      ^ pretty_expr name_of callee_of body_expr
+      ^ ";\n"
   | VarDecl { name; value } ->
-      indent ^ "var " ^ name ^ " = " ^ pretty_expr name_of callee_of value ^ ";\n"
+      indent ^ "var " ^ name ^ " = "
+      ^ pretty_expr name_of callee_of value
+      ^ ";\n"
   | ProcDef { name; params; body } ->
       indent ^ "fn " ^ name ^ "("
       ^ String.concat ", " (List.map name_of params)
@@ -147,8 +171,11 @@ let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
   | Process { name; proc; fair; lo; hi } ->
       indent
       ^ (if fair then "fair process " else "process ")
-      ^ name ^ " = " ^ proc ^ " in " ^ pretty_expr name_of callee_of lo ^ ".."
-      ^ pretty_expr name_of callee_of hi ^ ";\n"
+      ^ name ^ " = " ^ proc ^ " in "
+      ^ pretty_expr name_of callee_of lo
+      ^ ".."
+      ^ pretty_expr name_of callee_of hi
+      ^ ";\n"
 
 let pretty_module_def name_of callee_of (m : ('n, 'c) module_def) =
   "mod " ^ m.mod_name ^ " {\n"

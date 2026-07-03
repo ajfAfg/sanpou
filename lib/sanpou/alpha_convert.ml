@@ -82,8 +82,7 @@ let rec alpha_step st env (step : Surface_ast.step) : Resolved_ast.step =
             | Assign (target, value) ->
                 Assign
                   (alpha_assign_target env st target, alpha_expr env st value)
-            | Call (name, args) ->
-                Call (name, List.map (alpha_expr env st) args)
+            | Call (name, args) -> Call (name, List.map (alpha_expr env st) args)
             | Return value -> Return (alpha_expr env st value)
             | Break -> Break
             | Continue -> Continue

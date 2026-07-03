@@ -52,7 +52,8 @@ let rec expr_to_tla local_vars (e : Resolved_ast.expr) =
   | Ast.App (callee, args) ->
       (* Proc callees never survive Linearize inside procedure bodies; both
          kinds map to a same-named TLA+ operator application. *)
-      TApp (Resolved_ast.callee_name callee, List.map (expr_to_tla local_vars) args)
+      TApp
+        (Resolved_ast.callee_name callee, List.map (expr_to_tla local_vars) args)
   | Ast.Subscript (lhs, index) ->
       TSubscript (expr_to_tla local_vars lhs, expr_to_tla local_vars index)
   | Ast.MapInit { binder; lo; hi; value } ->
@@ -169,9 +170,7 @@ let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
         in
         let frame =
           TRecord
-            ([
-               ("procedure", TStr proc_name); ("return_pc", TStr return_label);
-             ]
+            ([ ("procedure", TStr proc_name); ("return_pc", TStr return_label) ]
             @ bind params args
             @ List.map (fun v -> (v, null_value)) other_fields)
         in
@@ -318,8 +317,7 @@ let init_decls (ir : module_ir) : tla_decl list =
       (fun (name, expr) -> TBinOp ("=", TId name, expr_to_tla_global expr))
       ir.var_decls
     @ [
-        TBinOp
-          ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit []));
+        TBinOp ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit []));
         TBinOp ("=", TId "pc", pc_init);
       ]
   in
@@ -342,7 +340,9 @@ let termination_decls : tla_decl list =
   in
   [
     DOpDef
-      ("Terminating", [], TConj (Block, [ all_done; TUnchangedExpr (TId "vars") ]));
+      ( "Terminating",
+        [],
+        TConj (Block, [ all_done; TUnchangedExpr (TId "vars") ]) );
     DSeparator;
     DOpDef ("Termination", [], TFinally all_done);
     DSeparator;
@@ -381,8 +381,8 @@ let next_decls config (ir : module_ir) : tla_decl list =
           [],
           TDisj
             ( Block,
-              procedure_disjuncts @ process_disjuncts @ termination_disjuncts
-            ) );
+              procedure_disjuncts @ process_disjuncts @ termination_disjuncts )
+        );
       DSeparator;
     ]
 
