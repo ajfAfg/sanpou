@@ -4,10 +4,10 @@
    a located diagnostic instead of a raw exception, so callers only need one
    error-reporting path. *)
 
-type diagnostic = { loc : Ast.loc; message : string }
+type diagnostic = { loc : Generic_ast.loc; message : string }
 type output = { tla_module : Tla.Tla_ast.tla_module; source_map : Source_map.t }
 
-let loc_of_position (pos : Lexing.position) : Ast.loc =
+let loc_of_position (pos : Lexing.position) : Generic_ast.loc =
   { line = pos.pos_lnum; col = pos.pos_cnum - pos.pos_bol + 1 }
 
 let parse (source : string) : (Surface_ast.program, diagnostic) result =

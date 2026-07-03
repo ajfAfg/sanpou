@@ -7,16 +7,16 @@ type ty
 
 type type_error =
   | Type_clash of ty * ty
-  | Unbound_variable of Ast.id
-  | Arity_mismatch of Ast.id * int * int
-  | Not_a_function of Ast.id
+  | Unbound_variable of Generic_ast.id
+  | Arity_mismatch of Generic_ast.id * int * int
+  | Not_a_function of Generic_ast.id
   | Break_outside_loop
   | Continue_outside_loop
   | Return_type_mismatch
-  | Assign_to_non_variable of Ast.id
+  | Assign_to_non_variable of Generic_ast.id
   | Recursive_type
 
-exception Type_error of type_error * Ast.loc
+exception Type_error of type_error * Generic_ast.loc
 
 val check : Surface_ast.program -> unit
 val string_of_ty : ty -> string

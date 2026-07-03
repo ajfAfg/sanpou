@@ -1,5 +1,5 @@
 %{
-open Ast
+open Generic_ast
 
 let loc_of_pos (pos : Lexing.position) : loc =
   { line = pos.pos_lnum; col = pos.pos_cnum - pos.pos_bol + 1 }
@@ -40,8 +40,8 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %type <Surface_ast.expr> mult_expr postfix_expr primary_expr
 %type <Surface_ast.expr list> separated_nonempty_list(COMMA, expr)
 %type <Surface_ast.expr list> loption(separated_nonempty_list(COMMA, expr))
-%type <Ast.id list> separated_nonempty_list(COMMA, ID)
-%type <Ast.id list> loption(separated_nonempty_list(COMMA, ID))
+%type <Generic_ast.id list> separated_nonempty_list(COMMA, ID)
+%type <Generic_ast.id list> loption(separated_nonempty_list(COMMA, ID))
 %type <unit option> option(FAIR) option(SEMI)
 %%
 

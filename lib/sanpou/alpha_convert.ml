@@ -1,4 +1,4 @@
-open Ast
+open Generic_ast
 
 (* ===== Alpha conversion: surface AST → resolved AST =====
 
@@ -133,7 +133,7 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
   let st = create_state proc_names in
   (* Module-level expressions are never renamed; their names display as
      themselves. *)
-  let plain = Ast.map_expr Resolved_ast.ident (resolve_callee st) in
+  let plain = Generic_ast.map_expr Resolved_ast.ident (resolve_callee st) in
   let items =
     List.map
       (fun (item : Surface_ast.item) ->

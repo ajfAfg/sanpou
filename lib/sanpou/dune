@@ -6,7 +6,7 @@
 
 (menhir
  (flags (--explain))
- ; Inference prints some nonterminal types qualified as Sanpou.Ast.*, which
+ ; Inference prints some nonterminal types qualified as Sanpou.Generic_ast.*,
  ; makes the generated parser depend on the library's own alias module —
  ; dune rejects that as circular. Every symbol is typed by hand in
  ; parser.mly instead.

@@ -143,7 +143,7 @@ lib/
   sanpou/      Compiler core
     lexer.mll      Lexer (ocamllex)
     parser.mly     Parser (Menhir)
-    ast.ml         Abstract Syntax Tree (AST), parameterized by stage
+    generic_ast.ml Abstract Syntax Tree (AST) shape, parameterized by stage
     surface_ast.ml Surface-stage AST instantiation (as parsed)
     ast_printer.ml AST pretty printer
     builtin.ml     Built-in function registry
