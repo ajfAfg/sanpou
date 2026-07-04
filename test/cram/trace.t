@@ -25,16 +25,19 @@ A single process stuck on an await gives a short, deterministic trace.
   >   > out/dl.out 2>&1
   [11]
 
-FIXME: action steps are missing from the rendered trace, and the deadlock
-summary points at the process entry instead of the blocking await.
-Trace_reader.parse_header only accepts "<Label(pid) line ...>" action
-headers, but TLC 2.19 emits "<Label line ...>" (no process id), so every
-action step is dropped and only the initial state survives.
+The annotated trace shows every step with the acting process and source
+position, and the deadlock summary points at the blocking await.
 
   $ sanpou trace out/dl.out -o out
   Step 1: Initial state
     x = 0
   
+  Step 2: p (process 1): [process p starts f]  [line 8]
+    (no changes)
+  
+  Step 3: f (process 1): while (true) [check]  [line 4]
+    (no changes)
+  
   DEADLOCK — all processes blocked:
-    process 1 (p): [process p starts f]  [line 8]
+    process 1 (f): await x == 1, x = 0  [line 5]
 

@@ -69,6 +69,45 @@ let test_v1_backcompat () =
   Alcotest.(check int) "entries" 1 (List.length parsed.entries);
   Alcotest.(check int) "no vars" 0 (List.length parsed.vars)
 
+(* ===== Action header parsing ===== *)
+
+(* TLC prints action headers without a process id ("<L1 line ... of module
+   m>"); the older "<L1(1) line ...>" form carries one. Both arrive inside
+   tool-mode state blocks (message code 2217). *)
+let state_block body =
+  "@!@!@STARTMSG 2217:4 @!@!@\n" ^ body ^ "@!@!@ENDMSG 2217 @!@!@\n"
+
+let test_action_header_without_pid () =
+  let out =
+    state_block "1: <Initial predicate>\n/\\ x = 0\n"
+    ^ state_block
+        "2: <L1 line 16, col 5 to line 18, col 31 of module dl>\n/\\ x = 1\n"
+  in
+  let trace = Trace_reader.parse out in
+  match trace.steps with
+  | [ s1; s2 ] ->
+      Alcotest.(check bool)
+        "initial" true
+        (s1.header = Trace_reader.InitialPredicate);
+      Alcotest.(check bool)
+        "action label, no pid" true
+        (s2.header = Trace_reader.Action { label = "L1"; process_id = None })
+  | steps ->
+      Alcotest.fail
+        (Printf.sprintf "expected 2 steps, got %d" (List.length steps))
+
+let test_action_header_with_pid () =
+  let out = state_block "2: <L34(1) line 5, col 1 of module m>\n/\\ x = 1\n" in
+  let trace = Trace_reader.parse out in
+  match trace.steps with
+  | [ s ] ->
+      Alcotest.(check bool)
+        "action label and pid" true
+        (s.header = Trace_reader.Action { label = "L34"; process_id = Some 1 })
+  | steps ->
+      Alcotest.fail
+        (Printf.sprintf "expected 1 step, got %d" (List.length steps))
+
 (* ===== Module name detection ===== *)
 
 let test_module_name_detection () =
@@ -193,7 +232,7 @@ let test_render_frame_locals () =
           (* Same depth: plain assignment inside the frame -> diff *)
           {
             step_num = 2;
-            header = Trace_reader.Action { label = "L5"; process_id = 1 };
+            header = Trace_reader.Action { label = "L5"; process_id = Some 1 };
             state =
               state
                 ~stack_value:(stack [ fact_frame ~x:3 ~ans:null ~call_ret:2 ])
@@ -201,7 +240,7 @@ let test_render_frame_locals () =
           };
           {
             step_num = 3;
-            header = Trace_reader.Action { label = "L5"; process_id = 1 };
+            header = Trace_reader.Action { label = "L5"; process_id = Some 1 };
             state =
               state
                 ~stack_value:(stack [ fact_frame ~x:3 ~ans:"6" ~call_ret:2 ])
@@ -210,7 +249,7 @@ let test_render_frame_locals () =
           (* Depth increased (call): frame context, not a diff *)
           {
             step_num = 4;
-            header = Trace_reader.Action { label = "L2"; process_id = 1 };
+            header = Trace_reader.Action { label = "L2"; process_id = Some 1 };
             state =
               state
                 ~stack_value:
@@ -224,7 +263,7 @@ let test_render_frame_locals () =
           (* Depth decreased (return): frame context, not a diff *)
           {
             step_num = 5;
-            header = Trace_reader.Action { label = "L2"; process_id = 1 };
+            header = Trace_reader.Action { label = "L2"; process_id = Some 1 };
             state =
               state
                 ~stack_value:(stack [ fact_frame ~x:3 ~ans:"6" ~call_ret:2 ])
@@ -274,6 +313,45 @@ let test_render_frame_locals () =
     "header desc" true
     (contains flat "fact (process 1): var ans = x * fact(x - 1)")
 
+(* Headers without a pid: the acting process is recovered from the pc diff *)
+let test_render_infers_process () =
+  let state ~x ~pc =
+    [
+      { Trace_reader.var_name = "x"; value = string_of_int x };
+      { var_name = "pc"; value = pc };
+    ]
+  in
+  let trace : Trace_reader.trace =
+    {
+      is_deadlock = false;
+      module_name = Some "factorial";
+      steps =
+        [
+          {
+            step_num = 1;
+            header = Trace_reader.InitialPredicate;
+            state = state ~x:0 ~pc:"<<\"L2\", \"L2\">>";
+          };
+          (* Second process moved: its pc changed, the first one's did not *)
+          {
+            step_num = 2;
+            header = Trace_reader.Action { label = "L5"; process_id = None };
+            state = state ~x:1 ~pc:"<<\"L2\", \"L5\">>";
+          };
+        ];
+    }
+  in
+  let rendered = Trace_printer.render trace smap_v2 in
+  let contains needle =
+    Str.string_match
+      (Str.regexp (".*" ^ Str.quote needle ^ ".*"))
+      (Str.global_replace (Str.regexp "\n") " " rendered)
+      0
+  in
+  Alcotest.(check bool)
+    "inferred process in header" true
+    (contains "fact (process 2): var ans = x * fact(x - 1)")
+
 let () =
   Alcotest.run "Trace"
     [
@@ -281,6 +359,11 @@ let () =
         [
           Alcotest.test_case "v2 roundtrip" `Quick test_v2_roundtrip;
           Alcotest.test_case "v1 backcompat" `Quick test_v1_backcompat;
+        ] );
+      ( "action_header",
+        [
+          Alcotest.test_case "without pid" `Quick test_action_header_without_pid;
+          Alcotest.test_case "with pid" `Quick test_action_header_with_pid;
         ] );
       ( "module_name",
         [
@@ -300,5 +383,7 @@ let () =
         [
           Alcotest.test_case "names" `Quick test_display_names;
           Alcotest.test_case "render" `Quick test_render_frame_locals;
+          Alcotest.test_case "render infers process" `Quick
+            test_render_infers_process;
         ] );
     ]
