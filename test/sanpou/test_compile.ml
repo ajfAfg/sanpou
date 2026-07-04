@@ -120,6 +120,36 @@ let () =
               has_in "VARIABLES pc, x, stack" tla_a;
               has_in "---- MODULE b ----" tla_b;
               has_in "VARIABLES pc, y, stack" tla_b);
+          Alcotest.test_case "frame sentinel is a declared model-value constant"
+            `Quick (fun () ->
+              (* A string sentinel would crash TLC's liveness checking when
+                 compared with a user value; the constant is assigned a model
+                 value in the cfg instead *)
+              let ast =
+                parse
+                  "mod m {\n\
+                   var g = 0;\n\
+                   fn foo() { var x = 5; g = x; return (); }\n\
+                   process ps = foo in 1..2;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "CONSTANT defaultInitValue" tla;
+              has_in "x__1 |-> defaultInitValue" tla;
+              has_not_in "__null__" tla);
+          Alcotest.test_case "no unbound frame fields, no constant" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x = 0;\n\
+                   fn foo() { x = 1 - x; }\n\
+                   process ps = foo in 1..2;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_not_in "CONSTANT" tla;
+              has_not_in "defaultInitValue" tla);
           Alcotest.test_case "nested shadowing" `Quick (fun () ->
               let ast =
                 parse

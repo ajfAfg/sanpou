@@ -44,7 +44,16 @@ let cfg_properties config =
 
 let bool_to_upper_string b = if b then "TRUE" else "FALSE"
 
-let to_cfg_string config =
+(* [default_init_value]: when the module declares CONSTANT defaultInitValue
+   (the null sentinel for unassigned frame fields), the cfg must assign it.
+   Assigning the constant to its own name makes TLC create a model value,
+   which compares unequal to every user value without a type error. *)
+let to_cfg_string ?(default_init_value = false) config =
+  let constant_lines =
+    if default_init_value then
+      [ ""; "CONSTANT defaultInitValue = defaultInitValue" ]
+    else []
+  in
   let property_lines =
     match cfg_properties config with
     | [] -> []
@@ -53,11 +62,8 @@ let to_cfg_string config =
         :: List.map (fun property -> "    " ^ property) properties
   in
   let lines =
-    [
-      "SPECIFICATION Spec";
-      "";
-      "CHECK_DEADLOCK " ^ bool_to_upper_string config.checks.deadlock;
-    ]
+    [ "SPECIFICATION Spec" ] @ constant_lines
+    @ [ ""; "CHECK_DEADLOCK " ^ bool_to_upper_string config.checks.deadlock ]
     @ property_lines
   in
   String.concat "\n" lines ^ "\n"

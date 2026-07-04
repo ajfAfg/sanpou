@@ -40,6 +40,7 @@ and tla_expr =
 
 type tla_decl =
   | DExtends of string list
+  | DConstants of string list
   | DOpDef of string * string list * tla_expr
   | DVariables of string list
   | DSeparator
