@@ -15,7 +15,6 @@ type type_error =
   | Return_type_mismatch
   | Assign_to_non_variable of Generic_ast.id
   | Recursive_type
-  | Builtin_redefinition of Generic_ast.id
 
 exception Type_error of type_error * Generic_ast.loc
 

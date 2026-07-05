@@ -373,6 +373,100 @@ let () =
               | VarDecl { name; _ } -> check string "name" "v" name
               | _ -> fail "expected VarDecl");
         ] );
+      ( "callee_resolution",
+        [
+          (* Resolution is lexical and sequential: definitions shadow the
+             builtins from their point onward. *)
+          test_case "unshadowed builtin name resolves to the builtin" `Quick
+            (fun () ->
+              let const =
+                node
+                  (ConstDef
+                     { name = "c"; value = node (App ("head", [ var "xs" ])) })
+              in
+              let m = transform_one (make_program [ make_module [ const ] ]) in
+              match (List.hd m.items).desc with
+              | ConstDef
+                  { value = { desc = Builtin (Sanpou.Builtin.Head, _); _ }; _ }
+                ->
+                  ()
+              | _ -> fail "expected the builtin Head");
+          test_case "preceding def shadows the builtin" `Quick (fun () ->
+              let fd =
+                node
+                  (FunDef
+                     { name = "head"; params = [ "x" ]; body_expr = var "x" })
+              in
+              let const =
+                node
+                  (ConstDef
+                     { name = "c"; value = node (App ("head", [ intlit 1 ])) })
+              in
+              let m =
+                transform_one (make_program [ make_module [ fd; const ] ])
+              in
+              match (List.nth m.items 1).desc with
+              | ConstDef
+                  {
+                    value = { desc = App (Sanpou.Resolved_ast.Fun "head", _); _ };
+                    _;
+                  } ->
+                  ()
+              | _ -> fail "expected the user function");
+          test_case "use before the shadowing def is the builtin" `Quick
+            (fun () ->
+              let const =
+                node
+                  (ConstDef
+                     {
+                       name = "c";
+                       value = node (App ("head", [ var "xs" ]));
+                     })
+              in
+              let fd =
+                node
+                  (FunDef
+                     { name = "head"; params = [ "x" ]; body_expr = var "x" })
+              in
+              let m =
+                transform_one (make_program [ make_module [ const; fd ] ])
+              in
+              match (List.hd m.items).desc with
+              | ConstDef
+                  { value = { desc = Builtin (Sanpou.Builtin.Head, _); _ }; _ }
+                ->
+                  ()
+              | _ -> fail "expected the builtin Head");
+          test_case "procedure sees itself for self-recursion" `Quick
+            (fun () ->
+              let body =
+                [ simple_step [ return_ (node (App ("f", [ intlit 0 ]))) ] ]
+              in
+              let m =
+                transform_one (make_program [ make_module [ make_proc "f" body ] ])
+              in
+              match get_proc_body m "f" with
+              | [
+               {
+                 desc =
+                   SimpleStep
+                     [
+                       {
+                         desc =
+                           Return
+                             {
+                               desc = App (Sanpou.Resolved_ast.Proc "f", _);
+                               _;
+                             };
+                         _;
+                       };
+                     ];
+                 _;
+               };
+              ] ->
+                  ()
+              | _ -> fail "expected a Proc self-call");
+        ] );
       ( "multiple_modules",
         [
           test_case "counters independent per module" `Quick (fun () ->
