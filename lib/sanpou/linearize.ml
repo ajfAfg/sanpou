@@ -42,6 +42,7 @@ let describe_simple_stmts (stmts : Normalized_ast.simple_stmt list) =
    at most one control-transferring statement is meaningful per step. *)
 type stmt_effect = {
   guard : Normalized_ast.expr option;
+  asserts : (Normalized_ast.expr * string) list;
   assignments : assignment list;
   stack_op : stack_op;
   next : pc_dest;
@@ -51,6 +52,7 @@ type stmt_effect = {
 let empty_effect ~next =
   {
     guard = None;
+    asserts = [];
     assignments = [];
     stack_op = StackNone;
     next = PcNext next;
@@ -69,6 +71,12 @@ let apply_simple_stmt ctx ~next_label ~source eff
       in
       { eff with assignments = eff.assignments @ [ assignment ] }
   | Generic_ast.Await cond -> { eff with guard = Some cond }
+  | Generic_ast.Assert cond ->
+      let message =
+        Printf.sprintf "assertion failed at line %d, col %d: %s" stmt.loc.line
+          stmt.loc.col (pretty_expr cond)
+      in
+      { eff with asserts = eff.asserts @ [ (cond, message) ] }
   | Generic_ast.Call (name, args) ->
       let pop_label = fresh_label ctx in
       let pop_action =
@@ -120,8 +128,9 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
           stmts
       in
       let a =
-        make_action ?guard:eff.guard ~assignments:eff.assignments
-          ~stack_op:eff.stack_op ~label ~pc_dest:eff.next ~source ()
+        make_action ?guard:eff.guard ~asserts:eff.asserts
+          ~assignments:eff.assignments ~stack_op:eff.stack_op ~label
+          ~pc_dest:eff.next ~source ()
       in
       {
         actions = List.map (fun x -> Action x) (a :: eff.extra_actions);
@@ -185,8 +194,8 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
       let a =
         make_action
           ~binders:[ (binder.name, lo, hi) ]
-          ?guard:eff.guard ~assignments:eff.assignments ~stack_op:eff.stack_op
-          ~label ~pc_dest:eff.next ~source ()
+          ?guard:eff.guard ~asserts:eff.asserts ~assignments:eff.assignments
+          ~stack_op:eff.stack_op ~label ~pc_dest:eff.next ~source ()
       in
       {
         actions = List.map (fun x -> Action x) (a :: eff.extra_actions);

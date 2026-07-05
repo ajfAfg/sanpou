@@ -74,6 +74,13 @@ let () =
                 \  }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "assert statement" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() { assert x >= 0, x = x + 1; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "nested subscript assignment" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -405,6 +412,12 @@ let () =
               check_fails "mod m { var x in true..false; }");
           test_case "var decl range used as bool" `Quick (fun () ->
               check_fails "mod m { var x in 1..3; def p = x && true; }");
+          test_case "assert non-bool" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  fn foo() { assert 1; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "nested subscript value mismatch" `Quick (fun () ->
               check_fails
                 "mod m {\n\

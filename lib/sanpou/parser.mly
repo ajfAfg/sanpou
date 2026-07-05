@@ -11,7 +11,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token <string> ID
 %token TRUE FALSE
 %token DEF VAR FN MOD FAIR PROCESS IN SELF
-%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS EITHER OR WITH
+%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT ASSERT FORALL EXISTS EITHER OR WITH
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token SEMI COMMA DOTDOT ARROW
@@ -105,6 +105,8 @@ simple_stmt:
       { mk $startpos Continue }
   | AWAIT cond=expr
       { mk $startpos (Await cond) }
+  | ASSERT cond=expr
+      { mk $startpos (Assert cond) }
 
 assign_target:
   | name=ID

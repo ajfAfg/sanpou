@@ -97,6 +97,7 @@ let alpha_simple_stmt env st (stmt : Surface_ast.simple_stmt) :
     | Break -> Break
     | Continue -> Continue
     | Await cond -> Await (alpha_expr env st cond)
+    | Assert cond -> Assert (alpha_expr env st cond)
   in
   { desc; loc = stmt.loc }
 

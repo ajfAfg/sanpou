@@ -49,15 +49,18 @@ type action = {
       (* existentially quantified over an integer range: the action fires
          for any binder value that satisfies its guard *)
   guard : Normalized_ast.expr option;
+  asserts : (Normalized_ast.expr * string) list;
+      (* condition and failure message; unlike a guard, a false assert is a
+         verification error, not a disabled action *)
   assignments : assignment list;
   pc_dest : pc_dest;
   stack_op : stack_op;
   source : source_info;
 }
 
-let make_action ?(binders = []) ?guard ?(assignments = [])
+let make_action ?(binders = []) ?guard ?(asserts = []) ?(assignments = [])
     ?(stack_op = StackNone) ~label ~pc_dest ~source () =
-  { label; binders; guard; assignments; pc_dest; stack_op; source }
+  { label; binders; guard; asserts; assignments; pc_dest; stack_op; source }
 
 (* A [Choice] is an either statement: one pc value whose transition is the
    disjunction of its arms' first actions. Embedding the arm actions (rather

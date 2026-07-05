@@ -313,6 +313,8 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
   | Continue -> if not ctx.in_loop then type_error Continue_outside_loop loc
   | Await cond ->
       unify cond.loc (infer_expr ctx.fresh_tyvar ctx.env cond) TyBool
+  | Assert cond ->
+      unify cond.loc (infer_expr ctx.fresh_tyvar ctx.env cond) TyBool
 
 let rec check_body (ctx : proc_ctx) (steps : Surface_ast.body) : unit =
   match steps with

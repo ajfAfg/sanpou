@@ -134,6 +134,7 @@ let pretty_simple_stmt name_of callee_of (stmt : ('n, 'c) simple_stmt) =
   | Break -> "break"
   | Continue -> "continue"
   | Await cond -> "await " ^ pretty_expr name_of callee_of cond
+  | Assert cond -> "assert " ^ pretty_expr name_of callee_of cond
 
 let rec pretty_step name_of callee_of indent (step : ('n, 'c) step) =
   match step.desc with

@@ -16,6 +16,7 @@ let reservedWords = [
   ("break", Parser.BREAK);
   ("continue", Parser.CONTINUE);
   ("await", Parser.AWAIT);
+  ("assert", Parser.ASSERT);
   ("forall", Parser.FORALL);
   ("exists", Parser.EXISTS);
   ("either", Parser.EITHER);

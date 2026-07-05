@@ -9,7 +9,7 @@ verdict is neither a clean pass nor a deadlock, so failures stay debuggable.
   >   "$SANPOU_JAVA" -cp "$SANPOU_TLA2TOOLS_JAR" -XX:+UseParallelGC tlc2.TLC \
   >     -config "$1/$2.cfg" -metadir "$1/states" -workers 1 "$1/$2.tla" \
   >     > "$1/$2.raw" 2>&1
-  >   verdict=$(grep -Eo 'No error has been found|Deadlock reached' "$1/$2.raw" | head -n 1)
+  >   verdict=$(grep -Eo 'No error has been found|Deadlock reached|The first argument of Assert evaluated to FALSE' "$1/$2.raw" | head -n 1)
   >   if [ -n "$verdict" ]; then echo "$verdict"; else cat "$1/$2.raw"; fi
   > }
 
@@ -169,3 +169,42 @@ would block the single fair process forever.
   $ sanpou compile with_guard.snp -o with_guard
   $ tlc with_guard with_guard
   No error has been found
+
+An assert that holds is silent; one that fails halts TLC with an error
+(unlike await, which would just disable the action).
+
+  $ cat > assert_ok.snp <<'EOF'
+  > mod assert_ok {
+  >   var x = 0;
+  >   fn f() {
+  >     while (x < 3) {
+  >       assert x >= 0,
+  >       x = x + 1;
+  >     }
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json assert_ok.json
+  $ sanpou compile assert_ok.snp -o assert_ok
+  $ tlc assert_ok assert_ok
+  No error has been found
+
+  $ cat > assert_fail.snp <<'EOF'
+  > mod assert_fail {
+  >   var x = 0;
+  >   fn f() {
+  >     while (x < 3) {
+  >       assert x != 2,
+  >       x = x + 1;
+  >     }
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json assert_fail.json
+  $ sanpou compile assert_fail.snp -o assert_fail
+  $ tlc assert_fail assert_fail
+  The first argument of Assert evaluated to FALSE
