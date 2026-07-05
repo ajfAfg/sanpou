@@ -69,7 +69,7 @@ type proc_def = {
 type process_def = {
   name : Generic_ast.id;
   proc : Generic_ast.id;
-  fair : bool;
+  fairness : Generic_ast.fairness;
   lo : expr;
   hi : expr;
   loc : Generic_ast.loc;

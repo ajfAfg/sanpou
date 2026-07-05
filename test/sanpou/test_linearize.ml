@@ -39,9 +39,9 @@ let if_block cond body : Sanpou.Normalized_ast.step =
 let make_proc name body : Sanpou.Normalized_ast.proc_def =
   { name; params = []; body; loc = loc0 }
 
-let make_process ?(fair = false) name proc lo hi :
+let make_process ?(fairness = Unfair) name proc lo hi :
     Sanpou.Normalized_ast.process_def =
-  { name; proc; fair; lo; hi; loc = loc0 }
+  { name; proc; fairness; lo; hi; loc = loc0 }
 
 let make_module ?(const_defs = []) ?(fun_defs = []) ?(var_decls = [])
     ?(processes = []) name procs : Sanpou.Normalized_ast.module_def =
@@ -129,12 +129,16 @@ let () =
               let m =
                 make_module "m"
                   ~processes:
-                    [ make_process ~fair:true "ps" "foo" (intlit 1) (intlit 2) ]
+                    [
+                      make_process ~fairness:WeakFair "ps" "foo" (intlit 1)
+                        (intlit 2);
+                    ]
                   [ make_proc "foo" [ empty_step ] ]
               in
               let ir = linearize_one m in
               match ir.processes with
-              | [ p ] -> Alcotest.(check bool) "fair" true p.fair
+              | [ p ] ->
+                  Alcotest.(check bool) "fair" true (p.fairness = WeakFair)
               | _ -> fail "expected one process");
         ] );
       ( "control_flow",

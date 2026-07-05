@@ -130,6 +130,8 @@ let () =
               pretty_roundtrip "mod m { process ps = foo in 1..n; }");
           test_case "fair process" `Quick (fun () ->
               pretty_roundtrip "mod m { fair process ps = foo in 1..n; }");
+          test_case "strongly fair process" `Quick (fun () ->
+              pretty_roundtrip "mod m { fair+ process ps = foo in 1..n; }");
           test_case "call stmt" `Quick (fun () ->
               pretty_roundtrip "mod m { fn foo() { bar(1, 2); } }");
           test_case "app expr" `Quick (fun () ->
@@ -187,6 +189,9 @@ let () =
           test_case "fair process" `Quick (fun () ->
               pretty_prints "mod m { fair process ps = foo in 1..n; }"
                 "mod m {\n  fair process ps = foo in 1..n;\n}\n");
+          test_case "strongly fair process" `Quick (fun () ->
+              pretty_prints "mod m { fair+ process ps = foo in 1..n; }"
+                "mod m {\n  fair+ process ps = foo in 1..n;\n}\n");
           test_case "else if prints on one line" `Quick (fun () ->
               pretty_prints
                 "mod m { fn foo() { if (a) { break; } else if (b) { break; } \

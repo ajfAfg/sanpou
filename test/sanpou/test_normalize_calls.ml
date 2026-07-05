@@ -46,7 +46,8 @@ let make_var name value : Sanpou.Resolved_ast.item =
   node (VarDecl { name; init = InitValue value })
 
 let make_process name proc : Sanpou.Resolved_ast.item =
-  node (Process { name; proc; fair = false; lo = intlit 1; hi = intlit 1 })
+  node
+    (Process { name; proc; fairness = Unfair; lo = intlit 1; hi = intlit 1 })
 
 let make_module name items : Sanpou.Resolved_ast.module_def =
   { mod_name = name; items; mod_loc = loc0 }
