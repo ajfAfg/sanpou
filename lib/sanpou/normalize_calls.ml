@@ -86,7 +86,13 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
       let cond_steps, cond = normalize_expr st cond in
       (* Hoisting a call out of a branch would run it unconditionally,
          changing which calls the program performs; only the condition is
-         evaluated on every path, so only its calls may be hoisted. *)
+         evaluated on every path, so only its calls may be hoisted. Note
+         that hoisting weakens the if-expression's atomicity guarantee:
+         the call completes in earlier actions, so other processes can
+         interleave between it and the step containing the if expression.
+         The test and the update are one atomic action only when the
+         condition is call-free (see "If expressions and atomicity" in the
+         README). *)
       let branch_call_free label e =
         match normalize_expr st e with
         | [], e -> e
