@@ -14,7 +14,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
-%token SEMI COMMA COLON DOTDOT
+%token SEMI COMMA DOTDOT ARROW
 %token EOF
 
 (* Precedence is encoded structurally in the stratified expr rules
@@ -42,7 +42,6 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %type <Surface_ast.expr list> loption(separated_nonempty_list(COMMA, expr))
 %type <Generic_ast.id list> separated_nonempty_list(COMMA, ID)
 %type <Generic_ast.id list> loption(separated_nonempty_list(COMMA, ID))
-%type <unit option> option(SEMI)
 %type <Generic_ast.fairness> fairness_marker
 %%
 
@@ -182,7 +181,9 @@ primary_expr:
           | Some b -> Builtin (b, args)
           | None -> App (name, args)) }
   | name=ID { mk $startpos (Var name) }
-  | LBRACE binder=ID IN lo=expr DOTDOT hi=expr COLON value=expr option(SEMI) RBRACE
+  (* Mirrors the map type's notation ({int -> t}). The arrow separator
+     leaves `{ x in S : p }` free for a future set filter form. *)
+  | LBRACE binder=ID IN lo=expr DOTDOT hi=expr ARROW value=expr RBRACE
       { mk $startpos (MapInit { binder; lo; hi; value }) }
   | LPAREN RPAREN
       { mk $startpos (Tuple []) }

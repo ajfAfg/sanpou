@@ -157,7 +157,7 @@ let () =
               let ast =
                 parse
                   "mod maps {\n\
-                   var xs = { i in 1..2: 0; };\n\
+                   var xs = { i in 1..2 -> 0 };\n\
                    fn main() { xs[1] = self; return (); }\n\
                    process ps = main in 1..2;\n\
                    }\n"

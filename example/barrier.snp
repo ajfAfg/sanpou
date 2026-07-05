@@ -5,10 +5,10 @@ mod bakery_algorithm {
 
   var count = 0;
   var entering = {
-    x in 1..numThreads: false;
+    x in 1..numThreads -> false
   };
   var tickets = {
-    x in 1..numThreads: null;
+    x in 1..numThreads -> null
   };
 
   def lossless = finally(count == numThreads * numLoop);

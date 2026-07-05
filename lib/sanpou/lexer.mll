@@ -41,8 +41,8 @@ rule main = parse
     { Parser.NEQ }
 | ".."
     { Parser.DOTDOT }
-| ":"
-    { Parser.COLON }
+| "->"
+    { Parser.ARROW }
 | "("
     { Parser.LPAREN }
 | ")"

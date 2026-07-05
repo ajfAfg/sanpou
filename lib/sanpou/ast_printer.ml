@@ -77,7 +77,7 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       ^ pretty_expr name_of callee_of lo
       ^ ".."
       ^ pretty_expr name_of callee_of hi
-      ^ ": "
+      ^ " -> "
       ^ pretty_expr name_of callee_of value
       ^ " }"
   | Tuple elems -> (
