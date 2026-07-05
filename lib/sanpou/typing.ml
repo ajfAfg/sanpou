@@ -147,6 +147,9 @@ let builtin_signature fresh_tyvar (b : Builtin.t) =
   | Concat ->
       let elem_ty = fresh_tyvar () in
       ([ TySeq elem_ty; TySeq elem_ty ], TySeq elem_ty)
+  | Len ->
+      let elem_ty = fresh_tyvar () in
+      ([ TySeq elem_ty ], TyInt)
 
 (* ===== Infer expression type ===== *)
 
