@@ -36,7 +36,8 @@ let () =
               let config = Sanpou.Config.from_string "{}" in
               check bool "deadlock" true config.checks.deadlock;
               check bool "termination" false config.checks.termination;
-              check (list string) "properties" [] config.properties);
+              check (list string) "properties" [] config.properties;
+              check (list string) "invariants" [] config.invariants);
           test_case "reads booleans and properties" `Quick (fun () ->
               let config =
                 Sanpou.Config.from_string
@@ -49,6 +50,14 @@ let () =
               check bool "termination" true config.checks.termination;
               check (list string) "properties" [ "convergence" ]
                 config.properties);
+          test_case "reads invariants" `Quick (fun () ->
+              let config =
+                Sanpou.Config.from_string
+                  {|{ "invariants": ["typeOK", "mutualExclusion"] }|}
+              in
+              check (list string) "invariants"
+                [ "typeOK"; "mutualExclusion" ]
+                config.invariants);
         ] );
       ( "cfg",
         [
@@ -67,6 +76,19 @@ let () =
               check_has "PROPERTIES" cfg;
               check_has "    convergence" cfg;
               check_has "    Termination" cfg);
+          test_case "formats invariants section" `Quick (fun () ->
+              let config =
+                Sanpou.Config.from_string
+                  {|{ "invariants": ["typeOK", "mutualExclusion"] }|}
+              in
+              let cfg = Sanpou.Config.to_cfg_string config in
+              check_has "INVARIANTS" cfg;
+              check_has "    typeOK" cfg;
+              check_has "    mutualExclusion" cfg;
+              check_before "CHECK_DEADLOCK" "INVARIANTS" cfg);
+          test_case "omits invariants section when empty" `Quick (fun () ->
+              let cfg = Sanpou.Config.to_cfg_string Sanpou.Config.default in
+              check_not_has "INVARIANTS" cfg);
           test_case "does not duplicate Termination property" `Quick (fun () ->
               let config =
                 Sanpou.Config.from_string
