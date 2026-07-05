@@ -63,6 +63,12 @@ rule main = parse
     { Parser.MINUS }
 | "*"
     { Parser.MULT }
+| "/"
+    { Parser.DIV }
+| "%"
+    { Parser.PERCENT }
+| "!"
+    { Parser.NOT }
 | "<="
     { Parser.LTEQ }
 | ">="
@@ -73,6 +79,8 @@ rule main = parse
     { Parser.OROR }
 | "<"
     { Parser.LT }
+| ">"
+    { Parser.GT }
 | "="
     { Parser.EQ }
 | ['a'-'z' 'A'-'Z'] ['a'-'z' 'A'-'Z' '0'-'9' '_']*

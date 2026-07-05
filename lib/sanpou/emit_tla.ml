@@ -16,7 +16,10 @@ let binop_to_tla = function
   | Generic_ast.Plus -> "+"
   | Generic_ast.Minus -> "-"
   | Generic_ast.Mult -> "*"
+  | Generic_ast.Div -> "\\div"
+  | Generic_ast.Mod -> "%"
   | Generic_ast.Lt -> "<"
+  | Generic_ast.Gt -> ">"
   | Generic_ast.LtEq -> "<="
   | Generic_ast.GtEq -> ">="
   | Generic_ast.Eq -> "="
@@ -38,6 +41,8 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
       match rhs.desc with
       | Generic_ast.IntLit value -> TInt (-value)
       | _ -> TParens (TBinOp ("-", TInt 0, expr_to_tla local_vars rhs)))
+  | Generic_ast.UnOp (Generic_ast.Not, rhs) ->
+      TNot (expr_to_tla local_vars rhs)
   | Generic_ast.BinOp (op, lhs, rhs) ->
       TParens
         (TBinOp

@@ -10,10 +10,23 @@ let equal_loc _ _ = true
 type 'a node = { desc : 'a; loc : loc } [@@deriving show, eq]
 type id = string [@@deriving show, eq]
 
-type binop = Plus | Minus | Mult | Lt | LtEq | GtEq | Eq | Neq | And | Or
+type binop =
+  | Plus
+  | Minus
+  | Mult
+  | Div
+  | Mod
+  | Lt
+  | Gt
+  | LtEq
+  | GtEq
+  | Eq
+  | Neq
+  | And
+  | Or
 [@@deriving show, eq]
 
-type unop = Neg [@@deriving show, eq]
+type unop = Neg | Not [@@deriving show, eq]
 
 (* The tree is parameterized by the type ['n] of variable names and the type
    ['c] of applied callees: the parser produces [Surface_ast.program] (plain

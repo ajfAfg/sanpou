@@ -55,6 +55,16 @@ let () =
                  } }");
           test_case "inequality" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = 1 != 2; }");
+          test_case "greater than" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = 2 > 1; }");
+          test_case "division and modulo" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = 7 / 2 % 3; }");
+          test_case "division of sum" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = (1 + 2) / 3; }");
+          test_case "logical not" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = !true; }");
+          test_case "logical not of compound operand" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = !(a && b); }");
           test_case "unary minus literal" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = -1; }");
           test_case "unary minus paren expr" `Quick (fun () ->

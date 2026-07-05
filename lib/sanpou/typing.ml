@@ -153,11 +153,11 @@ let builtin_signature fresh_tyvar (b : Builtin.t) =
 (* Operand type errors point at the offending operand's own location. *)
 let ty_prim fresh_tyvar ~lhs_loc ~rhs_loc op ty1 ty2 =
   match op with
-  | Plus | Minus | Mult ->
+  | Plus | Minus | Mult | Div | Mod ->
       unify lhs_loc ty1 TyInt;
       unify rhs_loc ty2 TyInt;
       TyInt
-  | Lt | LtEq | GtEq ->
+  | Lt | Gt | LtEq | GtEq ->
       unify lhs_loc ty1 TyInt;
       unify rhs_loc ty2 TyInt;
       TyBool
@@ -210,6 +210,9 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
   | UnOp (Neg, rhs) ->
       unify rhs.loc (infer_expr fresh_tyvar env rhs) TyInt;
       TyInt
+  | UnOp (Not, rhs) ->
+      unify rhs.loc (infer_expr fresh_tyvar env rhs) TyBool;
+      TyBool
   | BinOp (op, lhs, rhs) ->
       let ty1 = infer_expr fresh_tyvar env lhs in
       let ty2 = infer_expr fresh_tyvar env rhs in

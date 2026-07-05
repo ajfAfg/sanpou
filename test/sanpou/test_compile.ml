@@ -75,6 +75,10 @@ let () =
                    def either = true || false;\n\
                    def literal = -1;\n\
                    def expr = -(1 + 2);\n\
+                   def bigger = 2 > 1;\n\
+                   def quotient = 7 / 2;\n\
+                   def remainder = 7 % 2;\n\
+                   def negated = !true;\n\
                    fn main() { return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"
@@ -84,7 +88,11 @@ let () =
               has "differs == (<< 1 >> /= << 2 >>)";
               has "either == (TRUE \\/ FALSE)";
               has "literal == -1";
-              has "expr == (0 - (1 + 2))");
+              has "expr == (0 - (1 + 2))";
+              has "bigger == (2 > 1)";
+              has "quotient == (7 \\div 2)";
+              has "remainder == (7 % 2)";
+              has "negated == ~(TRUE)");
           Alcotest.test_case "map init and indexed update compile" `Quick
             (fun () ->
               let ast =

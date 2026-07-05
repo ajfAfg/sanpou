@@ -16,7 +16,10 @@ let binop_str = function
   | Plus -> "+"
   | Minus -> "-"
   | Mult -> "*"
+  | Div -> "/"
+  | Mod -> "%"
   | Lt -> "<"
+  | Gt -> ">"
   | LtEq -> "<="
   | GtEq -> ">="
   | Eq -> "=="
@@ -24,16 +27,16 @@ let binop_str = function
   | And -> "&&"
   | Or -> "||"
 
-let unop_str = function Neg -> "-"
+let unop_str = function Neg -> "-" | Not -> "!"
 
 (* Higher binds tighter; mirrors the stratified grammar rules
    (or < and < comparison < add < mult < subscript < unary < atom). *)
 let binop_prec = function
   | Or -> 1
   | And -> 2
-  | Lt | LtEq | GtEq | Eq | Neq -> 3
+  | Lt | Gt | LtEq | GtEq | Eq | Neq -> 3
   | Plus | Minus -> 4
-  | Mult -> 5
+  | Mult | Div | Mod -> 5
 
 let prec (e : ('n, 'c) expr) =
   match e.desc with
