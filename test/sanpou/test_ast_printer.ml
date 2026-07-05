@@ -88,6 +88,17 @@ let () =
               pretty_roundtrip
                 "mod m { def x = forall (i in 1..2) { exists (j in 1..2) { i \
                  == j } }; }");
+          test_case "either two arms" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { either { x = 1; } or { x = 2; } } }");
+          test_case "either three arms" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { either { x = 1; } or { x = 2; } or { ; } \
+                 } }");
+          test_case "either nested" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { either { either { x = 1; } or { x = 2; } \
+                 } or { x = 3; } } }");
           test_case "if expression" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = if (a) { 1 } else { 2 }; }");
           test_case "if expression as operand" `Quick (fun () ->
@@ -192,6 +203,19 @@ let () =
           test_case "strongly fair process" `Quick (fun () ->
               pretty_prints "mod m { fair+ process ps = foo in 1..n; }"
                 "mod m {\n  fair+ process ps = foo in 1..n;\n}\n");
+          test_case "either arms print on the closing brace's line" `Quick
+            (fun () ->
+              pretty_prints
+                "mod m { fn foo() { either { x = 1; } or { x = 2; } } }"
+                "mod m {\n\
+                \  fn foo() {\n\
+                \    either {\n\
+                \      x = 1;\n\
+                \    } or {\n\
+                \      x = 2;\n\
+                \    }\n\
+                \  }\n\
+                 }\n");
           test_case "else if prints on one line" `Quick (fun () ->
               pretty_prints
                 "mod m { fn foo() { if (a) { break; } else if (b) { break; } \

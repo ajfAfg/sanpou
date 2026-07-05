@@ -153,6 +153,14 @@ and pretty_block_stmt name_of callee_of indent = function
       ^ indent ^ "}\n"
   | If { cond; body; else_body } ->
       indent ^ pretty_if name_of callee_of indent cond body else_body
+  | Either arms ->
+      indent ^ "either {\n"
+      ^ String.concat
+          (indent ^ "} or {\n")
+          (List.map
+             (fun arm -> pretty_body name_of callee_of (indent ^ "  ") arm)
+             arms)
+      ^ indent ^ "}\n"
 
 (* Printed without the leading indent so an else-if chain can continue on
    the closing brace's line. An else body that is exactly a nested if (the

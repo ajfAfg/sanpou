@@ -74,6 +74,28 @@ let () =
                 \  }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "either arms" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() {\n\
+                \    either { x = 1; } or { x = 2; } or { await x > 0; }\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "break in either arm inside loop" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() {\n\
+                \    while (true) {\n\
+                \      either { break; } or { x = x + 1; }\n\
+                \    }\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "else if chain" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -355,6 +377,22 @@ let () =
               check_fails "mod m { var x in true..false; }");
           test_case "var decl range used as bool" `Quick (fun () ->
               check_fails "mod m { var x in 1..3; def p = x && true; }");
+          test_case "ill-typed either arm" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() {\n\
+                \    either { x = true; } or { x = 2; }\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "break in either arm outside loop" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  fn foo() { either { break; } or { ; } return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "quantifier body non-bool" `Quick (fun () ->
               check_fails "mod m { def x = forall (i in 1..2) { i }; }");
           test_case "quantifier bounds non-int" `Quick (fun () ->

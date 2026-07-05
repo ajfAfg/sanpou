@@ -113,3 +113,34 @@ that can never fire, and two processes each waiting on the other.
   $ sanpou compile mutual_dl.snp -o mutual_dl
   $ tlc mutual_dl mutual_dl
   Deadlock reached
+
+An either statement offers only its *enabled* arms. At every state below
+exactly one arm's guard holds (x alternates parity), so the process always
+proceeds and terminates; a translation that committed to an arm before
+evaluating its guard would deadlock instead. Reaching x = 3 needs both arms
+in a single behavior, so termination also proves both arms fire.
+
+  $ cat > either_guard.snp <<'EOF'
+  > mod either_guard {
+  >   var x = 0;
+  >   fn f() {
+  >     while (x < 3) {
+  >       either {
+  >         await x % 2 == 0,
+  >         x = x + 1;
+  >       } or {
+  >         await x % 2 == 1,
+  >         x = x + 2;
+  >       }
+  >     }
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cat > either_guard.json <<'EOF'
+  > { "checks": { "deadlock": true, "termination": true } }
+  > EOF
+  $ sanpou compile either_guard.snp -o either_guard
+  $ tlc either_guard either_guard
+  No error has been found

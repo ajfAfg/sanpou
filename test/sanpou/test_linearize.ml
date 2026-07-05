@@ -36,6 +36,9 @@ let while_block ?(pre = []) cond body : Sanpou.Normalized_ast.step =
 let if_block cond body : Sanpou.Normalized_ast.step =
   node (Sanpou.Normalized_ast.BlockStep (If { cond; body; else_body = None }))
 
+let either_block arms : Sanpou.Normalized_ast.step =
+  node (Sanpou.Normalized_ast.BlockStep (Either arms))
+
 let make_proc name body : Sanpou.Normalized_ast.proc_def =
   { name; params = []; body; loc = loc0 }
 
@@ -60,8 +63,14 @@ let linearize_one m =
   let result = Sanpou.Linearize.linearize [ m ] in
   List.hd result
 
+(* Most tests inspect plain actions; unwrap the node layer. *)
+let plain_actions (nodes : action_node list) : action list =
+  List.filter_map (function Action a -> Some a | Choice _ -> None) nodes
+
 let find_action ir label =
-  let all_actions = List.concat_map (fun (p : proc_ir) -> p.actions) ir.procs in
+  let all_actions =
+    List.concat_map (fun (p : proc_ir) -> plain_actions p.actions) ir.procs
+  in
   List.find (fun (a : action) -> a.label = label) all_actions
 
 let find_proc ir name =
@@ -81,7 +90,7 @@ let () =
               let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               check int "one action" 1 (List.length proc.actions);
-              let a = List.hd proc.actions in
+              let a = List.hd (plain_actions proc.actions) in
               check string "label" "L1" a.label;
               (match a.stack_op with
               | StackReturn _ -> ()
@@ -121,7 +130,7 @@ let () =
               let ir = linearize_one m in
               let proc = find_proc ir "foo" in
               check int "one action" 1 (List.length proc.actions);
-              let a = List.hd proc.actions in
+              let a = List.hd (plain_actions proc.actions) in
               match a.pc_dest with
               | PcNext "Done" -> ()
               | _ -> fail "expected PcNext Done");
@@ -140,6 +149,72 @@ let () =
               | [ p ] ->
                   Alcotest.(check bool) "fair" true (p.fairness = WeakFair)
               | _ -> fail "expected one process");
+        ] );
+      ( "either",
+        [
+          test_case "either becomes a choice of arm entry actions" `Quick
+            (fun () ->
+              let m =
+                make_module "m" ~processes:[ default_process ]
+                  [
+                    make_proc "foo"
+                      [
+                        either_block
+                          [
+                            [ simple_step (cl1 (assign "x" (intlit 1))) ];
+                            [
+                              simple_step
+                                (cl1 (await_ (boollit false)))
+                            ];
+                          ];
+                        simple_step (cl1 (return_ tuple0));
+                      ];
+                  ]
+              in
+              let ir = linearize_one m in
+              let foo = find_proc ir "foo" in
+              let arms =
+                List.find_map
+                  (function
+                    | Choice { arms; _ } -> Some arms | Action _ -> None)
+                  foo.actions
+                |> Option.get
+              in
+              check int "two arms" 2 (List.length arms);
+              let first = List.nth arms 0 in
+              let second = List.nth arms 1 in
+              check bool "first arm assigns" true
+                (first.assignments
+                = [ AssignVar ("x", (intlit 1 : Sanpou.Normalized_ast.expr)) ]);
+              check bool "second arm is guarded" true (second.guard <> None);
+              (* both arms rejoin at the step after the either *)
+              let dest = function
+                | PcNext l -> l
+                | _ -> Alcotest.fail "expected PcNext"
+              in
+              check string "arms rejoin" (dest first.pc_dest)
+                (dest second.pc_dest));
+          test_case "the choice is the entry of its step sequence" `Quick
+            (fun () ->
+              let m =
+                make_module "m" ~processes:[ default_process ]
+                  [
+                    make_proc "foo"
+                      [
+                        either_block
+                          [
+                            [ simple_step (cl1 (assign "x" (intlit 1))) ];
+                            [ simple_step (cl1 (assign "x" (intlit 2))) ];
+                          ];
+                      ];
+                  ]
+              in
+              let ir = linearize_one m in
+              let foo = find_proc ir "foo" in
+              match List.hd foo.actions with
+              | Choice { label; _ } ->
+                  check string "entry is the choice" foo.entry_label label
+              | Action _ -> fail "expected the choice first");
         ] );
       ( "control_flow",
         [
@@ -189,7 +264,7 @@ let () =
                     match a.stack_op with
                     | StackPopAssign "callRet__1" -> true
                     | _ -> false)
-                  foo.actions
+                  (plain_actions foo.actions)
               in
               let check_label =
                 match pop.pc_dest with
@@ -243,7 +318,7 @@ let () =
                 List.find
                   (fun (a : action) ->
                     match a.stack_op with StackReturn _ -> true | _ -> false)
-                  foo.actions
+                  (plain_actions foo.actions)
               in
               let break_action =
                 List.find
@@ -254,7 +329,7 @@ let () =
                     match a.pc_dest with
                     | PcNext l -> l = return_action.label
                     | _ -> false)
-                  foo.actions
+                  (plain_actions foo.actions)
               in
               match break_action.pc_dest with
               | PcNext l -> check string "break to return" return_action.label l
@@ -280,7 +355,7 @@ let () =
                 List.find
                   (fun (a : action) ->
                     match a.stack_op with StackPush _ -> true | _ -> false)
-                  foo.actions
+                  (plain_actions foo.actions)
               in
               (match push_action.stack_op with
               | StackPush ("bar", _, []) -> ()
@@ -289,7 +364,7 @@ let () =
                 List.find
                   (fun (a : action) ->
                     match a.stack_op with StackDiscard -> true | _ -> false)
-                  foo.actions
+                  (plain_actions foo.actions)
               in
               check bool "pop has no assignments" true
                 (pop_action.assignments = []));
@@ -311,7 +386,7 @@ let () =
                 List.find
                   (fun (a : action) ->
                     match a.stack_op with StackPush _ -> true | _ -> false)
-                  foo.actions
+                  (plain_actions foo.actions)
               in
               match push_action.pc_dest with
               | PcCall callee -> check string "callee" "bar" callee
@@ -347,7 +422,7 @@ let () =
                     match a.stack_op with
                     | StackPopAssign _ -> true
                     | _ -> false)
-                  foo.actions
+                  (plain_actions foo.actions)
               in
               (match capture_action.stack_op with
               | StackPopAssign "callRet__1" -> ()
@@ -362,7 +437,7 @@ let () =
                     ] ->
                         true
                     | _ -> false)
-                  foo.actions
+                  (plain_actions foo.actions)
               in
               check bool "assigns captured return" true
                 (assign_action.stack_op = StackNone));
@@ -444,9 +519,7 @@ let () =
               in
               let ir = linearize_one m in
               let proc = find_proc ir "foo" in
-              let labels =
-                List.map (fun (a : action) -> a.label) proc.actions
-              in
+              let labels = List.map node_label proc.actions in
               check bool "has L1" true (List.mem "L1" labels);
               check bool "has L2" true (List.mem "L2" labels);
               check bool "has L3" true (List.mem "L3" labels));

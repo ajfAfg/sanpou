@@ -11,7 +11,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token <string> ID
 %token TRUE FALSE
 %token DEF VAR FN MOD FAIR PROCESS IN SELF
-%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS
+%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS EITHER OR
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token SEMI COMMA DOTDOT ARROW
@@ -29,7 +29,8 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %type <Surface_ast.module_def> module_def
 %type <Surface_ast.item list> list(item)
 %type <Surface_ast.item> item
-%type <Surface_ast.body> body list(step) else_clause
+%type <Surface_ast.body> body list(step) else_clause or_arm
+%type <Surface_ast.body list> nonempty_list(or_arm)
 %type <Surface_ast.body option> option(else_clause)
 %type <Surface_ast.step> step
 %type <Surface_ast.simple_stmt> simple_stmt
@@ -109,6 +110,11 @@ block_stmt:
   | WHILE LPAREN cond=expr RPAREN LBRACE body=body RBRACE
       { While { cond; body } }
   | s=if_stmt { s }
+  | EITHER LBRACE first=body RBRACE rest=nonempty_list(or_arm)
+      { Either (first :: rest) }
+
+or_arm:
+  | OR LBRACE body=body RBRACE { body }
 
 if_stmt:
   | IF LPAREN cond=expr RPAREN LBRACE body=body RBRACE else_body=option(else_clause)

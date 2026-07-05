@@ -334,6 +334,9 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
       | Some else_body -> check_body ctx else_body
       | None -> ());
       ctx
+  | BlockStep (Either arms) ->
+      List.iter (check_body ctx) arms;
+      ctx
   | VarStep (name, value) ->
       (* Local variables are mutable, so their type is never generalized
          (value restriction): reads and assignments share one type. *)
