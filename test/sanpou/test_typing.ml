@@ -32,6 +32,14 @@ let () =
               check_ok "mod m { def x = 1 != 2; }");
           test_case "or" `Quick (fun () ->
               check_ok "mod m { def x = true || false; }");
+          test_case "greater than" `Quick (fun () ->
+              check_ok "mod m { def x = 2 > 1; }");
+          test_case "division" `Quick (fun () ->
+              check_ok "mod m { def x = 7 / 2; }");
+          test_case "modulo" `Quick (fun () ->
+              check_ok "mod m { def x = 7 % 2; }");
+          test_case "logical not" `Quick (fun () ->
+              check_ok "mod m { def x = !true; }");
           test_case "unary minus literal" `Quick (fun () ->
               check_ok "mod m { def x = -1; }");
           test_case "unary minus paren expr" `Quick (fun () ->
@@ -272,6 +280,14 @@ let () =
                 \  }");
           test_case "unary minus bool" `Quick (fun () ->
               check_fails "mod m { def x = -true; }");
+          test_case "logical not on int" `Quick (fun () ->
+              check_fails "mod m { def x = !1; }");
+          test_case "division on bool" `Quick (fun () ->
+              check_fails "mod m { def x = true / false; }");
+          test_case "modulo on bool" `Quick (fun () ->
+              check_fails "mod m { def x = true % false; }");
+          test_case "greater than on bool" `Quick (fun () ->
+              check_fails "mod m { def x = true > false; }");
           test_case "inequality mismatch" `Quick (fun () ->
               check_fails "mod m { def x = 1 != true; }");
           test_case "fn arity mismatch" `Quick (fun () ->

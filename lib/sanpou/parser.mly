@@ -12,7 +12,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token TRUE FALSE
 %token DEF VAR FN MOD FAIR PROCESS IN SELF
 %token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT
-%token PLUS MINUS MULT LT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
+%token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token SEMI COMMA COLON DOTDOT
 %token EOF
@@ -120,6 +120,7 @@ and_expr:
 comparison_expr:
   | e=add_expr { e }
   | e1=comparison_expr LT e2=add_expr { mk $startpos (BinOp (Lt, e1, e2)) }
+  | e1=comparison_expr GT e2=add_expr { mk $startpos (BinOp (Gt, e1, e2)) }
   | e1=comparison_expr EQEQ e2=add_expr { mk $startpos (BinOp (Eq, e1, e2)) }
   | e1=comparison_expr NEQ e2=add_expr { mk $startpos (BinOp (Neq, e1, e2)) }
   | e1=comparison_expr LTEQ e2=add_expr { mk $startpos (BinOp (LtEq, e1, e2)) }
@@ -133,6 +134,8 @@ add_expr:
 mult_expr:
   | e=postfix_expr { e }
   | e1=mult_expr MULT e2=postfix_expr { mk $startpos (BinOp (Mult, e1, e2)) }
+  | e1=mult_expr DIV e2=postfix_expr { mk $startpos (BinOp (Div, e1, e2)) }
+  | e1=mult_expr PERCENT e2=postfix_expr { mk $startpos (BinOp (Mod, e1, e2)) }
 
 postfix_expr:
   | e=primary_expr { e }
@@ -141,6 +144,7 @@ postfix_expr:
 
 primary_expr:
   | MINUS rhs=primary_expr { mk $startpos (UnOp (Neg, rhs)) }
+  | NOT rhs=primary_expr { mk $startpos (UnOp (Not, rhs)) }
   | value=INTV { mk $startpos (IntLit value) }
   | TRUE { mk $startpos (BoolLit true) }
   | FALSE { mk $startpos (BoolLit false) }
