@@ -13,7 +13,7 @@ mod bakery_algorithm {
 
   def lossless = finally(count == numThreads * numLoop);
 
-  fn lockAcquire(idx) {
+  procedure lockAcquire(idx) {
     entering[idx] = true;
 
     var max = 0;
@@ -57,12 +57,12 @@ mod bakery_algorithm {
     return ();
   }
 
-  fn lockRelease(idx) {
+  procedure lockRelease(idx) {
     tickets[idx] = null;
     return ();
   }
 
-  fn thread() {
+  procedure thread() {
     var i = 1;
     while (i <= numLoop) {
       lockAcquire(self);

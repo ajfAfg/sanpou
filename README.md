@@ -129,7 +129,7 @@ mod example {
   def counted = finally(count > 0);
   def bounded = globally(forall (i in 1..n) { grid[i][1] >= 0 });
 
-  fn worker() {                    // procedure definition
+  procedure worker() {                    // procedure definition
     while (count < n) {            // while loop
       either {                     //   non-deterministic branch;
         await count % 2 == 0,      //   only arms whose guards hold

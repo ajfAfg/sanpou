@@ -37,31 +37,31 @@ let () =
           test_case "var_decl range" `Quick (fun () ->
               pretty_roundtrip "mod m { var x in 1..3; }");
           test_case "proc simple" `Quick (fun () ->
-              pretty_roundtrip "mod m { fn foo() { return (); } }");
+              pretty_roundtrip "mod m { procedure foo() { return (); } }");
           test_case "proc assign" `Quick (fun () ->
-              pretty_roundtrip "mod m { fn foo() { x = 1; return (); } }");
+              pretty_roundtrip "mod m { procedure foo() { x = 1; return (); } }");
           test_case "skip step" `Quick (fun () ->
-              pretty_roundtrip "mod m { fn foo() { ; } }");
+              pretty_roundtrip "mod m { procedure foo() { ; } }");
           test_case "atomic step" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { await lock == false, lock = true; } }");
+                "mod m { procedure foo() { await lock == false, lock = true; } }");
           test_case "while body" `Quick (fun () ->
-              pretty_roundtrip "mod m { fn foo() { while (true) { break; } } }");
+              pretty_roundtrip "mod m { procedure foo() { while (true) { break; } } }");
           test_case "while wait" `Quick (fun () ->
-              pretty_roundtrip "mod m { fn foo() { while (0 < x){} } }");
+              pretty_roundtrip "mod m { procedure foo() { while (0 < x){} } }");
           test_case "if" `Quick (fun () ->
-              pretty_roundtrip "mod m { fn foo() { if (x == 0) { break; } } }");
+              pretty_roundtrip "mod m { procedure foo() { if (x == 0) { break; } } }");
           test_case "if else" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { if (x == 0) { break; } else { continue; } \
+                "mod m { procedure foo() { if (x == 0) { break; } else { continue; } \
                  } }");
           test_case "else if chain" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { if (x == 0) { break; } else if (x == 1) { \
+                "mod m { procedure foo() { if (x == 0) { break; } else if (x == 1) { \
                  continue; } else { break; } } }");
           test_case "else if without final else" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { if (x == 0) { break; } else if (x == 1) { \
+                "mod m { procedure foo() { if (x == 0) { break; } else if (x == 1) { \
                  continue; } } }");
           test_case "inequality" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = 1 != 2; }");
@@ -90,31 +90,31 @@ let () =
                  == j } }; }");
           test_case "with statement" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { with (v in 1..3) { x = v; } } }");
+                "mod m { procedure foo() { with (v in 1..3) { x = v; } } }");
           test_case "assert statement" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { assert x > 0, x = x + 1; } }");
+                "mod m { procedure foo() { assert x > 0, x = x + 1; } }");
           test_case "nested subscript assignment" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { grid[i][j + 1] = 5; } }");
+                "mod m { procedure foo() { grid[i][j + 1] = 5; } }");
           test_case "with statement multiple stmts" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { with (v in 1..n) { await v > x, x = v; } \
+                "mod m { procedure foo() { with (v in 1..n) { await v > x, x = v; } \
                  } }");
           test_case "with inside either arm" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { either { with (v in 1..2) { x = v; } } \
+                "mod m { procedure foo() { either { with (v in 1..2) { x = v; } } \
                  or { x = 0; } } }");
           test_case "either two arms" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { either { x = 1; } or { x = 2; } } }");
+                "mod m { procedure foo() { either { x = 1; } or { x = 2; } } }");
           test_case "either three arms" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { either { x = 1; } or { x = 2; } or { ; } \
+                "mod m { procedure foo() { either { x = 1; } or { x = 2; } or { ; } \
                  } }");
           test_case "either nested" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { either { either { x = 1; } or { x = 2; } \
+                "mod m { procedure foo() { either { either { x = 1; } or { x = 2; } \
                  } or { x = 3; } } }");
           test_case "if expression" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = if (a) { 1 } else { 2 }; }");
@@ -127,7 +127,7 @@ let () =
                  }; }");
           test_case "if expression in assignment" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { x = if (x == 0) { 1 } else { x }; } }");
+                "mod m { procedure foo() { x = if (x == 0) { 1 } else { x }; } }");
           test_case "unary minus literal" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = -1; }");
           test_case "unary minus paren expr" `Quick (fun () ->
@@ -161,14 +161,14 @@ let () =
           test_case "strongly fair process" `Quick (fun () ->
               pretty_roundtrip "mod m { fair+ process ps = foo in 1..n; }");
           test_case "call stmt" `Quick (fun () ->
-              pretty_roundtrip "mod m { fn foo() { bar(1, 2); } }");
+              pretty_roundtrip "mod m { procedure foo() { bar(1, 2); } }");
           test_case "app expr" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = foo(1, 2); }");
           test_case "var step" `Quick (fun () ->
-              pretty_roundtrip "mod m { fn foo() { var x = 5; } }");
+              pretty_roundtrip "mod m { procedure foo() { var x = 5; } }");
           test_case "var step expr" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { fn foo() { var y = 1 + 2; return (); } }");
+                "mod m { procedure foo() { var y = 1 + 2; return (); } }");
           test_case "multiple modules" `Quick (fun () ->
               pretty_roundtrip "mod a { var x = 0; }\nmod b { var y = 1; }");
           test_case "full module" `Quick (fun () ->
@@ -177,11 +177,11 @@ let () =
   def readerNum = 2;
     var rcnt = 0;
     var lock = false;
-  fn lockAcquire() {
+  procedure lockAcquire() {
     await lock == false, lock = true;
     return ();
   }
-  fn reader() {
+  procedure reader() {
     while (true) {
       lockAcquire();
       ;
@@ -223,9 +223,9 @@ let () =
           test_case "either arms print on the closing brace's line" `Quick
             (fun () ->
               pretty_prints
-                "mod m { fn foo() { either { x = 1; } or { x = 2; } } }"
+                "mod m { procedure foo() { either { x = 1; } or { x = 2; } } }"
                 "mod m {\n\
-                \  fn foo() {\n\
+                \  procedure foo() {\n\
                 \    either {\n\
                 \      x = 1;\n\
                 \    } or {\n\
@@ -235,10 +235,10 @@ let () =
                  }\n");
           test_case "else if prints on one line" `Quick (fun () ->
               pretty_prints
-                "mod m { fn foo() { if (a) { break; } else if (b) { break; } \
+                "mod m { procedure foo() { if (a) { break; } else if (b) { break; } \
                  else { continue; } } }"
                 "mod m {\n\
-                \  fn foo() {\n\
+                \  procedure foo() {\n\
                 \    if (a) {\n\
                 \      break;\n\
                 \    } else if (b) {\n\

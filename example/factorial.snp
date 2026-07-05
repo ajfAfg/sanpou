@@ -3,7 +3,7 @@ mod factorial {
 
   def testing = finally(x == 120);
 
-  fn fact(x) {
+  procedure fact(x) {
     if (x == 0) {
       return 1;
     } else {
@@ -12,7 +12,7 @@ mod factorial {
     }
   }
 
-  fn worker() {
+  procedure worker() {
     x = fact(5);
     return ();
   }

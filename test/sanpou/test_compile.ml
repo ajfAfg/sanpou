@@ -39,7 +39,7 @@ let () =
                 parse
                   "mod foo {\n\
                    var x = 0;\n\
-                   fn foo() { x = 1 - x; }\n\
+                   procedure foo() { x = 1 - x; }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
               in
@@ -51,7 +51,7 @@ let () =
                 parse
                   "mod foo {\n\
                    var x = 0;\n\
-                   fn foo() { x = 1 - x; }\n\
+                   procedure foo() { x = 1 - x; }\n\
                    fair+ process ps = foo in 1..2;\n\
                    }\n"
               in
@@ -69,7 +69,7 @@ let () =
                    def zs = append(xs, 3);\n\
                    def ws = concat(xs, [4, 5]);\n\
                    def n = len(xs);\n\
-                   fn main() { return (); }\n\
+                   procedure main() { return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"
               in
@@ -94,7 +94,7 @@ let () =
                    def quotient = 7 / 2;\n\
                    def remainder = 7 % 2;\n\
                    def negated = !true;\n\
-                   fn main() { return (); }\n\
+                   procedure main() { return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"
               in
@@ -116,7 +116,7 @@ let () =
                   "mod m {\n\
                    var x in 1..3;\n\
                    var y = 0;\n\
-                   fn main() { y = x; return (); }\n\
+                   procedure main() { y = x; return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"
               in
@@ -132,7 +132,7 @@ let () =
                    def a = head([1, 2]);\n\
                    def head(x) = x + 1;\n\
                    def b = head(2);\n\
-                   fn main() { return (); }\n\
+                   procedure main() { return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"
               in
@@ -146,13 +146,13 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   fn foo() { assert x >= 0, x = x + 1; return (); }\n\
+                   procedure foo() { assert x >= 0, x = x + 1; return (); }\n\
                    process ps = foo in 1..1;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in
-                "Assert((x >= 0), \"assertion failed at line 3, col 12: x >= \
+                "Assert((x >= 0), \"assertion failed at line 3, col 19: x >= \
                  0\")"
                 tla);
           Alcotest.test_case "nested subscript assignment compiles to EXCEPT"
@@ -161,7 +161,7 @@ let () =
                 parse
                   "mod m {\n\
                    var grid = { i in 1..2 -> { j in 1..2 -> 0 } };\n\
-                   fn foo() { grid[1][2] = 5; return (); }\n\
+                   procedure foo() { grid[1][2] = 5; return (); }\n\
                    process ps = foo in 1..1;\n\
                    }\n"
               in
@@ -174,7 +174,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   fn foo() {\n\
+                   procedure foo() {\n\
                    with (v in 1..3) { await v > x, x = v; }\n\
                    return ();\n\
                    }\n\
@@ -192,7 +192,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   fn foo() {\n\
+                   procedure foo() {\n\
                    either { x = 1; } or { await x > 0, x = 2; }\n\
                    return ();\n\
                    }\n\
@@ -212,7 +212,7 @@ let () =
                   "mod m {\n\
                    def inv = forall (i in 1..3) { i < 4 };\n\
                    def can = exists (i in 1..3) { i == 2 };\n\
-                   fn main() { return (); }\n\
+                   procedure main() { return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"
               in
@@ -227,7 +227,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   fn foo() { x = if (x == 0) { 1 } else { x }; return (); }\n\
+                   procedure foo() { x = if (x == 0) { 1 } else { x }; return (); }\n\
                    process ps = foo in 1..1;\n\
                    }\n"
               in
@@ -239,7 +239,7 @@ let () =
                 parse
                   "mod maps {\n\
                    var xs = { i in 1..2 -> 0 };\n\
-                   fn main() { xs[1] = self; return (); }\n\
+                   procedure main() { xs[1] = self; return (); }\n\
                    process ps = main in 1..2;\n\
                    }\n"
               in
@@ -251,12 +251,12 @@ let () =
                 parse
                   "mod a {\n\
                    var x = 0;\n\
-                   fn f() { x = 1; return (); }\n\
+                   procedure f() { x = 1; return (); }\n\
                    process ps = f in 1..2;\n\
                    }\n\
                    mod b {\n\
                    var y = 0;\n\
-                   fn g() { y = 2; return (); }\n\
+                   procedure g() { y = 2; return (); }\n\
                    process qs = g in 1..3;\n\
                    }\n"
               in
@@ -277,7 +277,7 @@ let () =
                 parse
                   "mod m {\n\
                    var g = 0;\n\
-                   fn foo() { var x = 5; g = x; return (); }\n\
+                   procedure foo() { var x = 5; g = x; return (); }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
               in
@@ -291,7 +291,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   fn foo() { x = 1 - x; }\n\
+                   procedure foo() { x = 1 - x; }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
               in
@@ -303,7 +303,7 @@ let () =
                 parse
                   "mod m {\n\
                    var g = 0;\n\
-                   fn foo() {\n\
+                   procedure foo() {\n\
                    var x = 1;\n\
                    while (true) {\n\
                    var x = 2;\n\

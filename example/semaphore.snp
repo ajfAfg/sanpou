@@ -6,7 +6,7 @@ mod semaphore {
 
     def convergence = globally(0 <= cnt) && globally(finally(cnt <= num));
 
-    fn semaphore() {
+    procedure semaphore() {
         while (true) {
             while (cnt >= num) {}
             cnt = cnt + 1;
