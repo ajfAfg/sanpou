@@ -285,14 +285,18 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
           | Some var_ty ->
               unify value.loc var_ty (infer_expr ctx.fresh_tyvar ctx.env value)
           | None -> type_error (Assign_to_non_variable name) loc)
-      | SubscriptTarget (name, index) -> (
+      | SubscriptTarget (name, indices) -> (
           match List.assoc_opt name ctx.mutable_vars with
           | Some container_ty ->
-              let index_ty = infer_expr ctx.fresh_tyvar ctx.env index in
               let value_ty = infer_expr ctx.fresh_tyvar ctx.env value in
+              (* Walk the index path: each level peels one collection. *)
               let elem_ty =
-                infer_indexed_access ctx.fresh_tyvar ~collection_loc:loc
-                  ~index_loc:index.loc container_ty index_ty
+                List.fold_left
+                  (fun collection_ty (index : Surface_ast.expr) ->
+                    let index_ty = infer_expr ctx.fresh_tyvar ctx.env index in
+                    infer_indexed_access ctx.fresh_tyvar ~collection_loc:loc
+                      ~index_loc:index.loc collection_ty index_ty)
+                  container_ty indices
               in
               unify value.loc elem_ty value_ty
           | None -> type_error (Assign_to_non_variable name) loc))

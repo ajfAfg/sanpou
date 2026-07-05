@@ -112,8 +112,13 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
 
 let pretty_assign_target name_of callee_of = function
   | VarTarget n -> name_of n
-  | SubscriptTarget (n, index) ->
-      name_of n ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
+  | SubscriptTarget (n, indices) ->
+      name_of n
+      ^ String.concat ""
+          (List.map
+             (fun index ->
+               "[" ^ pretty_expr name_of callee_of index ^ "]")
+             indices)
 
 let pretty_simple_stmt name_of callee_of (stmt : ('n, 'c) simple_stmt) =
   match stmt.desc with

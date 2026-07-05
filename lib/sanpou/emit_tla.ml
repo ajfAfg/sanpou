@@ -155,9 +155,10 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
       (function
         | AssignVar (var, expr) when List.mem var local_vars ->
             Some ([ SubSel (TInt 1); FieldSel var ], to_tla expr)
-        | AssignIndex (var, index, expr) when List.mem var local_vars ->
+        | AssignIndex (var, indices, expr) when List.mem var local_vars ->
             Some
-              ( [ SubSel (TInt 1); FieldSel var; SubSel (to_tla index) ],
+              ( [ SubSel (TInt 1); FieldSel var ]
+                @ List.map (fun index -> SubSel (to_tla index)) indices,
                 to_tla expr )
         | _ -> None)
       action.assignments
@@ -167,13 +168,18 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
       (function
         | AssignVar (var, expr) when not (List.mem var local_vars) ->
             Some (TBinOp ("=", TPrimed (TId var), to_tla expr))
-        | AssignIndex (var, index, expr) when not (List.mem var local_vars) ->
+        | AssignIndex (var, indices, expr) when not (List.mem var local_vars)
+          ->
             Some
               (TBinOp
                  ( "=",
                    TPrimed (TId var),
                    TExcept
-                     (TId var, [ ([ SubSel (to_tla index) ], to_tla expr) ]) ))
+                     ( TId var,
+                       [
+                         ( List.map (fun index -> SubSel (to_tla index)) indices,
+                           to_tla expr );
+                       ] ) ))
         | _ -> None)
       action.assignments
   in

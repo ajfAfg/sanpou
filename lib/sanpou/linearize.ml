@@ -64,8 +64,8 @@ let apply_simple_stmt ctx ~next_label ~source eff
       let assignment =
         match target with
         | Generic_ast.VarTarget i -> AssignVar (i.name, value)
-        | Generic_ast.SubscriptTarget (i, index) ->
-            AssignIndex (i.name, index, value)
+        | Generic_ast.SubscriptTarget (i, indices) ->
+            AssignIndex (i.name, indices, value)
       in
       { eff with assignments = eff.assignments @ [ assignment ] }
   | Generic_ast.Await cond -> { eff with guard = Some cond }

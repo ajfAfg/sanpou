@@ -81,8 +81,8 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
 let alpha_assign_target env st :
     Surface_ast.assign_target -> Resolved_ast.assign_target = function
   | VarTarget name -> VarTarget (resolve env name)
-  | SubscriptTarget (name, index) ->
-      SubscriptTarget (resolve env name, alpha_expr env st index)
+  | SubscriptTarget (name, indices) ->
+      SubscriptTarget (resolve env name, List.map (alpha_expr env st) indices)
 
 (* ===== Step and body alpha conversion ===== *)
 

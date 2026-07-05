@@ -91,6 +91,9 @@ let () =
           test_case "with statement" `Quick (fun () ->
               pretty_roundtrip
                 "mod m { fn foo() { with (v in 1..3) { x = v; } } }");
+          test_case "nested subscript assignment" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { grid[i][j + 1] = 5; } }");
           test_case "with statement multiple stmts" `Quick (fun () ->
               pretty_roundtrip
                 "mod m { fn foo() { with (v in 1..n) { await v > x, x = v; } \

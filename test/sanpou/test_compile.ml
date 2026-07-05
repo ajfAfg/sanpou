@@ -124,6 +124,18 @@ let () =
               let has s = has_in s tla in
               has "x \\in 1..3";
               has "y = 0");
+          Alcotest.test_case "nested subscript assignment compiles to EXCEPT"
+            `Quick (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   var grid = { i in 1..2 -> { j in 1..2 -> 0 } };\n\
+                   fn foo() { grid[1][2] = 5; return (); }\n\
+                   process ps = foo in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "grid' = [grid EXCEPT ![1][2] = 5]" tla);
           Alcotest.test_case
             "with compiles to an existential over the range" `Quick
             (fun () ->
