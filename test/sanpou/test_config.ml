@@ -89,6 +89,16 @@ let () =
                 with Not_found -> false
               in
               check bool "duplicated" false duplicated);
+          test_case "assigns defaultInitValue a model value when requested"
+            `Quick (fun () ->
+              let config = Sanpou.Config.default in
+              let with_constant =
+                Sanpou.Config.to_cfg_string ~default_init_value:true config
+              in
+              check_has "CONSTANT defaultInitValue = defaultInitValue"
+                with_constant;
+              check_before "SPECIFICATION Spec" "CONSTANT" with_constant;
+              check_not_has "CONSTANT" (Sanpou.Config.to_cfg_string config));
         ] );
       ( "emit",
         [

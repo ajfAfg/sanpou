@@ -197,19 +197,31 @@ let test_display_names () =
     "unknown passthrough" "pc"
     (Trace_printer.display_var_name smap_v2 "pc")
 
+let test_display_null () =
+  Alcotest.(check string)
+    "model value" "null"
+    (Trace_printer.display_field_value "defaultInitValue");
+  Alcotest.(check string)
+    "legacy string sentinel" "null"
+    (Trace_printer.display_field_value "\"__null__\"");
+  Alcotest.(check string)
+    "user value passthrough" "42"
+    (Trace_printer.display_field_value "42")
+
 (* ===== Rendering ===== *)
 
 (* Locals live inside the stack frames: the printer must dig them out of the
    top frame, diff same-depth frames, and show frame context on call/return. *)
 let test_render_frame_locals () =
-  (* [ans] is a raw TLC value string: unassigned fields hold "__null__" *)
+  (* [ans] is a raw TLC value string: unassigned fields hold the
+     defaultInitValue model value *)
   let fact_frame ~x ~ans ~call_ret =
     Printf.sprintf
       "[x__1 |-> %d, ans__2 |-> %s, callRet__1 |-> %d, return_pc |-> \"L11\", \
        procedure |-> \"fact\"]"
       x ans call_ret
   in
-  let null = "\"__null__\"" in
+  let null = "defaultInitValue" in
   let stack frames = "<<<<" ^ String.concat ", " frames ^ ">>>>" in
   let state ~stack_value ~x ~pc =
     [
@@ -382,6 +394,7 @@ let () =
       ( "display",
         [
           Alcotest.test_case "names" `Quick test_display_names;
+          Alcotest.test_case "null sentinel" `Quick test_display_null;
           Alcotest.test_case "render" `Quick test_render_frame_locals;
           Alcotest.test_case "render infers process" `Quick
             test_render_infers_process;

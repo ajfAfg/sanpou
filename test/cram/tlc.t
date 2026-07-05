@@ -13,8 +13,10 @@ verdict is neither a clean pass nor a deadlock, so failures stay debuggable.
   >   if [ -n "$verdict" ]; then echo "$verdict"; else cat "$1/$2.raw"; fi
   > }
 
-The shipped examples model-check cleanly. rwlock is safety-only;
-semaphore also checks temporal properties (convergence, Termination).
+Every shipped example model-checks cleanly. rwlock is safety-only; the
+others also check temporal properties (Termination and/or user-defined
+ones), which exercises TLC's liveness checking against the generated
+specs — including the defaultInitValue frame sentinel.
 
   $ sanpou compile ../../example/rwlock.snp -o rwlock
   $ tlc rwlock rwlock
@@ -22,6 +24,18 @@ semaphore also checks temporal properties (convergence, Termination).
 
   $ sanpou compile ../../example/semaphore.snp -o semaphore
   $ tlc semaphore semaphore
+  No error has been found
+
+  $ sanpou compile ../../example/factorial.snp -o factorial
+  $ tlc factorial factorial
+  No error has been found
+
+  $ sanpou compile ../../example/barrier.snp -o barrier
+  $ tlc barrier bakery_algorithm
+  No error has been found
+
+  $ sanpou compile ../../example/conditional_variable.snp -o cv
+  $ tlc cv conditional_variable
   No error has been found
 
 Recursion with parameters, locals, and call-return temporaries, checked

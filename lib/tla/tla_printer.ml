@@ -83,6 +83,7 @@ let rec render_expr = function
 
 let render_decl = function
   | DExtends modules -> "EXTENDS " ^ String.concat ", " modules
+  | DConstants names -> "CONSTANT " ^ String.concat ", " names
   | DOpDef (name, params, body) -> (
       let lhs =
         if params = [] then name

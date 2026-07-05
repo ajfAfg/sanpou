@@ -2,6 +2,14 @@ open Tla.Tla_ast
 open Ir
 open Config
 
+(* Null sentinel for not-yet-assigned frame fields. A CONSTANT that the
+   generated .cfg assigns a model value (following PlusCal's convention):
+   model values compare unequal to every other value without a TLC type
+   error. A string sentinel would crash TLC's liveness checking, which
+   compares states for equality — and a frame field that holds "__null__"
+   in one state and an int in another is exactly such a comparison. *)
+let default_init_value = "defaultInitValue"
+
 (* ===== AST expression → TLA+ expression ===== *)
 
 let binop_to_tla = function
@@ -154,12 +162,11 @@ let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
         let params, other_fields = List.assoc proc_name frame_fields in
         (* Bind params to args (evaluated in the caller's frame, unprimed).
            Not-yet-assigned fields (the callee's locals, and params of a
-           process root proc pushed by a wrapper) start as the null sentinel:
-           sanpou values are never strings, so "__null__" cannot collide with
-           a user value and keeps "unassigned" distinguishable from a computed
-           0. Every field must exist at push time: TLC silently ignores EXCEPT
-           updates to missing record fields. *)
-        let null_value = TStr "__null__" in
+           process root proc pushed by a wrapper) start as the null sentinel,
+           which keeps "unassigned" distinguishable from a computed 0. Every
+           field must exist at push time: TLC silently ignores EXCEPT updates
+           to missing record fields. *)
+        let null_value = TId default_init_value in
         let rec bind params args =
           match (params, args) with
           | [], _ -> []
@@ -257,17 +264,19 @@ let proc_to_decls proc_entry_labels frame_fields local_vars (ir : module_ir)
    Each section function returns the tla_decls it contributes (including its
    trailing separators); generate_module concatenates them in order. *)
 
-let header_decls (ir : module_ir) : tla_decl list =
+let header_decls ~uses_default_init_value (ir : module_ir) : tla_decl list =
   let global_vars = List.map fst ir.var_decls in
   let all_tla_vars = ("pc" :: global_vars) @ [ "stack" ] in
-  [
-    DExtends [ "TLC"; "Sequences"; "Integers" ];
-    DSeparator;
-    DVariables all_tla_vars;
-    DSeparator;
-    DOpDef ("vars", [], TSeqLit (List.map (fun v -> TId v) all_tla_vars));
-    DSeparator;
-  ]
+  [ DExtends [ "TLC"; "Sequences"; "Integers" ]; DSeparator ]
+  @ (if uses_default_init_value then
+       [ DConstants [ default_init_value ]; DSeparator ]
+     else [])
+  @ [
+      DVariables all_tla_vars;
+      DSeparator;
+      DOpDef ("vars", [], TSeqLit (List.map (fun v -> TId v) all_tla_vars));
+      DSeparator;
+    ]
 
 let const_and_fun_decls (ir : module_ir) : tla_decl list =
   let with_trailing_sep = function
@@ -447,10 +456,26 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
         (p.proc_name, (p.params, other_fields)))
       ir.procs
   in
+  (* The null sentinel appears when a push leaves frame fields unbound:
+     locals and callRet temps always, params only when the pushing action
+     supplies no arguments (a wrapper starting a root proc). *)
+  let uses_default_init_value =
+    List.exists
+      (fun (p : proc_ir) ->
+        List.exists
+          (fun (a : action) ->
+            match a.stack_op with
+            | StackPush (callee, _, args) ->
+                let params, other_fields = List.assoc callee frame_fields in
+                List.length args < List.length params || other_fields <> []
+            | _ -> false)
+          p.actions)
+      all_runtime_procs
+  in
   let body =
     List.concat
       [
-        header_decls ir;
+        header_decls ~uses_default_init_value ir;
         const_and_fun_decls ir;
         proc_set_decls ir;
         init_decls ir;

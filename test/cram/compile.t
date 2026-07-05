@@ -38,6 +38,8 @@ and termination checking.
   ---- MODULE factorial ----
   EXTENDS TLC, Sequences, Integers
   
+  CONSTANT defaultInitValue
+  
   VARIABLES pc, x, stack
   
   vars == << pc, x, stack >>
@@ -64,7 +66,7 @@ and termination checking.
   
   L5(self) ==
       /\ pc[self] = "L5"
-      /\ stack' = [stack EXCEPT ![self] = << [procedure |-> "fact", return_pc |-> "L6", x__1 |-> (Head(stack[self]).x__1 - 1), callRet__1 |-> "__null__", ans__2 |-> "__null__"] >> \o stack[self]]
+      /\ stack' = [stack EXCEPT ![self] = << [procedure |-> "fact", return_pc |-> "L6", x__1 |-> (Head(stack[self]).x__1 - 1), callRet__1 |-> defaultInitValue, ans__2 |-> defaultInitValue] >> \o stack[self]]
       /\ pc' = [pc EXCEPT ![self] = "L1"]
       /\ UNCHANGED << x >>
   
@@ -90,7 +92,7 @@ and termination checking.
   
   L9(self) ==
       /\ pc[self] = "L9"
-      /\ stack' = [stack EXCEPT ![self] = << [procedure |-> "fact", return_pc |-> "L10", x__1 |-> 5, callRet__1 |-> "__null__", ans__2 |-> "__null__"] >> \o stack[self]]
+      /\ stack' = [stack EXCEPT ![self] = << [procedure |-> "fact", return_pc |-> "L10", x__1 |-> 5, callRet__1 |-> defaultInitValue, ans__2 |-> defaultInitValue] >> \o stack[self]]
       /\ pc' = [pc EXCEPT ![self] = "L1"]
       /\ UNCHANGED << x >>
   
@@ -116,7 +118,7 @@ and termination checking.
   
   __w_workers_entry__(self) ==
       /\ pc[self] = "__w_workers_entry__"
-      /\ stack' = [stack EXCEPT ![self] = << [procedure |-> "worker", return_pc |-> "__w_workers_discard__", callRet__2 |-> "__null__"] >> \o stack[self]]
+      /\ stack' = [stack EXCEPT ![self] = << [procedure |-> "worker", return_pc |-> "__w_workers_discard__", callRet__2 |-> defaultInitValue] >> \o stack[self]]
       /\ pc' = [pc EXCEPT ![self] = "L9"]
       /\ UNCHANGED << x >>
   
@@ -144,6 +146,8 @@ and termination checking.
   ====
   $ cat out_factorial/factorial.cfg
   SPECIFICATION Spec
+  
+  CONSTANT defaultInitValue = defaultInitValue
   
   CHECK_DEADLOCK TRUE
   

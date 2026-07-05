@@ -176,9 +176,11 @@ let is_hidden_field (smap : Source_map.t) name =
   | Some { kind = CallRet _; _ } -> true
   | _ -> false
 
-(* Unassigned frame fields hold the compiler's null sentinel (a TLA string,
-   which user values can never be); show it as "null" *)
-let display_field_value v = if v = "\"__null__\"" then "null" else v
+(* Unassigned frame fields hold the compiler's null sentinel — the
+   defaultInitValue model value (or the "__null__" string in traces from
+   older compilers); show it as "null" *)
+let display_field_value v =
+  if v = "defaultInitValue" || v = "\"__null__\"" then "null" else v
 
 (* The given process's stack frames, top first. None when the stack value
    cannot be parsed (e.g. non-1..n ProcSet). *)
