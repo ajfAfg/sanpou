@@ -82,7 +82,8 @@ Example:
 
 - `checks.deadlock` controls `CHECK_DEADLOCK` in the generated `.cfg`.
 - `checks.termination` adds `Terminating` and `Termination` to the generated TLA+ and automatically includes `Termination` in the generated `.cfg` properties.
-- `properties` lists additional TLC properties to place in the generated `.cfg`.
+- `properties` lists temporal properties (module-level `def`s using `globally`/`finally`) to place in the generated `.cfg`.
+- `invariants` lists boolean `def`s to check as `INVARIANTS` — cheaper for TLC than the equivalent `globally(...)` property.
 
 ### trace: Annotate TLC output
 
@@ -111,37 +112,66 @@ sanpou trace dist/rwlock.out -o dist
 ## Language overview
 
 ```sanpou
-mod rwlock {
-  def readerNum = 2;       // constant definition
-  def foo(x) = x + 1;     // function definition
-  def pair = (1, true);   // tuple value
-  def queue = [1, 2, 3];  // sequence value
+mod example {
+  def n = 3;                       // constant definition
+  def inc(x) = x + 1;              // function definition (pure expression)
+  def abs(x) = if (x < 0) { -x } else { x };   // if expression
+  def pair = (1, true);            // tuple value
+  def queue = [1, 2, 3];           // sequence value
+  def table = { i in 1..n -> 0 };  // map with domain 1..n
 
-  var rcnt = 0;            // mutable variable declaration
-  var lock = false;
+  var count = 0;                   // mutable variable declaration
+  var start in 1..n;               // non-deterministic initial value
+  var grid = { i in 1..n -> { j in 1..n -> 0 } };
 
-  fn lockAcquire() {       // procedure definition
-    await lock == false,    //   await (guard condition)
-    lock = true;            //   assignment
+  // temporal properties: globally/finally are allowed only in
+  // module-level defs like these (list them in the sidecar config)
+  def counted = finally(count > 0);
+  def bounded = globally(forall (i in 1..n) { grid[i][1] >= 0 });
+
+  fn worker() {                    // procedure definition
+    while (count < n) {            // while loop
+      either {                     //   non-deterministic branch;
+        await count % 2 == 0,      //   only arms whose guards hold
+        count = count + 1;         //   are offered
+      } or {
+        await count % 2 == 1,
+        count = count + 1;
+      }
+      with (v in 1..n) {           //   non-deterministic choice of v,
+        grid[v][1] = count;        //   one atomic step; nested
+      }                            //   subscript assignment
+      assert count <= n;           //   checked by TLC; failing is an error
+      ;                            //   empty step (yield point)
+    }
     return ();
   }
 
-  fn reader() {
-    while (true) {          // while loop
-      lockAcquire();        //   procedure call
-      ;                     //   empty step (yield point)
-      if (rcnt == 0) {      //   if branch
-        break;              //   break
-      }
-    }
-  }
-
-  process readers = reader in 1..readerNum;  // process definition
+  fair process workers = worker in 1..n;   // process definition
 }
 ```
 
-Tuples use `(a, b)` syntax and may contain values of different types.
-Sequences use `[a, b, c]` syntax and are intended for homogeneous collections.
+- **Operators**: `+ - * / %` (integer arithmetic; `/` is integer division),
+  `< > <= >= == !=`, `&& || !`.
+- **Values**: tuples `(a, b)` may mix types; sequences `[a, b, c]` are
+  homogeneous; maps `{ x in lo..hi -> e }` have an integer-range domain.
+- **Sequence builtins**: `head`, `tail`, `append`, `concat`, `len`. Builtins
+  are lexically shadowed by module definitions of the same name.
+- **Quantifiers**: `forall (x in lo..hi) { p }` and
+  `exists (x in lo..hi) { p }` are boolean expressions.
+- **Statements**: assignment (including nested subscripts `a[i][j] = e`),
+  procedure calls (with return values; recursion is supported), `await`,
+  `assert`, `return`, `break`, `continue`; `if`/`else if`/`else`, `while`,
+  `either { } or { }`, `with (x in lo..hi) { }`.
+- **Steps and atomicity**: statements joined by commas and ended with `;`
+  form one atomic action; block statements evaluate their condition in an
+  action of its own; a bare `;` is an explicit yield point.
+- **Processes**: `process name = proc in lo..hi;` instantiates a procedure
+  per id in the range (readable as `self`). `fair` adds weak fairness,
+  `fair+` strong fairness.
+- **Temporal properties**: `globally(p)` / `finally(p)` may appear only in
+  module-level `def`s; reference those defs from the sidecar config's
+  `properties` (and plain boolean defs from `invariants`).
 
 ### If expressions and atomicity
 
