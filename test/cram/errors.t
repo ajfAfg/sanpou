@@ -39,7 +39,7 @@ Type error:
   $ cat > add_bool.snp <<'EOF'
   > mod m {
   >   var x = 0;
-  >   fn f() {
+  >   procedure f() {
   >     x = 1 + true;
   >   }
   >   process p = f in 1..1;
@@ -55,12 +55,12 @@ previously crash the emitter or compile to invalid TLA+ are diagnosed:
   $ cat > call_fun.snp <<'EOF'
   > mod m {
   >   def f(x) = x;
-  >   fn g() { f(1); return (); }
+  >   procedure g() { f(1); return (); }
   >   process p = g in 1..1;
   > }
   > EOF
   $ sanpou compile call_fun.snp -o out
-  call_fun.snp:3:12: f is not a procedure
+  call_fun.snp:3:19: f is not a procedure
   [1]
 
   $ cat > higher_order.snp <<'EOF'
@@ -80,7 +80,7 @@ containing one) in a runtime context is rejected:
   $ cat > temporal.snp <<'EOF'
   > mod m {
   >   var x = 0;
-  >   fn f() {
+  >   procedure f() {
   >     await globally(x == 0);
   >     return ();
   >   }
@@ -95,7 +95,7 @@ containing one) in a runtime context is rejected:
   > mod m {
   >   var x = 0;
   >   def p = globally(x == 0);
-  >   fn f() {
+  >   procedure f() {
   >     await p;
   >     return ();
   >   }
@@ -110,7 +110,7 @@ Syntax error:
 
   $ cat > syntax.snp <<'EOF'
   > mod m {
-  >   fn f() {
+  >   procedure f() {
   >     x =
   >   }
   > }
@@ -123,7 +123,7 @@ Lexical error:
 
   $ cat > lexical.snp <<'EOF'
   > mod m {
-  >   fn f() {
+  >   procedure f() {
   >     ?
   >   }
   > }
@@ -136,7 +136,7 @@ Invalid sidecar config:
 
   $ cat > cfg.snp <<'EOF'
   > mod m {
-  >   fn f() {}
+  >   procedure f() {}
   >   process p = f in 1..1;
   > }
   > EOF

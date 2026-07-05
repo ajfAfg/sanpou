@@ -223,7 +223,7 @@ let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
           ^ pretty_expr name_of callee_of hi
           ^ ";\n")
   | ProcDef { name; params; body } ->
-      indent ^ "fn " ^ name ^ "("
+      indent ^ "procedure " ^ name ^ "("
       ^ String.concat ", " (List.map name_of params)
       ^ ") {\n"
       ^ pretty_body name_of callee_of (indent ^ "  ") body

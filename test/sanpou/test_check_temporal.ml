@@ -37,7 +37,7 @@ let () =
                 "mod m {\n\
                 \  var x = 0;\n\
                 \  def p = globally(x == 0);\n\
-                \  fn f() { var p = 1; x = p; return (); }\n\
+                \  procedure f() { var p = 1; x = p; return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
           test_case "shadowed globally is an ordinary function" `Quick
@@ -48,7 +48,7 @@ let () =
                 "mod m {\n\
                 \  var x = 0;\n\
                 \  def globally(p) = p;\n\
-                \  fn f() { await globally(x == 0); return (); }\n\
+                \  procedure f() { await globally(x == 0); return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
         ] );
@@ -58,7 +58,7 @@ let () =
               check_fails
                 "mod m {\n\
                 \  var x = 0;\n\
-                \  fn f() { await globally(x == 0); return (); }\n\
+                \  procedure f() { await globally(x == 0); return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
           test_case "temporal operator in function def" `Quick (fun () ->
@@ -70,7 +70,7 @@ let () =
                 "mod m {\n\
                 \  var x = 0;\n\
                 \  def p = globally(x == 0);\n\
-                \  fn f() { await p; return (); }\n\
+                \  procedure f() { await p; return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
           test_case "temporal def referenced in a var init" `Quick (fun () ->
@@ -86,7 +86,7 @@ let () =
                 \  var x = 0;\n\
                 \  def p = globally(x == 0);\n\
                 \  def q = p;\n\
-                \  fn f() { await q; return (); }\n\
+                \  procedure f() { await q; return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
         ] );

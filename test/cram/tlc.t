@@ -45,7 +45,7 @@ through the stack frames.
   $ cat > fact.snp <<'EOF'
   > mod fact_check {
   >   var x = 0;
-  >   fn fact(n) {
+  >   procedure fact(n) {
   >     if (n == 0) {
   >       return 1;
   >     } else {
@@ -53,7 +53,7 @@ through the stack frames.
   >       return ans;
   >     }
   >   }
-  >   fn f() {
+  >   procedure f() {
   >     x = fact(3);
   >     while (true) {
   >       await x == 6;
@@ -75,7 +75,7 @@ that can never fire, and two processes each waiting on the other.
   $ cat > single_dl.snp <<'EOF'
   > mod single_dl {
   >   var x = 0;
-  >   fn f() {
+  >   procedure f() {
   >     while (true) {
   >       await x == 1,
   >       x = 0;
@@ -93,13 +93,13 @@ that can never fire, and two processes each waiting on the other.
   > mod mutual_dl {
   >   var a = false;
   >   var b = false;
-  >   fn fa() {
+  >   procedure fa() {
   >     while (true) {
   >       await b == true,
   >       a = true;
   >     }
   >   }
-  >   fn fb() {
+  >   procedure fb() {
   >     while (true) {
   >       await a == true,
   >       b = true;
@@ -123,7 +123,7 @@ in a single behavior, so termination also proves both arms fire.
   $ cat > either_guard.snp <<'EOF'
   > mod either_guard {
   >   var x = 0;
-  >   fn f() {
+  >   procedure f() {
   >     while (x < 3) {
   >       either {
   >         await x % 2 == 0,
@@ -153,7 +153,7 @@ would block the single fair process forever.
   $ cat > with_guard.snp <<'EOF'
   > mod with_guard {
   >   var x = 0;
-  >   fn f() {
+  >   procedure f() {
   >     while (x < 3) {
   >       with (v in 1..3) {
   >         await v == x + 1,
@@ -176,7 +176,7 @@ An assert that holds is silent; one that fails halts TLC with an error
   $ cat > assert_ok.snp <<'EOF'
   > mod assert_ok {
   >   var x = 0;
-  >   fn f() {
+  >   procedure f() {
   >     while (x < 3) {
   >       assert x >= 0,
   >       x = x + 1;
@@ -194,7 +194,7 @@ An assert that holds is silent; one that fails halts TLC with an error
   $ cat > assert_fail.snp <<'EOF'
   > mod assert_fail {
   >   var x = 0;
-  >   fn f() {
+  >   procedure f() {
   >     while (x < 3) {
   >       assert x != 2,
   >       x = x + 1;

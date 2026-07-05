@@ -8,18 +8,18 @@ mod rwlock {
   var wcnt = 0;
   var lock = false;
 
-  fn lockAcquire() {
+  procedure lockAcquire() {
     await lock == false,
     lock = true;
     return ();
   }
 
-  fn lockRelease() {
+  procedure lockRelease() {
     lock = false;
     return ();
   }
 
-  fn rwlockReadAcquire() {
+  procedure rwlockReadAcquire() {
     while (true) {
       while (0 < wcnt) {}
       rcnt = rcnt + 1;
@@ -31,25 +31,25 @@ mod rwlock {
     return ();
   }
 
-  fn rwlockReadRelease() {
+  procedure rwlockReadRelease() {
     rcnt = rcnt - 1;
     return ();
   }
 
-  fn rwlockWriteAcquire() {
+  procedure rwlockWriteAcquire() {
     wcnt = wcnt + 1;
     while (0 < rcnt) {}
     lockAcquire();
     return ();
   }
 
-  fn rwlockWriteRelease() {
+  procedure rwlockWriteRelease() {
     lockRelease();
     wcnt = wcnt - 1;
     return ();
   }
 
-  fn reader() {
+  procedure reader() {
     while (true) {
       rwlockReadAcquire();
       ;
@@ -58,7 +58,7 @@ mod rwlock {
     return ();
   }
 
-  fn writer() {
+  procedure writer() {
     while (true) {
       rwlockWriteAcquire();
       ;

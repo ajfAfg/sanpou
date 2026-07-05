@@ -56,7 +56,7 @@ let () =
       ( "step_atomicity",
         [
           test_case "statements split into separate steps" `Quick (fun () ->
-              check_items "fn foo() { x = 1; return (); }"
+              check_items "procedure foo() { x = 1; return (); }"
                 [
                   proc_def "foo" cl0
                     [
@@ -66,7 +66,7 @@ let () =
                 ]);
           test_case "await with comma merges into one step" `Quick (fun () ->
               check_items
-                "fn foo() { await lock == false, lock = true; return (); }"
+                "procedure foo() { await lock == false, lock = true; return (); }"
                 [
                   proc_def "foo" cl0
                     [
@@ -78,13 +78,13 @@ let () =
                     ];
                 ]);
           test_case "bare semicolon is an empty step" `Quick (fun () ->
-              check_items "fn foo() { ; }" [ proc_def "foo" cl0 [ empty_step ] ]);
+              check_items "procedure foo() { ; }" [ proc_def "foo" cl0 [ empty_step ] ]);
         ] );
       ( "else_if",
         [
           test_case "else if desugars to a nested if in the else body" `Quick
             (fun () ->
-              check_items "fn foo() { if (a) { ; } else if (b) { ; } }"
+              check_items "procedure foo() { if (a) { ; } else if (b) { ; } }"
                 [
                   proc_def "foo" cl0
                     [
@@ -165,7 +165,7 @@ let () =
                     (binop Plus (var "x") (intlit 1));
                 ]);
           test_case "var step" `Quick (fun () ->
-              check_items "fn foo() { var x = 5; return (); }"
+              check_items "procedure foo() { var x = 5; return (); }"
                 [
                   proc_def "foo" cl0
                     [

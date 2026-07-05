@@ -7,7 +7,7 @@ A single process stuck on an await gives a short, deterministic trace.
   $ cat > dl.snp <<'EOF'
   > mod dl {
   >   var x = 0;
-  >   fn f() {
+  >   procedure f() {
   >     while (true) {
   >       await x == 1,
   >       x = 0;

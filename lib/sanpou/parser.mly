@@ -10,7 +10,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token <int> INTV
 %token <string> ID
 %token TRUE FALSE
-%token DEF VAR FN MOD FAIR PROCESS IN SELF
+%token DEF VAR PROCEDURE_KW MOD FAIR PROCESS IN SELF
 %token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT ASSERT FORALL EXISTS EITHER OR WITH
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
@@ -63,7 +63,7 @@ item:
       { mk $startpos (VarDecl { name; init = InitValue value }) }
   | VAR name=ID IN lo=expr DOTDOT hi=expr SEMI
       { mk $startpos (VarDecl { name; init = InitRange (lo, hi) }) }
-  | FN name=ID LPAREN params=separated_list(COMMA, ID) RPAREN LBRACE body=body RBRACE
+  | PROCEDURE_KW name=ID LPAREN params=separated_list(COMMA, ID) RPAREN LBRACE body=body RBRACE
       { mk $startpos (ProcDef { name; params; body }) }
   | fairness=fairness_marker PROCESS name=ID EQ proc=ID IN lo=expr DOTDOT hi=expr SEMI
       { mk $startpos (Process { name; proc; fairness; lo; hi }) }

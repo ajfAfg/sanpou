@@ -4,7 +4,7 @@ exception Error of string
 let reservedWords = [
   ("def", Parser.DEF);
   ("var", Parser.VAR);
-  ("fn", Parser.FN);
+  ("procedure", Parser.PROCEDURE_KW);
   ("mod", Parser.MOD);
   ("fair", Parser.FAIR);
   ("process", Parser.PROCESS);

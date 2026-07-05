@@ -8,7 +8,7 @@ mod conditional_variable {
 
   def lossless = globally(finally(concat(producerState, consumerState) == data));
 
-  fn producer() {
+  procedure producer() {
     while (producerState != []) {
       var tmp = head(producerState);
       producerState = tail(producerState);
@@ -18,7 +18,7 @@ mod conditional_variable {
     return ();
   }
 
-  fn consumer() {
+  procedure consumer() {
     while (true) {
       await channel != [];
       var tmp = head(channel);
