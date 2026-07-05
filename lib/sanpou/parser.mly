@@ -145,6 +145,9 @@ postfix_expr:
 primary_expr:
   | MINUS rhs=primary_expr { mk $startpos (UnOp (Neg, rhs)) }
   | NOT rhs=primary_expr { mk $startpos (UnOp (Not, rhs)) }
+  | IF LPAREN cond=expr RPAREN LBRACE then_e=expr RBRACE
+      ELSE LBRACE else_e=expr RBRACE
+      { mk $startpos (IfExpr (cond, then_e, else_e)) }
   | value=INTV { mk $startpos (IntLit value) }
   | TRUE { mk $startpos (BoolLit true) }
   | FALSE { mk $startpos (BoolLit false) }

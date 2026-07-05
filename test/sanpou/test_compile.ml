@@ -95,6 +95,19 @@ let () =
               has "quotient == (7 \\div 2)";
               has "remainder == (7 % 2)";
               has "negated == ~(TRUE)");
+          Alcotest.test_case
+            "if expression compiles to atomic conditional update" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x = 0;\n\
+                   fn foo() { x = if (x == 0) { 1 } else { x }; return (); }\n\
+                   process ps = foo in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "x' = (IF (x = 0) THEN 1 ELSE x)" tla);
           Alcotest.test_case "map init and indexed update compile" `Quick
             (fun () ->
               let ast =

@@ -42,6 +42,17 @@ let () =
               check_ok "mod m { def x = !true; }");
           test_case "len of sequence" `Quick (fun () ->
               check_ok "mod m { def x = len([1, 2, 3]); }");
+          test_case "if expression" `Quick (fun () ->
+              check_ok "mod m { def x = if (true) { 1 } else { 2 }; }");
+          test_case "if expression in function def" `Quick (fun () ->
+              check_ok "mod m { def abs(x) = if (x < 0) { -x } else { x }; }");
+          test_case "if expression in assignment" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() { x = if (x == 0) { 1 } else { x }; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "len is int" `Quick (fun () ->
               check_ok "mod m { def x = len([1]) + 1; }");
           test_case "unary minus literal" `Quick (fun () ->
@@ -302,6 +313,10 @@ let () =
               check_fails "mod m { def x = head((1, 2)); }");
           test_case "len on int" `Quick (fun () ->
               check_fails "mod m { def x = len(1); }");
+          test_case "if expression non-bool condition" `Quick (fun () ->
+              check_fails "mod m { def x = if (1) { 2 } else { 3 }; }");
+          test_case "if expression branch mismatch" `Quick (fun () ->
+              check_fails "mod m { def x = if (true) { 1 } else { false }; }");
           test_case "len on tuple" `Quick (fun () ->
               check_fails "mod m { def x = len((1, 2)); }");
           test_case "head on map" `Quick (fun () ->

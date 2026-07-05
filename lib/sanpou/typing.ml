@@ -251,6 +251,11 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       if elems = [] then TyUnit
       else TyTuple (List.map (infer_expr fresh_tyvar env) elems)
   | Sequence elems -> infer_sequence_literal fresh_tyvar env elems
+  | IfExpr (cond, then_e, else_e) ->
+      unify cond.loc (infer_expr fresh_tyvar env cond) TyBool;
+      let then_ty = infer_expr fresh_tyvar env then_e in
+      unify else_e.loc then_ty (infer_expr fresh_tyvar env else_e);
+      then_ty
 
 (* ===== Check procedure bodies ===== *)
 

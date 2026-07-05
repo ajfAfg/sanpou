@@ -55,6 +55,7 @@ and ('n, 'c) expr_desc =
     }
   | Tuple of ('n, 'c) expr list
   | Sequence of ('n, 'c) expr list
+  | IfExpr of ('n, 'c) expr * ('n, 'c) expr * ('n, 'c) expr
 [@@deriving show, eq]
 
 type ('n, 'c) assign_target =
@@ -141,5 +142,7 @@ let rec map_expr (f : 'n -> 'm) (g : 'c -> 'd) (e : ('n, 'c) expr) :
           }
     | Tuple elems -> Tuple (List.map (map_expr f g) elems)
     | Sequence elems -> Sequence (List.map (map_expr f g) elems)
+    | IfExpr (cond, then_e, else_e) ->
+        IfExpr (map_expr f g cond, map_expr f g then_e, map_expr f g else_e)
   in
   { desc; loc = e.loc }

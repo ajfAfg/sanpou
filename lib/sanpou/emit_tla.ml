@@ -75,6 +75,12 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
   | Generic_ast.Tuple elems -> TSeqLit (List.map (expr_to_tla local_vars) elems)
   | Generic_ast.Sequence elems ->
       TSeqLit (List.map (expr_to_tla local_vars) elems)
+  | Generic_ast.IfExpr (cond, then_e, else_e) ->
+      TParens
+        (TIf
+           ( expr_to_tla local_vars cond,
+             expr_to_tla local_vars then_e,
+             expr_to_tla local_vars else_e ))
 
 (* Module-level expressions have no local vars *)
 let expr_to_tla_global = expr_to_tla []
