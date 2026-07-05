@@ -142,19 +142,28 @@ and pretty_block_stmt name_of callee_of indent = function
       ^ ") {\n"
       ^ pretty_body name_of callee_of (indent ^ "  ") body
       ^ indent ^ "}\n"
-  | If { cond; body; else_body } -> (
-      indent ^ "if ("
-      ^ pretty_expr name_of callee_of cond
-      ^ ") {\n"
-      ^ pretty_body name_of callee_of (indent ^ "  ") body
-      ^ indent ^ "}"
-      ^
-      match else_body with
-      | Some else_body ->
-          " else {\n"
-          ^ pretty_body name_of callee_of (indent ^ "  ") else_body
-          ^ indent ^ "}\n"
-      | None -> "\n")
+  | If { cond; body; else_body } ->
+      indent ^ pretty_if name_of callee_of indent cond body else_body
+
+(* Printed without the leading indent so an else-if chain can continue on
+   the closing brace's line. An else body that is exactly a nested if (the
+   shape [else if] parses to) prints back as [else if]. *)
+and pretty_if name_of callee_of indent cond body else_body =
+  "if ("
+  ^ pretty_expr name_of callee_of cond
+  ^ ") {\n"
+  ^ pretty_body name_of callee_of (indent ^ "  ") body
+  ^ indent ^ "}"
+  ^
+  match else_body with
+  | Some [ { desc = BlockStep (If { cond = c; body = b; else_body = eb }); _ } ]
+    ->
+      " else " ^ pretty_if name_of callee_of indent c b eb
+  | Some else_body ->
+      " else {\n"
+      ^ pretty_body name_of callee_of (indent ^ "  ") else_body
+      ^ indent ^ "}\n"
+  | None -> "\n"
 
 and pretty_body name_of callee_of indent steps =
   String.concat "" (List.map (pretty_step name_of callee_of indent) steps)

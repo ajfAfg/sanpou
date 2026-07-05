@@ -80,6 +80,36 @@ let () =
           test_case "bare semicolon is an empty step" `Quick (fun () ->
               check_items "fn foo() { ; }" [ proc_def "foo" cl0 [ empty_step ] ]);
         ] );
+      ( "else_if",
+        [
+          test_case "else if desugars to a nested if in the else body" `Quick
+            (fun () ->
+              check_items "fn foo() { if (a) { ; } else if (b) { ; } }"
+                [
+                  proc_def "foo" cl0
+                    [
+                      node
+                        (BlockStep
+                           (If
+                              {
+                                cond = var "a";
+                                body = [ empty_step ];
+                                else_body =
+                                  Some
+                                    [
+                                      node
+                                        (BlockStep
+                                           (If
+                                              {
+                                                cond = var "b";
+                                                body = [ empty_step ];
+                                                else_body = None;
+                                              }));
+                                    ];
+                              }));
+                    ];
+                ]);
+        ] );
       ( "tuple_vs_paren",
         [
           test_case "empty" `Quick (fun () ->

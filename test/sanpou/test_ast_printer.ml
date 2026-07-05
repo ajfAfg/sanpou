@@ -53,6 +53,14 @@ let () =
               pretty_roundtrip
                 "mod m { fn foo() { if (x == 0) { break; } else { continue; } \
                  } }");
+          test_case "else if chain" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { if (x == 0) { break; } else if (x == 1) { \
+                 continue; } else { break; } } }");
+          test_case "else if without final else" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { if (x == 0) { break; } else if (x == 1) { \
+                 continue; } } }");
           test_case "inequality" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = 1 != 2; }");
           test_case "greater than" `Quick (fun () ->
@@ -164,5 +172,20 @@ let () =
           test_case "fair process" `Quick (fun () ->
               pretty_prints "mod m { fair process ps = foo in 1..n; }"
                 "mod m {\n  fair process ps = foo in 1..n;\n}\n");
+          test_case "else if prints on one line" `Quick (fun () ->
+              pretty_prints
+                "mod m { fn foo() { if (a) { break; } else if (b) { break; } \
+                 else { continue; } } }"
+                "mod m {\n\
+                \  fn foo() {\n\
+                \    if (a) {\n\
+                \      break;\n\
+                \    } else if (b) {\n\
+                \      break;\n\
+                \    } else {\n\
+                \      continue;\n\
+                \    }\n\
+                \  }\n\
+                 }\n");
         ] );
     ]

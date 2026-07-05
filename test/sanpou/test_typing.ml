@@ -53,6 +53,17 @@ let () =
                 \  fn foo() { x = if (x == 0) { 1 } else { x }; return (); }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "else if chain" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() {\n\
+                \    if (x == 0) { x = 1; } else if (x == 1) { x = 2; }\n\
+                \    else { x = 0; }\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "len is int" `Quick (fun () ->
               check_ok "mod m { def x = len([1]) + 1; }");
           test_case "unary minus literal" `Quick (fun () ->
