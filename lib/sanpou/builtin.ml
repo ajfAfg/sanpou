@@ -4,7 +4,7 @@
    applied). Their type signatures live in Typing and their TLA+ translations
    in Emit_tla, both as exhaustive matches on this type. *)
 
-type t = Globally | Finally | Head | Tail | Append | Concat
+type t = Globally | Finally | Head | Tail | Append | Concat | Len
 [@@deriving show, eq]
 
 let of_name = function
@@ -14,6 +14,7 @@ let of_name = function
   | "tail" -> Some Tail
   | "append" -> Some Append
   | "concat" -> Some Concat
+  | "len" -> Some Len
   | _ -> None
 
 let name = function
@@ -23,3 +24,4 @@ let name = function
   | Tail -> "tail"
   | Append -> "append"
   | Concat -> "concat"
+  | Len -> "len"

@@ -40,6 +40,10 @@ let () =
               check_ok "mod m { def x = 7 % 2; }");
           test_case "logical not" `Quick (fun () ->
               check_ok "mod m { def x = !true; }");
+          test_case "len of sequence" `Quick (fun () ->
+              check_ok "mod m { def x = len([1, 2, 3]); }");
+          test_case "len is int" `Quick (fun () ->
+              check_ok "mod m { def x = len([1]) + 1; }");
           test_case "unary minus literal" `Quick (fun () ->
               check_ok "mod m { def x = -1; }");
           test_case "unary minus paren expr" `Quick (fun () ->
@@ -296,6 +300,10 @@ let () =
               check_fails "mod m { def x = [1, true]; }");
           test_case "head on tuple" `Quick (fun () ->
               check_fails "mod m { def x = head((1, 2)); }");
+          test_case "len on int" `Quick (fun () ->
+              check_fails "mod m { def x = len(1); }");
+          test_case "len on tuple" `Quick (fun () ->
+              check_fails "mod m { def x = len((1, 2)); }");
           test_case "head on map" `Quick (fun () ->
               check_fails "mod m { def x = head({ i in 1..2: 0; }); }");
           test_case "continue outside loop" `Quick (fun () ->

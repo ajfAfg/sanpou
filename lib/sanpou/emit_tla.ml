@@ -61,6 +61,7 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
               [ expr_to_tla local_vars seq; expr_to_tla local_vars value ] )
       | Builtin.Concat, [ lhs; rhs ] ->
           TConcat (expr_to_tla local_vars lhs, expr_to_tla local_vars rhs)
+      | Builtin.Len, [ e ] -> TApp ("Len", [ expr_to_tla local_vars e ])
       | _ -> assert false (* arity enforced by Typing *))
   | Generic_ast.App (Normalized_ast.Fun name, args) ->
       TApp (name, List.map (expr_to_tla local_vars) args)

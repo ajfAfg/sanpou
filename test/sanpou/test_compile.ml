@@ -55,6 +55,7 @@ let () =
                    def ys = tail(xs);\n\
                    def zs = append(xs, 3);\n\
                    def ws = concat(xs, [4, 5]);\n\
+                   def n = len(xs);\n\
                    fn main() { return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"
@@ -65,7 +66,8 @@ let () =
               has "y == Head(xs)";
               has "ys == Tail(xs)";
               has "zs == Append(xs, 3)";
-              has "ws == xs \\o << 4, 5 >>");
+              has "ws == xs \\o << 4, 5 >>";
+              has "n == Len(xs)");
           Alcotest.test_case "operators compile to tla equivalents" `Quick
             (fun () ->
               let ast =
