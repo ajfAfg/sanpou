@@ -318,11 +318,12 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
       | None -> ());
       ctx
   | VarStep (name, value) ->
+      (* Local variables are mutable, so their type is never generalized
+         (value restriction): reads and assignments share one type. *)
       let val_ty = infer_expr ctx.fresh_tyvar ctx.env value in
-      let tysc = generalize ctx.env val_ty in
       {
         ctx with
-        env = (name, tysc) :: ctx.env;
+        env = (name, tysc_of_ty val_ty) :: ctx.env;
         mutable_vars = (name, val_ty) :: ctx.mutable_vars;
       }
 

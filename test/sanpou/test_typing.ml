@@ -153,6 +153,18 @@ let () =
                 \  fn foo() { ; return (); }\n\
                 \  process ps = foo in 1..2;\n\
                 \  }");
+          test_case "local var type fixed by first use" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var g = 0;\n\
+                \  fn foo() {\n\
+                \    var xs = [];\n\
+                \    xs = append(xs, 1);\n\
+                \    g = head(xs);\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "full rwlock" `Quick (fun () ->
               check_ok
                 {|mod rwlock {
@@ -274,5 +286,17 @@ let () =
               check_fails
                 "mod m { fn foo() { continue; return (); } process ps = foo in \
                  1..1; }");
+          test_case "local var used at two types" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var g = 0;\n\
+                \  fn foo() {\n\
+                \    var xs = [];\n\
+                \    if (xs == [true]) { g = 1; }\n\
+                \    xs = append(xs, 1);\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
         ] );
     ]
