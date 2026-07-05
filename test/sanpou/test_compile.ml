@@ -124,6 +124,21 @@ let () =
               let has s = has_in s tla in
               has "x \\in 1..3";
               has "y = 0");
+          Alcotest.test_case "assert compiles to TLC Assert with location"
+            `Quick (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x = 0;\n\
+                   fn foo() { assert x >= 0, x = x + 1; return (); }\n\
+                   process ps = foo in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in
+                "Assert((x >= 0), \"assertion failed at line 3, col 12: x >= \
+                 0\")"
+                tla);
           Alcotest.test_case "nested subscript assignment compiles to EXCEPT"
             `Quick (fun () ->
               let ast =

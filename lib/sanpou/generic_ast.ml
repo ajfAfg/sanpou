@@ -84,6 +84,7 @@ and ('n, 'c) simple_stmt_desc =
   | Break
   | Continue
   | Await of ('n, 'c) expr
+  | Assert of ('n, 'c) expr
 [@@deriving show, eq]
 
 type ('n, 'c) step = ('n, 'c) step_desc node

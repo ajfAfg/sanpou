@@ -165,6 +165,9 @@ let normalize_simple_stmt st (stmt : Resolved_ast.simple_stmt) :
   | Await cond ->
       let steps, cond = normalize_expr st cond in
       (steps, at (Await cond))
+  | Assert cond ->
+      let steps, cond = normalize_expr st cond in
+      (steps, at (Assert cond))
 
 (* ===== Steps ===== *)
 

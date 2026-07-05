@@ -148,6 +148,14 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
   let guard_conjuncts =
     match action.guard with Some g -> [ to_tla g ] | None -> []
   in
+  (* After the guard: conjunctions evaluate left to right, so a disabled
+     action never reaches its asserts; an enabled one halts TLC with the
+     message when the condition is false. *)
+  let assert_conjuncts =
+    List.map
+      (fun (cond, message) -> TApp ("Assert", [ to_tla cond; TStr message ]))
+      action.asserts
+  in
   (* Split assignments: globals become their own conjuncts, locals become
      EXCEPT updates of the top frame folded into stack'. *)
   let local_updates =
@@ -266,8 +274,8 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
     | unchanged -> [ TUnchanged (List.map (fun v -> TId v) unchanged) ]
   in
   let base =
-    guard_conjuncts @ global_assign_conjuncts @ stack_op_conjuncts
-    @ stack_conjuncts
+    guard_conjuncts @ assert_conjuncts @ global_assign_conjuncts
+    @ stack_op_conjuncts @ stack_conjuncts
     @ (pc_conjunct :: unchanged_conjuncts)
   in
   (* An action with binders fires for any binder value satisfying its
