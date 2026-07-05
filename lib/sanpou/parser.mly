@@ -192,11 +192,11 @@ primary_expr:
   | TRUE { mk $startpos (BoolLit true) }
   | FALSE { mk $startpos (BoolLit false) }
   | SELF { mk $startpos Self }
+  (* Applications parse as plain [App]; builtin resolution is a scoping
+     question and happens in [Alpha_convert], where module-level
+     definitions lexically shadow builtins. *)
   | name=ID LPAREN args=separated_list(COMMA, expr) RPAREN
-      { mk $startpos
-          (match Builtin.of_name name with
-          | Some b -> Builtin (b, args)
-          | None -> App (name, args)) }
+      { mk $startpos (App (name, args)) }
   | name=ID { mk $startpos (Var name) }
   (* Mirrors the map type's notation ({int -> t}). The arrow separator
      leaves `{ x in S : p }` free for a future set filter form. *)

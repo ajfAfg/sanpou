@@ -124,6 +124,22 @@ let () =
               let has s = has_in s tla in
               has "x \\in 1..3";
               has "y = 0");
+          Alcotest.test_case "defs shadow builtins from their point onward"
+            `Quick (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   def a = head([1, 2]);\n\
+                   def head(x) = x + 1;\n\
+                   def b = head(2);\n\
+                   fn main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "a == Head(<< 1, 2 >>)";
+              has "b == head(2)");
           Alcotest.test_case "assert compiles to TLC Assert with location"
             `Quick (fun () ->
               let ast =

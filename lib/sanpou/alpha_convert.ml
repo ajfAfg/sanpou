@@ -8,20 +8,32 @@ open Generic_ast
    source name for display, so no rename table needs to travel with the
    tree. Module-level expressions are not renamed and convert verbatim.
 
-   Applied callees are resolved at the same time: a name in application
-   position becomes [Proc] when the module defines a procedure by that name
-   and [Fun] otherwise, so downstream passes never consult a name table. *)
+   Applied callees are resolved at the same time, lexically: the module's
+   definitions seen so far shadow the builtins, which form the outermost
+   scope. Resolution is sequential — a definition is visible only after its
+   own item, matching the type checker's environment — so a name resolves
+   to [Proc]/[Fun] when a preceding module-level definition binds it, to a
+   [Builtin] node otherwise when a builtin has that name, and to [Fun] as a
+   last resort (the type checker has already rejected unbound callees). *)
 
-type state = { var_name_counter : int ref; proc_names : id list }
-
-let create_state proc_names = { var_name_counter = ref 0; proc_names }
-
-let resolve_callee st name : Resolved_ast.callee =
-  if List.mem name st.proc_names then Proc name else Fun name
+type state = {
+  var_name_counter : int ref;
+  defs : (id * Resolved_ast.callee) list;
+      (* module-level definitions seen so far; non-callables map to [Fun]
+         (applying one is a type error caught before this pass) *)
+  rename_binders : bool;
+      (* binders in module-level expressions keep their source name *)
+}
 
 let fresh st name : Resolved_ast.ident =
-  incr st.var_name_counter;
-  { name = name ^ "__" ^ string_of_int !(st.var_name_counter); original = name }
+  if not st.rename_binders then Resolved_ast.ident name
+  else begin
+    incr st.var_name_counter;
+    {
+      name = name ^ "__" ^ string_of_int !(st.var_name_counter);
+      original = name;
+    }
+  end
 
 (* [env] maps a source name to its renamed ident; names bound outside the
    procedure (globals, constants, functions) pass through unrenamed. *)
@@ -42,8 +54,14 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
     | UnOp (op, rhs) -> UnOp (op, alpha_expr env st rhs)
     | BinOp (op, lhs, rhs) ->
         BinOp (op, alpha_expr env st lhs, alpha_expr env st rhs)
-    | App (name, args) ->
-        App (resolve_callee st name, List.map (alpha_expr env st) args)
+    | App (name, args) -> (
+        let args = List.map (alpha_expr env st) args in
+        match List.assoc_opt name st.defs with
+        | Some callee -> App (callee, args)
+        | None -> (
+            match Builtin.of_name name with
+            | Some b -> Builtin (b, args)
+            | None -> App (Resolved_ast.Fun name, args)))
     | Builtin (b, args) -> Builtin (b, List.map (alpha_expr env st) args)
     | Subscript (lhs, index) ->
         Subscript (alpha_expr env st lhs, alpha_expr env st index)
@@ -149,50 +167,60 @@ and alpha_body st env (steps : Surface_ast.body) : Resolved_ast.body =
 (* ===== Module transformation ===== *)
 
 let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
-  let proc_names =
-    List.filter_map
-      (fun (item : Surface_ast.item) ->
-        match item.desc with ProcDef { name; _ } -> Some name | _ -> None)
-      m.items
-  in
-  let st = create_state proc_names in
+  let counter = ref 0 in
   (* Module-level expressions are never renamed; their names display as
      themselves. *)
-  let plain = Generic_ast.map_expr Resolved_ast.ident (resolve_callee st) in
-  let items =
-    List.map
-      (fun (item : Surface_ast.item) ->
-        let desc : (Resolved_ast.ident, Resolved_ast.callee) item_desc =
+  let module_st defs =
+    { var_name_counter = counter; defs; rename_binders = false }
+  in
+  let items_rev, _ =
+    List.fold_left
+      (fun (acc, defs) (item : Surface_ast.item) ->
+        let mst = module_st defs in
+        let plain = alpha_expr [] mst in
+        let desc, defs =
           match item.desc with
-          | ConstDef { name; value } -> ConstDef { name; value = plain value }
+          | ConstDef { name; value } ->
+              ( ConstDef { name; value = plain value },
+                (name, Resolved_ast.Fun name) :: defs )
           | FunDef { name; params; body_expr } ->
-              FunDef { name; params; body_expr = plain body_expr }
+              (* The body sees the preceding definitions, not the function
+                 itself: defs are not recursive, matching the type
+                 checker. *)
+              ( FunDef { name; params; body_expr = plain body_expr },
+                (name, Resolved_ast.Fun name) :: defs )
           | VarDecl { name; init } ->
-              VarDecl
-                {
-                  name;
-                  init =
-                    Generic_ast.map_var_init Resolved_ast.ident
-                      (resolve_callee st) init;
-                }
+              let init =
+                match init with
+                | InitValue value -> InitValue (plain value)
+                | InitRange (lo, hi) -> InitRange (plain lo, plain hi)
+              in
+              (VarDecl { name; init }, (name, Resolved_ast.Fun name) :: defs)
           | Process { name; proc; fairness; lo; hi } ->
-              Process { name; proc; fairness; lo = plain lo; hi = plain hi }
+              ( Process { name; proc; fairness; lo = plain lo; hi = plain hi },
+                defs )
           | ProcDef { name; params; body } ->
+              (* The procedure sees itself (self-recursion), again matching
+                 the type checker's environment. *)
+              let defs = (name, Resolved_ast.Proc name) :: defs in
+              let pst =
+                { var_name_counter = counter; defs; rename_binders = true }
+              in
               let env_rev, params_rev =
                 List.fold_left
                   (fun (env_acc, params_acc) param ->
-                    let renamed = fresh st param in
+                    let renamed = fresh pst param in
                     ((param, renamed) :: env_acc, renamed :: params_acc))
                   ([], []) params
               in
               let env = List.rev env_rev in
               let params = List.rev params_rev in
-              ProcDef { name; params; body = alpha_body st env body }
+              (ProcDef { name; params; body = alpha_body pst env body }, defs)
         in
-        { desc; loc = item.loc })
-      m.items
+        ({ desc; loc = item.loc } :: acc, defs))
+      ([], []) m.items
   in
-  { mod_name = m.mod_name; items; mod_loc = m.mod_loc }
+  { mod_name = m.mod_name; items = List.rev items_rev; mod_loc = m.mod_loc }
 
 (* ===== Public API ===== *)
 

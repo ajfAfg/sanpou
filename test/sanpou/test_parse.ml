@@ -131,11 +131,12 @@ let () =
         ] );
       ( "builtin",
         [
-          test_case "application resolves to builtin" `Quick (fun () ->
+          (* Builtin resolution is a scoping question and happens in
+             Alpha_convert; the parser leaves every application an App. *)
+          test_case "builtin-named application parses as a plain app" `Quick
+            (fun () ->
               check_items "def x = head(xs);"
-                [
-                  const_def "x" (builtin_ Sanpou.Builtin.Head (cl1 (var "xs")));
-                ]);
+                [ const_def "x" (app "head" (cl1 (var "xs"))) ]);
           test_case "non-builtin stays an app" `Quick (fun () ->
               check_items "def x = first(xs);"
                 [ const_def "x" (app "first" (cl1 (var "xs"))) ]);

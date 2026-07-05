@@ -33,7 +33,6 @@ type type_error =
   | Return_type_mismatch
   | Assign_to_non_variable of id
   | Recursive_type
-  | Builtin_redefinition of id
 
 exception Type_error of type_error * loc
 
@@ -222,10 +221,25 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       let ty2 = infer_expr fresh_tyvar env rhs in
       ty_prim fresh_tyvar ~lhs_loc:lhs.loc ~rhs_loc:rhs.loc op ty1 ty2
   | App (name, args) ->
+      (* Lexical resolution, mirroring Alpha_convert: a definition in the
+         environment shadows the builtin of the same name; builtins are the
+         outermost scope. *)
       let fn_ty =
         match List.assoc_opt name env with
         | Some tysc -> instantiate fresh_tyvar tysc
-        | None -> type_error (Unbound_variable name) e.loc
+        | None -> (
+            match Builtin.of_name name with
+            | Some b ->
+                (* Arity is checked here so the error is an Arity_mismatch
+                   rather than a TyFun clash. *)
+                let param_tys, ret_ty = builtin_signature fresh_tyvar b in
+                if List.length param_tys <> List.length args then
+                  type_error
+                    (Arity_mismatch
+                       (Builtin.name b, List.length param_tys, List.length args))
+                    e.loc;
+                TyFun (param_tys, ret_ty)
+            | None -> type_error (Unbound_variable name) e.loc)
       in
       infer_app fresh_tyvar env e.loc fn_ty args
   | Builtin (b, args) ->
@@ -381,11 +395,6 @@ let check_module (m : Surface_ast.module_def) : unit =
             let ty = infer_expr fresh_tyvar env value in
             (name, generalize env ty) :: env
         | FunDef { name; params; body_expr } ->
-            (* Applications resolve builtin names at parse time, so a
-               callable named like a builtin could never be called; reject
-               it instead of letting it die silently. *)
-            if Builtin.of_name name <> None then
-              type_error (Builtin_redefinition name) item.loc;
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
               List.map2
@@ -406,8 +415,6 @@ let check_module (m : Surface_ast.module_def) : unit =
             in
             (name, tysc_of_ty ty) :: env
         | ProcDef { name = proc_name; params; body } ->
-            if Builtin.of_name proc_name <> None then
-              type_error (Builtin_redefinition proc_name) item.loc;
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
               List.map2
@@ -504,8 +511,3 @@ let string_of_type_error = function
   | Assign_to_non_variable id ->
       Printf.sprintf "Cannot assign to %s: not a mutable variable" id
   | Recursive_type -> "Recursive type detected"
-  | Builtin_redefinition id ->
-      Printf.sprintf
-        "%s is a built-in function and cannot be redefined: a call to %s \
-         always resolves to the built-in"
-        id id
