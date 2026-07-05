@@ -86,29 +86,36 @@ let alpha_assign_target env st :
 
 (* ===== Step and body alpha conversion ===== *)
 
+let alpha_simple_stmt env st (stmt : Surface_ast.simple_stmt) :
+    Resolved_ast.simple_stmt =
+  let desc : (Resolved_ast.ident, Resolved_ast.callee) simple_stmt_desc =
+    match stmt.desc with
+    | Assign (target, value) ->
+        Assign (alpha_assign_target env st target, alpha_expr env st value)
+    | Call (name, args) -> Call (name, List.map (alpha_expr env st) args)
+    | Return value -> Return (alpha_expr env st value)
+    | Break -> Break
+    | Continue -> Continue
+    | Await cond -> Await (alpha_expr env st cond)
+  in
+  { desc; loc = stmt.loc }
+
 let rec alpha_step st env (step : Surface_ast.step) : Resolved_ast.step =
   let desc : (Resolved_ast.ident, Resolved_ast.callee) step_desc =
     match step.desc with
-    | SimpleStep stmts ->
-        let alpha_simple_stmt (stmt : Surface_ast.simple_stmt) :
-            Resolved_ast.simple_stmt =
-          let desc : (Resolved_ast.ident, Resolved_ast.callee) simple_stmt_desc
-              =
-            match stmt.desc with
-            | Assign (target, value) ->
-                Assign
-                  (alpha_assign_target env st target, alpha_expr env st value)
-            | Call (name, args) -> Call (name, List.map (alpha_expr env st) args)
-            | Return value -> Return (alpha_expr env st value)
-            | Break -> Break
-            | Continue -> Continue
-            | Await cond -> Await (alpha_expr env st cond)
-          in
-          { desc; loc = stmt.loc }
-        in
-        SimpleStep (List.map alpha_simple_stmt stmts)
+    | SimpleStep stmts -> SimpleStep (List.map (alpha_simple_stmt env st) stmts)
     | EmptyStep -> EmptyStep
     | BlockStep stmt -> BlockStep (alpha_block_stmt st env stmt)
+    | WithStep { binder; lo; hi; stmts } ->
+        let binder' = fresh st binder in
+        let env' = (binder, binder') :: env in
+        WithStep
+          {
+            binder = binder';
+            lo = alpha_expr env st lo;
+            hi = alpha_expr env st hi;
+            stmts = List.map (alpha_simple_stmt env' st) stmts;
+          }
     | VarStep _ -> failwith "VarStep should be handled in alpha_body"
   in
   { desc; loc = step.loc }

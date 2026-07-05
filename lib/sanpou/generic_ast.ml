@@ -92,6 +92,15 @@ and ('n, 'c) step_desc =
   | EmptyStep
   | BlockStep of ('n, 'c) block_stmt
   | VarStep of 'n * ('n, 'c) expr
+  | WithStep of {
+      binder : 'n;
+      lo : ('n, 'c) expr;
+      hi : ('n, 'c) expr;
+      stmts : ('n, 'c) simple_stmt list;
+    }
+      (* one atomic step under a non-deterministically chosen binder;
+         restricting the body to simple statements keeps the binder's
+         scope within a single action *)
 
 and ('n, 'c) block_stmt =
   | While of { cond : ('n, 'c) expr; body : ('n, 'c) body }

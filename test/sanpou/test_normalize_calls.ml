@@ -297,6 +297,46 @@ let () =
                        (n_intlit 1) (n_intlit 2));
                 ]
                 (normalize_proc_body body));
+          test_case "call in with body rejected" `Quick (fun () ->
+              let with_step : Sanpou.Resolved_ast.step =
+                node
+                  (WithStep
+                     {
+                       binder = ident "v";
+                       lo = intlit 1;
+                       hi = intlit 3;
+                       stmts = [ assign "x" (proc_app "foo" []) ];
+                     })
+              in
+              check_raises "located error"
+                (Sanpou.Normalize_calls.Error
+                   ( "procedure calls are not allowed inside a with statement",
+                     loc0 ))
+                (fun () -> ignore (normalize_proc_body [ with_step ])));
+          test_case "call in with bounds is hoisted" `Quick (fun () ->
+              let with_step : Sanpou.Resolved_ast.step =
+                node
+                  (WithStep
+                     {
+                       binder = ident "v";
+                       lo = proc_app "foo" [];
+                       hi = intlit 3;
+                       stmts = [ assign "x" (var "v") ];
+                     })
+              in
+              check_body "bound call hoisted before the step"
+                [
+                  n_call_bind "callRet__1" "foo" [];
+                  node
+                    (Sanpou.Normalized_ast.WithStep
+                       {
+                         binder = ident "v";
+                         lo = n_var "callRet__1";
+                         hi = n_intlit 3;
+                         stmts = [ n_assign "x" (n_var "v") ];
+                       });
+                ]
+                (normalize_proc_body [ with_step ]));
           test_case "call in quantifier bounds is hoisted" `Quick (fun () ->
               let body =
                 [

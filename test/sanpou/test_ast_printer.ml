@@ -88,6 +88,17 @@ let () =
               pretty_roundtrip
                 "mod m { def x = forall (i in 1..2) { exists (j in 1..2) { i \
                  == j } }; }");
+          test_case "with statement" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { with (v in 1..3) { x = v; } } }");
+          test_case "with statement multiple stmts" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { with (v in 1..n) { await v > x, x = v; } \
+                 } }");
+          test_case "with inside either arm" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { either { with (v in 1..2) { x = v; } } \
+                 or { x = 0; } } }");
           test_case "either two arms" `Quick (fun () ->
               pretty_roundtrip
                 "mod m { fn foo() { either { x = 1; } or { x = 2; } } }");

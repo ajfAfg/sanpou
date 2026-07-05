@@ -74,6 +74,27 @@ let () =
                 \  }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "with statement" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() {\n\
+                \    with (v in 1..3) { await v > x, x = v; }\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "with binder scoped to its step" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() {\n\
+                \    with (v in 1..3) { x = v; }\n\
+                \    x = v;\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "either arms" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -377,6 +398,29 @@ let () =
               check_fails "mod m { var x in true..false; }");
           test_case "var decl range used as bool" `Quick (fun () ->
               check_fails "mod m { var x in 1..3; def p = x && true; }");
+          test_case "with binder not assignable" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  fn foo() { with (v in 1..3) { v = 1; } return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "with bounds non-int" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  fn foo() {\n\
+                \    with (v in true..false) { x = 1; }\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "with binder is int" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var b = false;\n\
+                \  fn foo() { with (v in 1..3) { b = v; } return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "ill-typed either arm" `Quick (fun () ->
               check_fails
                 "mod m {\n\

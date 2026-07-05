@@ -167,6 +167,32 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
         entry = call_label;
         exit_label = next_label;
       }
+  | Normalized_ast.WithStep { binder; lo; hi; stmts } ->
+      let label = fresh_label ctx in
+      let source =
+        make_source ~proc_name:ctx.proc_name
+          ~description:
+            ("with (" ^ binder.original ^ " in " ^ pretty_expr lo ^ ".."
+           ^ pretty_expr hi ^ ") { " ^ describe_simple_stmts stmts ^ " }")
+          ~loc:step.loc
+      in
+      let eff =
+        List.fold_left
+          (apply_simple_stmt ctx ~next_label ~source)
+          (empty_effect ~next:next_label)
+          stmts
+      in
+      let a =
+        make_action
+          ~binders:[ (binder.name, lo, hi) ]
+          ?guard:eff.guard ~assignments:eff.assignments ~stack_op:eff.stack_op
+          ~label ~pc_dest:eff.next ~source ()
+      in
+      {
+        actions = List.map (fun x -> Action x) (a :: eff.extra_actions);
+        entry = label;
+        exit_label = next_label;
+      }
   | Normalized_ast.BlockStep (While { pre; cond; body }) ->
       linearize_while ctx pre cond body next_label step.loc
   | Normalized_ast.BlockStep (If { cond; body; else_body }) ->
@@ -353,7 +379,10 @@ let rec local_var_infos proc (steps : Normalized_ast.body) : var_info list =
           @ match else_body with Some b -> local_var_infos proc b | None -> [])
       | Normalized_ast.BlockStep (Either arms) ->
           List.concat_map (local_var_infos proc) arms
-      | Normalized_ast.SimpleStep _ | Normalized_ast.EmptyStep -> [])
+      (* with binders never become TLA state variables, like MapInit's *)
+      | Normalized_ast.WithStep _ | Normalized_ast.SimpleStep _
+      | Normalized_ast.EmptyStep ->
+          [])
     steps
 
 (* Each process runs its root procedure through a synthetic wrapper proc: the

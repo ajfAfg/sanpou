@@ -337,6 +337,16 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
   | BlockStep (Either arms) ->
       List.iter (check_body ctx) arms;
       ctx
+  | WithStep { binder; lo; hi; stmts } ->
+      unify lo.loc (infer_expr ctx.fresh_tyvar ctx.env lo) TyInt;
+      unify hi.loc (infer_expr ctx.fresh_tyvar ctx.env hi) TyInt;
+      (* The binder is readable but not assignable: it is absent from
+         mutable_vars, so assignments to it fail as to any non-variable. *)
+      let binder_ctx =
+        { ctx with env = (binder, tysc_of_ty TyInt) :: ctx.env }
+      in
+      List.iter (check_simple_stmt binder_ctx) stmts;
+      ctx
   | VarStep (name, value) ->
       (* Local variables are mutable, so their type is never generalized
          (value restriction): reads and assignments share one type. *)

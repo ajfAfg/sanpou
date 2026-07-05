@@ -143,6 +143,15 @@ let rec pretty_step name_of callee_of indent (step : ('n, 'c) step) =
       indent ^ "var " ^ name_of n ^ " = "
       ^ pretty_expr name_of callee_of value
       ^ ";\n"
+  | WithStep { binder; lo; hi; stmts } ->
+      indent ^ "with (" ^ name_of binder ^ " in "
+      ^ pretty_expr name_of callee_of lo
+      ^ ".."
+      ^ pretty_expr name_of callee_of hi
+      ^ ") { "
+      ^ String.concat ", "
+          (List.map (pretty_simple_stmt name_of callee_of) stmts)
+      ^ "; }\n"
 
 and pretty_block_stmt name_of callee_of indent = function
   | While { cond; body } ->

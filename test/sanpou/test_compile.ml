@@ -125,6 +125,24 @@ let () =
               has "x \\in 1..3";
               has "y = 0");
           Alcotest.test_case
+            "with compiles to an existential over the range" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x = 0;\n\
+                   fn foo() {\n\
+                   with (v in 1..3) { await v > x, x = v; }\n\
+                   return ();\n\
+                   }\n\
+                   process ps = foo in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "\\E v__1 \\in 1..3: /\\ (v__1 > x)";
+              has "x' = v__1");
+          Alcotest.test_case
             "either compiles to a disjunction of guarded arms" `Quick
             (fun () ->
               let ast =

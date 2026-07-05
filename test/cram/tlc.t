@@ -144,3 +144,28 @@ in a single behavior, so termination also proves both arms fire.
   $ sanpou compile either_guard.snp -o either_guard
   $ tlc either_guard either_guard
   No error has been found
+
+A with statement fires for any binder value satisfying its guard. At each
+state below only v = x + 1 passes the await, so the process walks x from 0
+to 3 and terminates; if the binder choice ignored the guard, a wrong pick
+would block the single fair process forever.
+
+  $ cat > with_guard.snp <<'EOF'
+  > mod with_guard {
+  >   var x = 0;
+  >   fn f() {
+  >     while (x < 3) {
+  >       with (v in 1..3) {
+  >         await v == x + 1,
+  >         x = v;
+  >       }
+  >     }
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json with_guard.json
+  $ sanpou compile with_guard.snp -o with_guard
+  $ tlc with_guard with_guard
+  No error has been found

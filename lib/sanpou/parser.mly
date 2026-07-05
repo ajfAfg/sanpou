@@ -11,7 +11,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token <string> ID
 %token TRUE FALSE
 %token DEF VAR FN MOD FAIR PROCESS IN SELF
-%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS EITHER OR
+%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS EITHER OR WITH
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token SEMI COMMA DOTDOT ARROW
@@ -85,6 +85,11 @@ step:
       { mk $startpos (BlockStep stmt) }
   | VAR name=ID EQ value=expr SEMI
       { mk $startpos (VarStep (name, value)) }
+  (* The body is a single atomic step: simple statements only, so the
+     chosen binder never has to survive past one action. *)
+  | WITH LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+      LBRACE stmts=separated_nonempty_list(COMMA, simple_stmt) SEMI RBRACE
+      { mk $startpos (WithStep { binder; lo; hi; stmts }) }
 
 simple_stmt:
   | target=assign_target EQ value=expr

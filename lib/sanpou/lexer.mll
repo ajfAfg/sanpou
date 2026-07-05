@@ -20,6 +20,7 @@ let reservedWords = [
   ("exists", Parser.EXISTS);
   ("either", Parser.EITHER);
   ("or", Parser.OR);
+  ("with", Parser.WITH);
   ("self", Parser.SELF);
   ("true", Parser.TRUE);
   ("false", Parser.FALSE);
