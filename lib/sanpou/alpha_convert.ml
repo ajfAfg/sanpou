@@ -64,6 +64,17 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
           ( alpha_expr env st cond,
             alpha_expr env st then_e,
             alpha_expr env st else_e )
+    | Quant { quant; binder; lo; hi; body } ->
+        let binder' = fresh st binder in
+        let env' = (binder, binder') :: env in
+        Quant
+          {
+            quant;
+            binder = binder';
+            lo = alpha_expr env st lo;
+            hi = alpha_expr env st hi;
+            body = alpha_expr env' st body;
+          }
   in
   { desc; loc = e.loc }
 

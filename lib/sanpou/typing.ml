@@ -256,6 +256,12 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       let then_ty = infer_expr fresh_tyvar env then_e in
       unify else_e.loc then_ty (infer_expr fresh_tyvar env else_e);
       then_ty
+  | Quant { binder; lo; hi; body; _ } ->
+      unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
+      unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
+      let binder_env = (binder, tysc_of_ty TyInt) :: env in
+      unify body.loc (infer_expr fresh_tyvar binder_env body) TyBool;
+      TyBool
 
 (* ===== Check procedure bodies ===== *)
 

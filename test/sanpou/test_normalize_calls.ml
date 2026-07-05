@@ -33,6 +33,9 @@ let if_block cond body : Sanpou.Resolved_ast.step =
 let map_init lo hi value = node (MapInit { binder = ident "i"; lo; hi; value })
 let if_expr c t f = node (IfExpr (c, t, f))
 
+let forall_ lo hi body =
+  node (Quant { quant = Forall; binder = ident "i"; lo; hi; body })
+
 let make_proc name body : Sanpou.Resolved_ast.item =
   node (ProcDef { name; params = []; body })
 
@@ -83,6 +86,9 @@ let n_if cond body : Sanpou.Normalized_ast.step =
   node (Sanpou.Normalized_ast.BlockStep (If { cond; body; else_body = None }))
 
 let n_if_expr c t f : Sanpou.Normalized_ast.expr = node (IfExpr (c, t, f))
+
+let n_forall lo hi body : Sanpou.Normalized_ast.expr =
+  node (Quant { quant = Forall; binder = ident "i"; lo; hi; body })
 
 (* ----- harness ----- *)
 
@@ -290,6 +296,35 @@ let () =
                        (n_intlit 1) (n_intlit 2));
                 ]
                 (normalize_proc_body body));
+          test_case "call in quantifier bounds is hoisted" `Quick (fun () ->
+              let body =
+                [
+                  var_step "y"
+                    (forall_ (proc_app "foo" []) (intlit 3)
+                       (binop Lt (var "i") (intlit 4)));
+                ]
+              in
+              check_body "bound call hoisted before the step"
+                [
+                  n_call_bind "callRet__1" "foo" [];
+                  n_var_step "y"
+                    (n_forall (n_var "callRet__1") (n_intlit 3)
+                       (n_binop Lt (n_var "i") (n_intlit 4)));
+                ]
+                (normalize_proc_body body));
+          test_case "call in quantifier body rejected" `Quick (fun () ->
+              let body =
+                [
+                  var_step "y"
+                    (forall_ (intlit 1) (intlit 3)
+                       (binop Lt (proc_app "foo" []) (intlit 4)));
+                ]
+              in
+              check_raises "located error"
+                (Sanpou.Normalize_calls.Error
+                   ( "procedure calls are not allowed inside a quantifier body",
+                     loc0 ))
+                (fun () -> ignore (normalize_proc_body body)));
           test_case "call in if-expression then branch rejected" `Quick
             (fun () ->
               let body =

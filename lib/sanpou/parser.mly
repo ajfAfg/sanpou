@@ -11,7 +11,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token <string> ID
 %token TRUE FALSE
 %token DEF VAR FN MOD FAIR PROCESS IN SELF
-%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT
+%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token SEMI COMMA COLON DOTDOT
@@ -112,8 +112,16 @@ else_clause:
   | ELSE LBRACE body=body RBRACE { body }
   | ELSE s=if_stmt { [ mk $startpos(s) (BlockStep s) ] }
 
+(* Quantifiers live at the top expression level, not in primary_expr: their
+   body extends as far right as possible (like TLA+'s \A and \E), so letting
+   one appear bare in operand position would make `a * forall ...: p * b`
+   ambiguous. In operand position a quantifier needs parens. *)
 expr:
   | e=or_expr { e }
+  | FORALL binder=ID IN lo=expr DOTDOT hi=expr COLON body=expr
+      { mk $startpos (Quant { quant = Forall; binder; lo; hi; body }) }
+  | EXISTS binder=ID IN lo=expr DOTDOT hi=expr COLON body=expr
+      { mk $startpos (Quant { quant = Exists; binder; lo; hi; body }) }
 
 or_expr:
   | e=and_expr { e }

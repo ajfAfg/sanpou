@@ -95,6 +95,21 @@ let () =
               has "quotient == (7 \\div 2)";
               has "remainder == (7 % 2)";
               has "negated == ~(TRUE)");
+          Alcotest.test_case "quantifiers compile to tla quantifiers" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   def inv = forall i in 1..3: i < 4;\n\
+                   def can = exists i in 1..3: i == 2;\n\
+                   fn main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "inv == (\\A i \\in 1..3: (i < 4))";
+              has "can == (\\E i \\in 1..3: (i = 2))");
           Alcotest.test_case
             "if expression compiles to atomic conditional update" `Quick
             (fun () ->
