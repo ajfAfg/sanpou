@@ -40,6 +40,17 @@ let () =
                 \  fn f() { var p = 1; x = p; return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
+          test_case "shadowed globally is an ordinary function" `Quick
+            (fun () ->
+              (* a user def shadows the builtin (see #79), so this call is
+                 not a temporal operator *)
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  def globally(p) = p;\n\
+                \  fn f() { await globally(x == 0); return (); }\n\
+                \  process ps = f in 1..1;\n\
+                \  }");
         ] );
       ( "rejected",
         [
