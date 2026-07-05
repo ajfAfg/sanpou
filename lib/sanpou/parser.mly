@@ -121,16 +121,8 @@ else_clause:
   | ELSE LBRACE body=body RBRACE { body }
   | ELSE s=if_stmt { [ mk $startpos(s) (BlockStep s) ] }
 
-(* Quantifiers live at the top expression level, not in primary_expr: their
-   body extends as far right as possible (like TLA+'s \A and \E), so letting
-   one appear bare in operand position would make `a * forall ...: p * b`
-   ambiguous. In operand position a quantifier needs parens. *)
 expr:
   | e=or_expr { e }
-  | FORALL binder=ID IN lo=expr DOTDOT hi=expr COLON body=expr
-      { mk $startpos (Quant { quant = Forall; binder; lo; hi; body }) }
-  | EXISTS binder=ID IN lo=expr DOTDOT hi=expr COLON body=expr
-      { mk $startpos (Quant { quant = Exists; binder; lo; hi; body }) }
 
 or_expr:
   | e=and_expr { e }
@@ -171,6 +163,15 @@ primary_expr:
   | IF LPAREN cond=expr RPAREN LBRACE then_e=expr RBRACE
       ELSE LBRACE else_e=expr RBRACE
       { mk $startpos (IfExpr (cond, then_e, else_e)) }
+  (* The braces delimit the body, so a quantifier composes as an ordinary
+     primary expression — unlike TLA+'s \A/\E, whose bodies extend as far
+     right as possible. *)
+  | FORALL LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+      LBRACE body=expr RBRACE
+      { mk $startpos (Quant { quant = Forall; binder; lo; hi; body }) }
+  | EXISTS LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+      LBRACE body=expr RBRACE
+      { mk $startpos (Quant { quant = Exists; binder; lo; hi; body }) }
   | value=INTV { mk $startpos (IntLit value) }
   | TRUE { mk $startpos (BoolLit true) }
   | FALSE { mk $startpos (BoolLit false) }
