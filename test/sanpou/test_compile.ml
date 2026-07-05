@@ -95,6 +95,22 @@ let () =
               has "quotient == (7 \\div 2)";
               has "remainder == (7 % 2)";
               has "negated == ~(TRUE)");
+          Alcotest.test_case
+            "range-initialized var compiles to membership in Init" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x in 1..3;\n\
+                   var y = 0;\n\
+                   fn main() { y = x; return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "x \\in 1..3";
+              has "y = 0");
           Alcotest.test_case "quantifiers compile to tla quantifiers" `Quick
             (fun () ->
               let ast =

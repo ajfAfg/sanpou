@@ -34,6 +34,8 @@ let () =
               pretty_roundtrip "mod m { def foo(x, y) = x + y; }");
           test_case "var_decl" `Quick (fun () ->
               pretty_roundtrip "mod m { var x = 0; }");
+          test_case "var_decl range" `Quick (fun () ->
+              pretty_roundtrip "mod m { var x in 1..3; }");
           test_case "proc simple" `Quick (fun () ->
               pretty_roundtrip "mod m { fn foo() { return (); } }");
           test_case "proc assign" `Quick (fun () ->

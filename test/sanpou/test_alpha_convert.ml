@@ -363,7 +363,9 @@ let () =
                     (Sanpou.Resolved_ast.equal_expr (intlit 1) value)
               | _ -> fail "expected ConstDef");
           test_case "var decl unchanged" `Quick (fun () ->
-              let vd = node (VarDecl { name = "v"; value = intlit 0 }) in
+              let vd =
+                node (VarDecl { name = "v"; init = InitValue (intlit 0) })
+              in
               let prog = make_program [ make_module [ vd ] ] in
               let m = transform_one prog in
               match (List.hd m.items).desc with

@@ -100,12 +100,19 @@ and ('n, 'c) block_stmt =
 
 and ('n, 'c) body = ('n, 'c) step list [@@deriving show, eq]
 
+(* How a module-level variable starts out: a single value, or any value
+   drawn from a range — the model checker then explores every choice. *)
+type ('n, 'c) var_init =
+  | InitValue of ('n, 'c) expr
+  | InitRange of ('n, 'c) expr * ('n, 'c) expr
+[@@deriving show, eq]
+
 type ('n, 'c) item = ('n, 'c) item_desc node
 
 and ('n, 'c) item_desc =
   | ConstDef of { name : id; value : ('n, 'c) expr }
   | FunDef of { name : id; params : id list; body_expr : ('n, 'c) expr }
-  | VarDecl of { name : id; value : ('n, 'c) expr }
+  | VarDecl of { name : id; init : ('n, 'c) var_init }
   | ProcDef of { name : id; params : 'n list; body : ('n, 'c) body }
   | Process of {
       name : id;
@@ -163,3 +170,8 @@ let rec map_expr (f : 'n -> 'm) (g : 'c -> 'd) (e : ('n, 'c) expr) :
           }
   in
   { desc; loc = e.loc }
+
+let map_var_init (f : 'n -> 'm) (g : 'c -> 'd) :
+    ('n, 'c) var_init -> ('m, 'd) var_init = function
+  | InitValue e -> InitValue (map_expr f g e)
+  | InitRange (lo, hi) -> InitRange (map_expr f g lo, map_expr f g hi)

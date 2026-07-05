@@ -58,7 +58,9 @@ item:
   | DEF name=ID LPAREN params=separated_list(COMMA, ID) RPAREN EQ body_expr=expr SEMI
       { mk $startpos (FunDef { name; params; body_expr }) }
   | VAR name=ID EQ value=expr SEMI
-      { mk $startpos (VarDecl { name; value }) }
+      { mk $startpos (VarDecl { name; init = InitValue value }) }
+  | VAR name=ID IN lo=expr DOTDOT hi=expr SEMI
+      { mk $startpos (VarDecl { name; init = InitRange (lo, hi) }) }
   | FN name=ID LPAREN params=separated_list(COMMA, ID) RPAREN LBRACE body=body RBRACE
       { mk $startpos (ProcDef { name; params; body }) }
   | fair=option(FAIR) PROCESS name=ID EQ proc=ID IN lo=expr DOTDOT hi=expr SEMI

@@ -97,6 +97,10 @@ let () =
               check_ok "mod m { def f(x) = x + 1; def y = f(3); }");
           test_case "var decl int" `Quick (fun () ->
               check_ok "mod m { var x = 0; }");
+          test_case "var decl range" `Quick (fun () ->
+              check_ok "mod m { var x in 1..3; }");
+          test_case "var decl range is int" `Quick (fun () ->
+              check_ok "mod m { var x in 1..3; def y = x + 1; }");
           test_case "var decl bool" `Quick (fun () ->
               check_ok "mod m { var x = false; }");
           test_case "simple proc" `Quick (fun () ->
@@ -347,6 +351,10 @@ let () =
               check_fails "mod m { def x = len(1); }");
           test_case "if expression non-bool condition" `Quick (fun () ->
               check_fails "mod m { def x = if (1) { 2 } else { 3 }; }");
+          test_case "var decl range non-int bounds" `Quick (fun () ->
+              check_fails "mod m { var x in true..false; }");
+          test_case "var decl range used as bool" `Quick (fun () ->
+              check_fails "mod m { var x in 1..3; def p = x && true; }");
           test_case "quantifier body non-bool" `Quick (fun () ->
               check_fails "mod m { def x = forall (i in 1..2) { i }; }");
           test_case "quantifier bounds non-int" `Quick (fun () ->

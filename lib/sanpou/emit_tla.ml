@@ -345,7 +345,14 @@ let init_decls (ir : module_ir) : tla_decl list =
   in
   let conjuncts =
     List.map
-      (fun (name, expr) -> TBinOp ("=", TId name, expr_to_tla_global expr))
+      (fun (name, init) ->
+        match init with
+        | Generic_ast.InitValue expr ->
+            TBinOp ("=", TId name, expr_to_tla_global expr)
+        | Generic_ast.InitRange (lo, hi) ->
+            TIn
+              ( TId name,
+                TRange (expr_to_tla_global lo, expr_to_tla_global hi) ))
       ir.var_decls
     @ [
         TBinOp ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit []));
