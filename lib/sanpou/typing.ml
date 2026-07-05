@@ -33,6 +33,7 @@ type type_error =
   | Return_type_mismatch
   | Assign_to_non_variable of id
   | Recursive_type
+  | Builtin_redefinition of id
 
 exception Type_error of type_error * loc
 
@@ -380,6 +381,11 @@ let check_module (m : Surface_ast.module_def) : unit =
             let ty = infer_expr fresh_tyvar env value in
             (name, generalize env ty) :: env
         | FunDef { name; params; body_expr } ->
+            (* Applications resolve builtin names at parse time, so a
+               callable named like a builtin could never be called; reject
+               it instead of letting it die silently. *)
+            if Builtin.of_name name <> None then
+              type_error (Builtin_redefinition name) item.loc;
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
               List.map2
@@ -400,6 +406,8 @@ let check_module (m : Surface_ast.module_def) : unit =
             in
             (name, tysc_of_ty ty) :: env
         | ProcDef { name = proc_name; params; body } ->
+            if Builtin.of_name proc_name <> None then
+              type_error (Builtin_redefinition proc_name) item.loc;
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
               List.map2
@@ -496,3 +504,8 @@ let string_of_type_error = function
   | Assign_to_non_variable id ->
       Printf.sprintf "Cannot assign to %s: not a mutable variable" id
   | Recursive_type -> "Recursive type detected"
+  | Builtin_redefinition id ->
+      Printf.sprintf
+        "%s is a built-in function and cannot be redefined: a call to %s \
+         always resolves to the built-in"
+        id id

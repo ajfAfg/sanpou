@@ -49,6 +49,18 @@ Type error:
   add_bool.snp:4:13: Type error: cannot unify bool with int
   [1]
 
+Redefining a builtin callable is rejected — applications always resolve to
+the builtin, so the definition could never be called:
+
+  $ cat > shadow.snp <<'EOF'
+  > mod m {
+  >   def append(xs, x) = xs;
+  > }
+  > EOF
+  $ sanpou compile shadow.snp -o out
+  shadow.snp:2:3: append is a built-in function and cannot be redefined: a call to append always resolves to the built-in
+  [1]
+
 Syntax error:
 
   $ cat > syntax.snp <<'EOF'

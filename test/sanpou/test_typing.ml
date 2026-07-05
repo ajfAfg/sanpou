@@ -74,6 +74,8 @@ let () =
                 \  }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "non-callable defs may reuse builtin names" `Quick
+            (fun () -> check_ok "mod m { def len = 5; var head = 0; }");
           test_case "assert statement" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -412,6 +414,14 @@ let () =
               check_fails "mod m { var x in true..false; }");
           test_case "var decl range used as bool" `Quick (fun () ->
               check_fails "mod m { var x in 1..3; def p = x && true; }");
+          test_case "function def named like a builtin" `Quick (fun () ->
+              check_fails "mod m { def len(x) = x; }");
+          test_case "procedure named like a builtin" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  fn head() { return (); }\n\
+                \  process ps = head in 1..1;\n\
+                \  }");
           test_case "assert non-bool" `Quick (fun () ->
               check_fails
                 "mod m {\n\
