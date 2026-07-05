@@ -88,6 +88,7 @@ type process_def = {
 type module_def = {
   name : Generic_ast.id;
   const_defs : (Generic_ast.id * expr) list;
+  prop_defs : (Generic_ast.id * expr) list;
   fun_defs : (Generic_ast.id * Generic_ast.id list * expr) list;
   var_decls : (Generic_ast.id * var_init) list;
   procs : proc_def list;

@@ -19,27 +19,21 @@ let () =
     [
       ( "allowed",
         [
-          test_case "temporal def" `Quick (fun () ->
-              check_ok "mod m { var x = 0; def p = globally(x == 0); }");
+          test_case "temporal property" `Quick (fun () ->
+              check_ok "mod m { var x = 0; property p = globally(x == 0); }");
           test_case "nested temporal operators" `Quick (fun () ->
               check_ok
-                "mod m { var x = 0; def p = globally(finally(x == 0)); }");
-          test_case "def referencing a temporal def" `Quick (fun () ->
+                "mod m { var x = 0; property p = globally(finally(x == 0)); \
+                 }");
+          test_case "property referencing a property" `Quick (fun () ->
               check_ok
                 "mod m {\n\
                 \  var x = 0;\n\
-                \  def p = globally(x == 0);\n\
-                \  def q = p && finally(x == 1);\n\
+                \  property p = globally(x == 0);\n\
+                \  property q = p && finally(x == 1);\n\
                 \  }");
-          test_case "local shadowing a temporal def is not a reference" `Quick
-            (fun () ->
-              check_ok
-                "mod m {\n\
-                \  var x = 0;\n\
-                \  def p = globally(x == 0);\n\
-                \  procedure f() { var p = 1; x = p; return (); }\n\
-                \  process ps = f in 1..1;\n\
-                \  }");
+          test_case "state predicate as a property" `Quick (fun () ->
+              check_ok "mod m { var x = 0; property p = x >= 0; }");
           test_case "shadowed globally is an ordinary function" `Quick
             (fun () ->
               (* a user def shadows the builtin (see #79), so this call is
@@ -51,9 +45,20 @@ let () =
                 \  procedure f() { await globally(x == 0); return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
+          test_case "local shadowing a property is not a reference" `Quick
+            (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  property p = globally(x == 0);\n\
+                \  procedure f() { var p = 1; x = p; return (); }\n\
+                \  process ps = f in 1..1;\n\
+                \  }");
         ] );
       ( "rejected",
         [
+          test_case "temporal operator in a def" `Quick (fun () ->
+              check_fails "mod m { var x = 0; def p = globally(x == 0); }");
           test_case "temporal operator in await" `Quick (fun () ->
               check_fails
                 "mod m {\n\
@@ -65,29 +70,27 @@ let () =
               check_fails "mod m { def g(y) = globally(y == 0); }");
           test_case "temporal operator in var init" `Quick (fun () ->
               check_fails "mod m { var x = 0; var b = globally(x == 0); }");
-          test_case "temporal def referenced in a procedure" `Quick (fun () ->
+          test_case "property referenced in a procedure" `Quick (fun () ->
               check_fails
                 "mod m {\n\
                 \  var x = 0;\n\
-                \  def p = globally(x == 0);\n\
+                \  property p = globally(x == 0);\n\
                 \  procedure f() { await p; return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
-          test_case "temporal def referenced in a var init" `Quick (fun () ->
+          test_case "property referenced in a def" `Quick (fun () ->
               check_fails
                 "mod m {\n\
                 \  var x = 0;\n\
-                \  def p = globally(x == 0);\n\
-                \  var b = p;\n\
-                \  }");
-          test_case "temporal def referenced transitively" `Quick (fun () ->
-              check_fails
-                "mod m {\n\
-                \  var x = 0;\n\
-                \  def p = globally(x == 0);\n\
+                \  property p = globally(x == 0);\n\
                 \  def q = p;\n\
-                \  procedure f() { await q; return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  }");
+          test_case "property referenced in a var init" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  property p = globally(x == 0);\n\
+                \  var b = p;\n\
                 \  }");
         ] );
     ]

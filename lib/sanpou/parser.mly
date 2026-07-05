@@ -10,7 +10,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token <int> INTV
 %token <string> ID
 %token TRUE FALSE
-%token DEF VAR PROCEDURE_KW MOD FAIR PROCESS IN SELF
+%token DEF VAR PROCEDURE_KW PROPERTY MOD FAIR PROCESS IN SELF
 %token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT ASSERT FORALL EXISTS EITHER OR WITH
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
@@ -59,6 +59,8 @@ item:
       { mk $startpos (ConstDef { name; value }) }
   | DEF name=ID LPAREN params=separated_list(COMMA, ID) RPAREN EQ body_expr=expr SEMI
       { mk $startpos (FunDef { name; params; body_expr }) }
+  | PROPERTY name=ID EQ value=expr SEMI
+      { mk $startpos (PropDef { name; value }) }
   | VAR name=ID EQ value=expr SEMI
       { mk $startpos (VarDecl { name; init = InitValue value }) }
   | VAR name=ID IN lo=expr DOTDOT hi=expr SEMI

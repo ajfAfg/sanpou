@@ -255,6 +255,11 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
           match item.desc with
           | ConstDef { name; value } -> Some (name, call_free_expr st value)
           | _ -> None);
+    prop_defs =
+      partition (fun (item : Resolved_ast.item) ->
+          match item.desc with
+          | PropDef { name; value } -> Some (name, call_free_expr st value)
+          | _ -> None);
     fun_defs =
       partition (fun (item : Resolved_ast.item) ->
           match item.desc with

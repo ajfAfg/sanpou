@@ -126,6 +126,8 @@ type ('n, 'c) item = ('n, 'c) item_desc node
 
 and ('n, 'c) item_desc =
   | ConstDef of { name : id; value : ('n, 'c) expr }
+  | PropDef of { name : id; value : ('n, 'c) expr }
+    (* a temporal property: the only place temporal operators may appear *)
   | FunDef of { name : id; params : id list; body_expr : ('n, 'c) expr }
   | VarDecl of { name : id; init : ('n, 'c) var_init }
   | ProcDef of { name : id; params : 'n list; body : ('n, 'c) body }

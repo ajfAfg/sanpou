@@ -3,45 +3,42 @@ open Generic_ast
 (* ===== Temporal-operator placement: resolved AST =====
 
    [globally] and [finally] parse as builtin applications but are TLA+
-   temporal operators, meaningful only in the property position — the body
-   of a module-level [def] referenced from the TLC config. Their builtin
-   type (bool -> bool) says nothing about that, so this pass enforces it
-   syntactically:
+   temporal operators, meaningful only inside a [property] item — the
+   formulas the TLC config's PROPERTIES section references. Temporal-ness
+   is declared by the item kind, so this pass is a plain placement check:
 
-   - the operators may appear only in module-level [def name = ...] bodies;
-   - a def containing one (directly or by referencing another temporal def)
-     is a *temporal property*, and referencing it from any runtime context
-     (procedure bodies, function bodies, variable initializers, process
-     ranges) is an error.
+   - the operators may appear only in [property] bodies;
+   - a property may be referenced only from another property (a runtime
+     value cannot depend on a temporal formula).
 
    Running after [Alpha_convert] makes shadowing a non-issue: procedure
-   locals and binders are renamed apart, while references to module-level
-   defs keep their source name. *)
+   locals and binders are renamed apart, module-level references keep
+   their source name, and a definition shadowing the [globally]/[finally]
+   builtin has already turned the application into a plain [App]. *)
 
 exception Error of string * Generic_ast.loc
 
 let error message loc = raise (Error (message, loc))
 
-(* The first temporal operator or temporal-def reference in [e], with the
+(* The first temporal operator or property reference in [e], with the
    message describing it. *)
-let rec temporal_occurrence (temporal_defs : id list) (e : Resolved_ast.expr) :
+let rec temporal_occurrence (props : id list) (e : Resolved_ast.expr) :
     (string * Generic_ast.loc) option =
-  let find = temporal_occurrence temporal_defs in
+  let find = temporal_occurrence props in
   let first exprs = List.find_map find exprs in
   match e.desc with
   | Builtin (((Builtin.Globally | Builtin.Finally) as b), _) ->
       Some
         ( Builtin.name b
-          ^ " is a temporal operator and is only allowed in a module-level \
-             def",
+          ^ " is a temporal operator and is only allowed in a property",
           e.loc )
   | Builtin (_, args) -> first args
   | Var i ->
-      if List.mem i.name temporal_defs then
+      if List.mem i.name props then
         Some
           ( i.original
-            ^ " is a temporal property and can only be referenced from \
-               another module-level def",
+            ^ " is a property and can only be referenced from another \
+               property",
             e.loc )
       else None
   | IntLit _ | BoolLit _ | Self -> None
@@ -54,13 +51,13 @@ let rec temporal_occurrence (temporal_defs : id list) (e : Resolved_ast.expr) :
   | IfExpr (cond, then_e, else_e) -> first [ cond; then_e; else_e ]
   | Quant { lo; hi; body; _ } -> first [ lo; hi; body ]
 
-let check_expr temporal_defs (e : Resolved_ast.expr) : unit =
-  match temporal_occurrence temporal_defs e with
+let check_expr props (e : Resolved_ast.expr) : unit =
+  match temporal_occurrence props e with
   | Some (message, loc) -> error message loc
   | None -> ()
 
-let check_stmt temporal_defs (stmt : Resolved_ast.simple_stmt) : unit =
-  let check = check_expr temporal_defs in
+let check_stmt props (stmt : Resolved_ast.simple_stmt) : unit =
+  let check = check_expr props in
   match stmt.desc with
   | Assign (target, value) ->
       (match target with
@@ -71,56 +68,54 @@ let check_stmt temporal_defs (stmt : Resolved_ast.simple_stmt) : unit =
   | Return value | Await value | Assert value -> check value
   | Break | Continue -> ()
 
-let rec check_body temporal_defs (steps : Resolved_ast.body) : unit =
-  List.iter (check_step temporal_defs) steps
+let rec check_body props (steps : Resolved_ast.body) : unit =
+  List.iter (check_step props) steps
 
-and check_step temporal_defs (step : Resolved_ast.step) : unit =
-  let check = check_expr temporal_defs in
+and check_step props (step : Resolved_ast.step) : unit =
+  let check = check_expr props in
   match step.desc with
-  | SimpleStep stmts -> List.iter (check_stmt temporal_defs) stmts
+  | SimpleStep stmts -> List.iter (check_stmt props) stmts
   | EmptyStep -> ()
   | VarStep (_, value) -> check value
   | WithStep { lo; hi; stmts; _ } ->
       check lo;
       check hi;
-      List.iter (check_stmt temporal_defs) stmts
+      List.iter (check_stmt props) stmts
   | BlockStep (While { cond; body }) ->
       check cond;
-      check_body temporal_defs body
+      check_body props body
   | BlockStep (If { cond; body; else_body }) ->
       check cond;
-      check_body temporal_defs body;
-      Option.iter (check_body temporal_defs) else_body
-  | BlockStep (Either arms) -> List.iter (check_body temporal_defs) arms
+      check_body props body;
+      Option.iter (check_body props) else_body
+  | BlockStep (Either arms) -> List.iter (check_body props) arms
 
 let check_module (m : Resolved_ast.module_def) : unit =
   let (_ : id list) =
     List.fold_left
-      (fun temporal_defs (item : Resolved_ast.item) ->
+      (fun props (item : Resolved_ast.item) ->
         match item.desc with
-        | ConstDef { name; value } ->
-            (* The one place temporal formulas belong; a def containing one
-               becomes temporal itself and taints its referrers. *)
-            if temporal_occurrence temporal_defs value <> None then
-              name :: temporal_defs
-            else temporal_defs
-        | FunDef { body_expr; _ } ->
-            check_expr temporal_defs body_expr;
-            temporal_defs
+        | PropDef { name; _ } ->
+            (* Temporal operators and references to preceding properties
+               are exactly what a property body is for. *)
+            name :: props
+        | ConstDef { value; _ } | FunDef { body_expr = value; _ } ->
+            check_expr props value;
+            props
         | VarDecl { init; _ } ->
             (match init with
-            | InitValue value -> check_expr temporal_defs value
+            | InitValue value -> check_expr props value
             | InitRange (lo, hi) ->
-                check_expr temporal_defs lo;
-                check_expr temporal_defs hi);
-            temporal_defs
+                check_expr props lo;
+                check_expr props hi);
+            props
         | ProcDef { body; _ } ->
-            check_body temporal_defs body;
-            temporal_defs
+            check_body props body;
+            props
         | Process { lo; hi; _ } ->
-            check_expr temporal_defs lo;
-            check_expr temporal_defs hi;
-            temporal_defs)
+            check_expr props lo;
+            check_expr props hi;
+            props)
       [] m.items
   in
   ()

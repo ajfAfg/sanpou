@@ -11,7 +11,7 @@ mod bakery_algorithm {
     x in 1..numThreads -> null
   };
 
-  def lossless = finally(count == numThreads * numLoop);
+  property lossless = finally(count == numThreads * numLoop);
 
   procedure lockAcquire(idx) {
     entering[idx] = true;

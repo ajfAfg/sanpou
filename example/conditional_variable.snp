@@ -6,7 +6,7 @@ mod conditional_variable {
   var producerState = data;
   var consumerState = [];
 
-  def lossless = globally(finally(concat(producerState, consumerState) == data));
+  property lossless = globally(finally(concat(producerState, consumerState) == data));
 
   procedure producer() {
     while (producerState != []) {

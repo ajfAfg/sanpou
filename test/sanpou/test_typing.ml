@@ -95,6 +95,9 @@ let () =
                 \  procedure f() { append(1); return (); }\n\
                 \  process ps = f in 1..1;\n\
                 \  }");
+          test_case "property is bool" `Quick (fun () ->
+              check_ok
+                "mod m { var x = 0; property p = finally(x == 1); }");
           test_case "assert statement" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -457,6 +460,8 @@ let () =
                 \  }");
           test_case "def function as process root" `Quick (fun () ->
               check_fails "mod m { def f(x) = x; process p = f in 1..1; }");
+          test_case "non-bool property" `Quick (fun () ->
+              check_fails "mod m { property p = 1; }");
           test_case "assert non-bool" `Quick (fun () ->
               check_fails
                 "mod m {\n\

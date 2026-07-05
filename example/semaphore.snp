@@ -4,7 +4,7 @@ mod semaphore {
 
     var cnt = 0;
 
-    def convergence = globally(0 <= cnt) && globally(finally(cnt <= num));
+    property convergence = globally(0 <= cnt) && globally(finally(cnt <= num));
 
     procedure semaphore() {
         while (true) {
