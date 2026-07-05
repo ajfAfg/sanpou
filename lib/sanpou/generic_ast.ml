@@ -100,6 +100,7 @@ and ('n, 'c) block_stmt =
       body : ('n, 'c) body;
       else_body : ('n, 'c) body option;
     }
+  | Either of ('n, 'c) body list (* non-deterministic arms; at least two *)
 
 and ('n, 'c) body = ('n, 'c) step list [@@deriving show, eq]
 

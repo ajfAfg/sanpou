@@ -25,13 +25,14 @@ let extract (ir : Ir.module_ir) : t =
     List.concat_map
       (fun (proc : Ir.proc_ir) ->
         List.map
-          (fun (action : Ir.action) ->
+          (fun (node : Ir.action_node) ->
+            let source = Ir.node_source node in
             {
-              label = action.label;
-              proc_name = action.source.proc_name;
-              description = action.source.description;
-              line = action.source.line;
-              col = action.source.col;
+              label = Ir.node_label node;
+              proc_name = source.proc_name;
+              description = source.description;
+              line = source.line;
+              col = source.col;
             })
           proc.actions)
       (ir.procs @ wrapper_procs)

@@ -206,6 +206,12 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
                     else_body = Option.map (normalize_body st) else_body;
                   }));
         ]
+  | BlockStep (Either arms) ->
+      [
+        at
+          (Normalized_ast.BlockStep
+             (Either (List.map (normalize_body st) arms)));
+      ]
 
 and normalize_body st (steps : Resolved_ast.body) : Normalized_ast.body =
   List.concat_map (normalize_step st) steps

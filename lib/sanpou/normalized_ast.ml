@@ -53,6 +53,7 @@ and block_stmt =
          back edge re-enter at [pre], so the condition is re-evaluated
          from scratch on every iteration *)
   | If of { cond : expr; body : body; else_body : body option }
+  | Either of body list
 
 and body = step list [@@deriving show, eq]
 

@@ -126,21 +126,25 @@ let compute_unchanged (ir : module_ir) (action : action) : string list =
 
 (* ===== Action IR → TLA+ AST ===== *)
 
-(* Locals live in the top frame of stack[self]. Every write to a local is an
+let pc_test_conjunct label =
+  TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr label)
+
+(* Everything an action says except its pc test: guard, assignments, stack
+   operation, pc', and UNCHANGED. Ordinary actions prepend their own pc test;
+   a Choice node disjoins its arms' conjunct lists under a single pc test.
+
+   Locals live in the top frame of stack[self]. Every write to a local is an
    update of that frame, so each action builds a single stack' expression:
    frame updates first, then the stack operation. This relies on an invariant
    guaranteed by Linearize: an action assigns locals of procedure P only while
    a P-frame is on top (pop actions carry no guards/assignments, so the
    transient [value |-> v] record is never read or written except by them). *)
-let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
-    (action : action) : tla_decl =
+let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
+    (action : action) : tla_expr list =
   let to_tla = expr_to_tla local_vars in
   let self = TId "self" in
   let stack_self = TSubscript (TId "stack", self) in
   let stack_head = THead stack_self in
-  let pc_test_conjunct =
-    TBinOp ("=", TSubscript (TId "pc", self), TStr action.label)
-  in
   let guard_conjuncts =
     match action.guard with Some g -> [ to_tla g ] | None -> []
   in
@@ -255,25 +259,51 @@ let action_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
     | [] -> []
     | unchanged -> [ TUnchanged (List.map (fun v -> TId v) unchanged) ]
   in
-  let conjuncts =
-    (pc_test_conjunct :: guard_conjuncts)
-    @ global_assign_conjuncts @ stack_op_conjuncts @ stack_conjuncts
-    @ (pc_conjunct :: unchanged_conjuncts)
+  guard_conjuncts @ global_assign_conjuncts @ stack_op_conjuncts
+  @ stack_conjuncts
+  @ (pc_conjunct :: unchanged_conjuncts)
+
+let node_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
+    (node : action_node) : tla_decl =
+  let conjuncts_of =
+    action_conjuncts proc_entry_labels frame_fields local_vars ir
   in
-  DOpDef (action.label, [ "self" ], TConj (Block, conjuncts))
+  match node with
+  | Action action ->
+      DOpDef
+        ( action.label,
+          [ "self" ],
+          TConj (Block, pc_test_conjunct action.label :: conjuncts_of action)
+        )
+  | Choice { label; arms; _ } ->
+      (* One pc value; the transition disjoins the arms, each carrying its
+         own guard, effect, pc', and UNCHANGED. TLC picks any enabled arm. *)
+      DOpDef
+        ( label,
+          [ "self" ],
+          TConj
+            ( Block,
+              [
+                pc_test_conjunct label;
+                TDisj
+                  ( Block,
+                    List.map
+                      (fun arm -> TConj (Block, conjuncts_of arm))
+                      arms );
+              ] ) )
 
 let proc_to_decls proc_entry_labels frame_fields local_vars (ir : module_ir)
     (proc : proc_ir) : tla_decl list =
   let action_decls =
     List.concat_map
-      (fun a ->
+      (fun node ->
         [
-          action_to_decl proc_entry_labels frame_fields local_vars ir a;
+          node_to_decl proc_entry_labels frame_fields local_vars ir node;
           DSeparator;
         ])
       proc.actions
   in
-  let action_labels = List.map (fun (a : action) -> a.label) proc.actions in
+  let action_labels = List.map node_label proc.actions in
   let disj =
     DOpDef
       ( proc.proc_name,
@@ -498,6 +528,7 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
      locals and callRet temps always, params only when the pushing action
      supplies no arguments (a wrapper starting a root proc). *)
   let uses_default_init_value =
+    let node_actions = function Action a -> [ a ] | Choice c -> c.arms in
     List.exists
       (fun (p : proc_ir) ->
         List.exists
@@ -507,7 +538,7 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
                 let params, other_fields = List.assoc callee frame_fields in
                 List.length args < List.length params || other_fields <> []
             | _ -> false)
-          p.actions)
+          (List.concat_map node_actions p.actions))
       all_runtime_procs
   in
   let body =

@@ -1,8 +1,23 @@
 open Tla_ast
 
-let indent n s =
-  let prefix = String.make n ' ' in
-  prefix ^ s
+(* Bullet lists are column-sensitive in TLA+: a nested list's bullets must
+   sit strictly to the right of the enclosing bullet. Blocks therefore
+   render flush-left relative to themselves — [bullet] prefixes the item's
+   first line and pads its continuation lines by the bullet's width, so
+   nesting indents naturally — and the operator definition indents the
+   whole body once. *)
+let bullet prefix s =
+  let pad = String.make (String.length prefix) ' ' in
+  match String.split_on_char '\n' s with
+  | [] -> prefix
+  | first :: rest ->
+      String.concat "\n"
+        ((prefix ^ first) :: List.map (fun line -> pad ^ line) rest)
+
+let indent_lines n s =
+  let pad = String.make n ' ' in
+  String.split_on_char '\n' s |> List.map (fun line -> pad ^ line)
+  |> String.concat "\n"
 
 let rec render_expr = function
   | TInt i -> string_of_int i
@@ -39,11 +54,11 @@ let rec render_expr = function
   | TConj (Inline, es) -> String.concat " /\\ " (List.map render_expr es)
   | TConj (Block, es) ->
       String.concat "\n"
-        (List.map (fun e -> indent 4 ("/\\ " ^ render_expr e)) es)
+        (List.map (fun e -> bullet "/\\ " (render_expr e)) es)
   | TDisj (Inline, es) -> String.concat " \\/ " (List.map render_expr es)
   | TDisj (Block, es) ->
       String.concat "\n"
-        (List.map (fun e -> indent 4 ("\\/ " ^ render_expr e)) es)
+        (List.map (fun e -> bullet "\\/ " (render_expr e)) es)
   | TExists (x, set, body) ->
       "\\E " ^ x ^ " \\in " ^ render_expr set ^ ": " ^ render_expr body
   | TForall (x, set, body) ->
@@ -90,8 +105,8 @@ let render_decl = function
         else name ^ "(" ^ String.concat ", " params ^ ")"
       in
       match body with
-      | TConj (Block, _) -> lhs ^ " ==\n" ^ render_expr body
-      | TDisj (Block, _) -> lhs ^ " ==\n" ^ render_expr body
+      | TConj (Block, _) | TDisj (Block, _) ->
+          lhs ^ " ==\n" ^ indent_lines 4 (render_expr body)
       | _ -> lhs ^ " == " ^ render_expr body)
   | DVariables vars -> "VARIABLES " ^ String.concat ", " vars
   | DSeparator -> ""

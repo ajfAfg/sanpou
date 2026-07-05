@@ -13,7 +13,11 @@ type ctx = {
 
 let fresh_label ctx = ctx.fresh_label ()
 
-type compiled = { actions : action list; entry : string; exit_label : string }
+type compiled = {
+  actions : action_node list;
+  entry : string;
+  exit_label : string;
+}
 
 (* ===== Source info generation ===== *)
 
@@ -101,7 +105,7 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
         make_source ~proc_name:ctx.proc_name ~description:";" ~loc:step.loc
       in
       let a = make_action ~label ~pc_dest:(PcNext next_label) ~source () in
-      { actions = [ a ]; entry = label; exit_label = next_label }
+      { actions = [ Action a ]; entry = label; exit_label = next_label }
   | Normalized_ast.SimpleStep stmts ->
       let label = fresh_label ctx in
       let source =
@@ -120,7 +124,7 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
           ~stack_op:eff.stack_op ~label ~pc_dest:eff.next ~source ()
       in
       {
-        actions = a :: eff.extra_actions;
+        actions = List.map (fun x -> Action x) (a :: eff.extra_actions);
         entry = label;
         exit_label = next_label;
       }
@@ -136,7 +140,7 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
           ~assignments:[ AssignVar (i.name, value) ]
           ~label ~pc_dest:(PcNext next_label) ~source ()
       in
-      { actions = [ a ]; entry = label; exit_label = next_label }
+      { actions = [ Action a ]; entry = label; exit_label = next_label }
   | Normalized_ast.CallBindStep { bind; callee; args } ->
       let call_label = fresh_label ctx in
       let pop_label = fresh_label ctx in
@@ -159,7 +163,7 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
           ()
       in
       {
-        actions = [ call_action; pop_action ];
+        actions = [ Action call_action; Action pop_action ];
         entry = call_label;
         exit_label = next_label;
       }
@@ -167,6 +171,8 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
       linearize_while ctx pre cond body next_label step.loc
   | Normalized_ast.BlockStep (If { cond; body; else_body }) ->
       linearize_if ctx cond body next_label step.loc else_body
+  | Normalized_ast.BlockStep (Either arms) ->
+      linearize_either ctx arms next_label step.loc
 
 and linearize_while ctx pre cond body after_loop_label loc =
   let check_label = fresh_label ctx in
@@ -201,7 +207,7 @@ and linearize_while ctx pre cond body after_loop_label loc =
   {
     actions =
       (match pre_compiled with Some c -> c.actions | None -> [])
-      @ [ check_action ] @ body_compiled.actions;
+      @ [ Action check_action ] @ body_compiled.actions;
     entry = cond_entry;
     exit_label = after_loop_label;
   }
@@ -227,8 +233,63 @@ and linearize_if ctx cond body next_label loc else_body =
       ~source ()
   in
   {
-    actions = (check_action :: body_compiled.actions) @ else_actions;
+    actions = (Action check_action :: body_compiled.actions) @ else_actions;
     entry = check_label;
+    exit_label = next_label;
+  }
+
+and linearize_either ctx arms next_label loc =
+  let label = fresh_label ctx in
+  let source =
+    make_source ~proc_name:ctx.proc_name
+      ~description:("either [" ^ string_of_int (List.length arms) ^ " arms]")
+      ~loc
+  in
+  let compiled_arms =
+    List.map (fun arm -> linearize_body ctx arm next_label ~loc) arms
+  in
+  (* The choice embeds each arm's entry action as an alternative; an arm
+     that itself starts with an either contributes its alternatives
+     directly (disjunction is associative). The embedded original is kept
+     only when a jump inside the arm (a loop back edge) still targets its
+     label; otherwise its pc value is unreachable and the standalone
+     operator would be dead weight. Jumps from outside the arm cannot
+     target it: labels are fresh per construct, and break/continue only
+     jump outward. *)
+  let referenced_labels nodes =
+    let of_action (a : action) =
+      (match a.pc_dest with
+      | PcNext l -> [ l ]
+      | PcBranch (_, t, f) -> [ t; f ]
+      | PcCall _ | PcReturn -> [])
+      @ match a.stack_op with StackPush (_, ret, _) -> [ ret ] | _ -> []
+    in
+    List.concat_map
+      (function
+        | Action a -> of_action a
+        | Choice inner -> List.concat_map of_action inner.arms)
+      nodes
+  in
+  let entry_alternatives (c : compiled) =
+    match List.find (fun n -> node_label n = c.entry) c.actions with
+    | Action a -> [ a ]
+    | Choice inner -> inner.arms
+  in
+  let arm_actions (c : compiled) =
+    if List.mem c.entry (referenced_labels c.actions) then c.actions
+    else List.filter (fun n -> node_label n <> c.entry) c.actions
+  in
+  let choice =
+    Choice
+      {
+        label;
+        arms = List.concat_map entry_alternatives compiled_arms;
+        source;
+      }
+  in
+  {
+    actions = choice :: List.concat_map arm_actions compiled_arms;
+    entry = label;
     exit_label = next_label;
   }
 
@@ -242,7 +303,7 @@ and linearize_body ctx (steps : Normalized_ast.body) (continuation : string)
         make_source ~proc_name:ctx.proc_name ~description:"[empty body]" ~loc
       in
       let a = make_action ~label ~pc_dest:(PcNext continuation) ~source () in
-      { actions = [ a ]; entry = label; exit_label = continuation }
+      { actions = [ Action a ]; entry = label; exit_label = continuation }
   | _ ->
       let rev_steps = List.rev steps in
       let first = List.hd rev_steps in
@@ -290,6 +351,8 @@ let rec local_var_infos proc (steps : Normalized_ast.body) : var_info list =
       | Normalized_ast.BlockStep (If { body; else_body; _ }) -> (
           local_var_infos proc body
           @ match else_body with Some b -> local_var_infos proc b | None -> [])
+      | Normalized_ast.BlockStep (Either arms) ->
+          List.concat_map (local_var_infos proc) arms
       | Normalized_ast.SimpleStep _ | Normalized_ast.EmptyStep -> [])
     steps
 
@@ -324,7 +387,7 @@ let wrapper_of_process ~process_name ~root_proc ~(loc : Generic_ast.loc) :
   {
     proc_name = "__process_" ^ process_name ^ "_wrapper__";
     params = [];
-    actions = [ entry_action; discard_action ];
+    actions = [ Action entry_action; Action discard_action ];
     entry_label;
   }
 

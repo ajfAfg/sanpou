@@ -55,10 +55,25 @@ let make_action ?guard ?(assignments = []) ?(stack_op = StackNone) ~label
     ~pc_dest ~source () =
   { label; guard; assignments; pc_dest; stack_op; source }
 
+(* A [Choice] is an either statement: one pc value whose transition is the
+   disjunction of its arms' first actions. Embedding the arm actions (rather
+   than jumping to their labels) makes the choice commit only to an *enabled*
+   arm: an arm whose first action's guard is false is simply not offered, and
+   the process blocks only when every arm is disabled — PlusCal's either
+   semantics. The embedded actions are copies; the originals stay in the
+   action list because internal jumps (loop back edges) may still target
+   their labels. *)
+type action_node =
+  | Action of action
+  | Choice of { label : string; arms : action list; source : source_info }
+
+let node_label = function Action a -> a.label | Choice c -> c.label
+let node_source = function Action a -> a.source | Choice c -> c.source
+
 type proc_ir = {
   proc_name : string;
   params : Generic_ast.id list;
-  actions : action list;
+  actions : action_node list;
   entry_label : string;
 }
 

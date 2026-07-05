@@ -87,7 +87,7 @@ let () =
                 parse
                   "mod ops {\n\
                    def differs = [1] != [2];\n\
-                   def either = true || false;\n\
+                   def disjoined = true || false;\n\
                    def literal = -1;\n\
                    def expr = -(1 + 2);\n\
                    def bigger = 2 > 1;\n\
@@ -101,7 +101,7 @@ let () =
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
               has "differs == (<< 1 >> /= << 2 >>)";
-              has "either == (TRUE \\/ FALSE)";
+              has "disjoined == (TRUE \\/ FALSE)";
               has "literal == -1";
               has "expr == (0 - (1 + 2))";
               has "bigger == (2 > 1)";
@@ -124,6 +124,26 @@ let () =
               let has s = has_in s tla in
               has "x \\in 1..3";
               has "y = 0");
+          Alcotest.test_case
+            "either compiles to a disjunction of guarded arms" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x = 0;\n\
+                   fn foo() {\n\
+                   either { x = 1; } or { await x > 0, x = 2; }\n\
+                   return ();\n\
+                   }\n\
+                   process ps = foo in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "x' = 1";
+              has "(x > 0)";
+              has "x' = 2";
+              has "\\/ /\\ x' = 1");
           Alcotest.test_case "quantifiers compile to tla quantifiers" `Quick
             (fun () ->
               let ast =

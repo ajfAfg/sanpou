@@ -125,6 +125,7 @@ and alpha_block_stmt st env :
           body = alpha_body st env body;
           else_body = Option.map (alpha_body st env) else_body;
         }
+  | Either arms -> Either (List.map (alpha_body st env) arms)
 
 and alpha_body st env (steps : Surface_ast.body) : Resolved_ast.body =
   match steps with
