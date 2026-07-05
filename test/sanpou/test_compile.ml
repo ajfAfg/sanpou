@@ -1,79 +1,9 @@
+(* Emitter specifics that the cram goldens (test/cram/compile.t) do not pin
+   down. Whole-program output, the process wrapper, frame-resident locals and
+   parameters, and CLI diagnostics are covered by the cram tests. *)
+
 let parse input =
   input |> Lexing.from_string |> Sanpou.Parser.program Sanpou.Lexer.main
-
-let full_example =
-  {|
-mod rwlock {
-  def readerNum = 2;
-  def writerNum = 2;
-
-  def foo(x) = x + 1;
-
-  var rcnt = 0;
-  var wcnt = 0;
-  var lock = false;
-
-  fn lockAcquire() {
-    await lock == false,
-    lock = true;
-    return ();
-  }
-
-  fn lockRelease() {
-    lock = false;
-    return ();
-  }
-
-  fn rwlockReadAcquire() {
-    while (true) {
-      while (0 < wcnt) {}
-      rcnt = rcnt + 1;
-      if (wcnt == 0) {
-        break;
-      }
-      rcnt = rcnt - 1;
-    }
-    return ();
-  }
-
-  fn rwlockReadRelease() {
-    rcnt = rcnt - 1;
-    return ();
-  }
-
-  fn rwlockWriteAcquire() {
-    wcnt = wcnt + 1;
-    while (0 < rcnt) {}
-    lockAcquire();
-    return ();
-  }
-
-  fn rwlockWriteRelease() {
-    lockRelease();
-    wcnt = wcnt - 1;
-    return ();
-  }
-
-  fn reader() {
-    while (true) {
-      rwlockWriteAcquire();
-      ;
-      rwlockReadRelease();
-    }
-  }
-
-  fn writer() {
-    while (true) {
-      rwlockWriteAcquire();
-      ;
-      rwlockWriteRelease();
-    }
-  }
-
-  process readers = reader in 1..readerNum;
-  process writers = writer in 1..writerNum;
-}
-|}
 
 let compile ast =
   Sanpou.Typing.check ast;
@@ -103,72 +33,6 @@ let () =
     [
       ( "codegen",
         [
-          Alcotest.test_case "simple proc" `Quick (fun () ->
-              let ast =
-                parse
-                  "mod foo {\n\
-                   var x = 0;\n\
-                   fn foo() { x = 1; return (); }\n\
-                   process ps = foo in 1..2;\n\
-                   }\n"
-              in
-              let modules = compile ast in
-              let tla = Tla.Tla_printer.render (List.hd modules) in
-              let has s = has_in s tla in
-              has "---- MODULE foo ----";
-              has "EXTENDS TLC, Sequences, Integers";
-              has "VARIABLES pc, x, stack";
-              has "__process_ps_wrapper__(self) ==";
-              has "x = 0";
-              has "Spec == Init /\\ [][Next]_vars";
-              has "====");
-          Alcotest.test_case "top-level return uses process wrapper" `Quick
-            (fun () ->
-              let ast =
-                parse
-                  "mod foo {\n\
-                   fn foo() { return (); }\n\
-                   process ps = foo in 1..1;\n\
-                   }\n"
-              in
-              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              let has s = has_in s tla in
-              has "__process_ps_wrapper__(self) ==";
-              has "__w_ps_entry__(self) ==";
-              has "__w_ps_discard__(self) ==";
-              has "pc = [self \\in ProcSet |-> \"__w_ps_entry__\"]");
-          Alcotest.test_case "fair process adds weak fairness" `Quick (fun () ->
-              let ast =
-                parse
-                  "mod foo {\n\
-                   var x = 0;\n\
-                   fn foo() { x = 1 - x; }\n\
-                   fair process ps = foo in 1..2;\n\
-                   }\n"
-              in
-              let modules = compile ast in
-              let tla = Tla.Tla_printer.render (List.hd modules) in
-              let has s = has_in s tla in
-              has "WF_vars(__process_ps_wrapper__(self))";
-              has "WF_vars(foo(self))";
-              has "====");
-          Alcotest.test_case "fair process covers helper procedures" `Quick
-            (fun () ->
-              let ast =
-                parse
-                  "mod foo {\n\
-                   var x = 0;\n\
-                   fn helper() { x = 1; return (); }\n\
-                   fn main() { helper(); return (); }\n\
-                   fair process ps = main in 1..2;\n\
-                   }\n"
-              in
-              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              let has s = has_in s tla in
-              has "WF_vars(__process_ps_wrapper__(self))";
-              has "WF_vars(main(self))";
-              has "WF_vars(helper(self))";
-              has "return_pc |->");
           Alcotest.test_case "plain process omits weak fairness" `Quick
             (fun () ->
               let ast =
@@ -179,34 +43,8 @@ let () =
                    process ps = foo in 1..2;\n\
                    }\n"
               in
-              let modules = compile ast in
-              let tla = Tla.Tla_printer.render (List.hd modules) in
-              let has_not s =
-                Alcotest.(check bool)
-                  s false
-                  (try
-                     let _ = Str.search_forward (Str.regexp_string s) tla 0 in
-                     true
-                   with Not_found -> false)
-              in
-              has_not "WF_vars(foo(self))");
-          Alcotest.test_case "full example compiles" `Quick (fun () ->
-              let ast = parse full_example in
-              let modules = compile ast in
-              let tla = Tla.Tla_printer.render (List.hd modules) in
-              let has s = has_in s tla in
-              has "---- MODULE rwlock ----";
-              has "readerNum == 2";
-              has "writerNum == 2";
-              has "foo(x) == (x + 1)";
-              has "VARIABLES pc, rcnt, wcnt, lock, stack";
-              has "ProcSet ==";
-              has "lockAcquire(self) ==";
-              has "__process_readers_wrapper__(self) ==";
-              has "reader(self) ==";
-              has "writer(self) ==";
-              has "Spec == Init /\\ [][Next]_vars";
-              has "====");
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_not_in "WF_vars(foo(self))" tla);
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
               let ast =
@@ -228,29 +66,25 @@ let () =
               has "ys == Tail(xs)";
               has "zs == Append(xs, 3)";
               has "ws == xs \\o << 4, 5 >>");
-          Alcotest.test_case "inequality compiles to tla not-equals" `Quick
+          Alcotest.test_case "operators compile to tla equivalents" `Quick
             (fun () ->
               let ast =
                 parse
-                  "mod neq {\n\
+                  "mod ops {\n\
                    def differs = [1] != [2];\n\
-                   fn main() { return (); }\n\
-                   process ps = main in 1..1;\n\
-                   }\n"
-              in
-              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              has_in "differs == (<< 1 >> /= << 2 >>)" tla);
-          Alcotest.test_case "or compiles to tla disjunction" `Quick (fun () ->
-              let ast =
-                parse
-                  "mod ormod {\n\
                    def either = true || false;\n\
+                   def literal = -1;\n\
+                   def expr = -(1 + 2);\n\
                    fn main() { return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              has_in "either == (TRUE \\/ FALSE)" tla);
+              let has s = has_in s tla in
+              has "differs == (<< 1 >> /= << 2 >>)";
+              has "either == (TRUE \\/ FALSE)";
+              has "literal == -1";
+              has "expr == (0 - (1 + 2))");
           Alcotest.test_case "map init and indexed update compile" `Quick
             (fun () ->
               let ast =
@@ -264,19 +98,6 @@ let () =
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "xs = [i \\in 1..2 |-> 0]" tla;
               has_in "xs' = [xs EXCEPT ![1] = self]" tla);
-          Alcotest.test_case "unary minus compiles" `Quick (fun () ->
-              let ast =
-                parse
-                  "mod neg {\n\
-                   def literal = -1;\n\
-                   def expr = -(1 + 2);\n\
-                   fn main() { return (); }\n\
-                   process ps = main in 1..1;\n\
-                   }\n"
-              in
-              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              has_in "literal == -1" tla;
-              has_in "expr == (0 - (1 + 2))" tla);
           Alcotest.test_case "multiple modules" `Quick (fun () ->
               let ast =
                 parse
@@ -299,40 +120,6 @@ let () =
               has_in "VARIABLES pc, x, stack" tla_a;
               has_in "---- MODULE b ----" tla_b;
               has_in "VARIABLES pc, y, stack" tla_b);
-          Alcotest.test_case "local variable" `Quick (fun () ->
-              let ast =
-                parse
-                  "mod m {\n\
-                   var g = 0;\n\
-                   fn foo() { var x = 5; g = x; return (); }\n\
-                   process ps = foo in 1..2;\n\
-                   }\n"
-              in
-              let modules = compile ast in
-              let tla = Tla.Tla_printer.render (List.hd modules) in
-              let has s = has_in s tla in
-              has "VARIABLES pc, g, stack";
-              has "x__1 |-> \"__null__\"";
-              has
-                "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT \
-                 ![1].x__1 = 5]]";
-              has "g' = Head(stack[self]).x__1");
-          Alcotest.test_case "shadowing module var" `Quick (fun () ->
-              let ast =
-                parse
-                  "mod m {\n\
-                   var x = 0;\n\
-                   fn foo() { var x = 42; return (); }\n\
-                   process ps = foo in 1..2;\n\
-                   }\n"
-              in
-              let modules = compile ast in
-              let tla = Tla.Tla_printer.render (List.hd modules) in
-              let has s = has_in s tla in
-              has "VARIABLES pc, x, stack";
-              has
-                "stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT \
-                 ![1].x__1 = 42]]");
           Alcotest.test_case "nested shadowing" `Quick (fun () ->
               let ast =
                 parse
@@ -359,94 +146,5 @@ let () =
               has "![1].x__2 = 2";
               has "g' = Head(stack[self]).x__2";
               has "g' = Head(stack[self]).x__1");
-          Alcotest.test_case "procedure parameters become local state" `Quick
-            (fun () ->
-              let ast =
-                parse
-                  "mod params {\n\
-                   fn callee(idx) {\n\
-                   var seen = idx;\n\
-                   return ();\n\
-                   }\n\
-                   fn caller() { callee(self); return (); }\n\
-                   process ps = caller in 1..2;\n\
-                   }\n"
-              in
-              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              let has s = has_in s tla in
-              has "VARIABLES pc, stack";
-              (* Argument bound directly in the pushed callee frame *)
-              has "idx__1 |-> self";
-              has "seen__2 |-> \"__null__\"";
-              has "![1].seen__2 = Head(stack[self]).idx__1";
-              has_not_in "![idx]" tla);
-          Alcotest.test_case "procedure call expression captures return" `Quick
-            (fun () ->
-              let ast =
-                parse
-                  "mod factorial {\n\
-                   var x = 0;\n\
-                   fn fact(y) {\n\
-                   if (y == 0) { return 1; } else {\n\
-                   var ans = y * fact(y - 1);\n\
-                   return ans;\n\
-                   }\n\
-                   }\n\
-                   fn worker() { x = fact(5); return (); }\n\
-                   process ps = worker in 1..1;\n\
-                   }\n"
-              in
-              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              let has s = has_in s tla in
-              has "callRet__1";
-              has "Head(stack[self]).value";
-              has "value |->";
-              has_not_in "x' = fact(5)" tla;
-              has_not_in "* fact(" tla);
-        ] );
-      ( "driver",
-        [
-          Alcotest.test_case "well-typed program compiles" `Quick (fun () ->
-              match Sanpou.Compile.compile full_example with
-              | Ok [ output ] ->
-                  Alcotest.(check string)
-                    "module name" "rwlock" output.tla_module.name
-              | Ok _ -> Alcotest.fail "expected one module"
-              | Error _ -> Alcotest.fail "expected success");
-          Alcotest.test_case "type error becomes a diagnostic" `Quick (fun () ->
-              let src =
-                "mod m {\n\
-                \  var g = 0;\n\
-                \  fn foo() {\n\
-                \    g = true;\n\
-                \    return ();\n\
-                \  }\n\
-                \  process ps = foo in 1..1;\n\
-                 }\n"
-              in
-              match Sanpou.Compile.compile src with
-              | Error { loc; message } ->
-                  Alcotest.(check int) "line" 4 loc.line;
-                  Alcotest.(check bool)
-                    "mentions unification" true
-                    (String.length message > 0
-                    && Str.string_match (Str.regexp ".*cannot unify") message 0
-                    )
-              | Ok _ -> Alcotest.fail "expected a type error");
-          Alcotest.test_case "syntax error becomes a diagnostic" `Quick
-            (fun () ->
-              match Sanpou.Compile.compile "mod m { def x = ; }" with
-              | Error { loc; message } ->
-                  Alcotest.(check int) "line" 1 loc.line;
-                  Alcotest.(check string) "message" "Syntax error" message
-              | Ok _ -> Alcotest.fail "expected a syntax error");
-          Alcotest.test_case "lexical error becomes a diagnostic" `Quick
-            (fun () ->
-              match Sanpou.Compile.compile "mod m { def x = 1 ? 2; }" with
-              | Error { loc; message } ->
-                  Alcotest.(check int) "line" 1 loc.line;
-                  Alcotest.(check string)
-                    "message" "Unexpected character: '?'" message
-              | Ok _ -> Alcotest.fail "expected a lexical error");
         ] );
     ]

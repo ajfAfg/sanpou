@@ -1,0 +1,20 @@
+; E2E tests: exercise the sanpou CLI itself (see README "Tests").
+;
+; - errors.t    CLI usage errors and compile diagnostics
+; - compile.t   golden output of `sanpou compile` for the examples
+; - tlc.t       compile → TLC model check (pass / deadlock verdicts)
+; - trace.t     compile → TLC counterexample → `sanpou trace` annotation
+
+(cram
+ (applies_to :whole_subtree)
+ (deps
+  %{bin:sanpou}
+  (glob_files %{project_root}/example/*)))
+
+; TLC-backed tests run only when the TLC environment is available.
+; mise provides SANPOU_JAVA and SANPOU_TLA2TOOLS_JAR (see AGENTS.md).
+
+(cram
+ (applies_to tlc trace)
+ (enabled_if
+  (<> %{env:SANPOU_JAVA=} "")))

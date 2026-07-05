@@ -1,3 +1,8 @@
+(* Parser cases where the AST shape is not obvious from the surface syntax:
+   step atomicity, tuple/paren disambiguation, trailing commas, builtin
+   resolution, and unary-minus grammar. Plain "construct X parses" coverage
+   lives in the pretty-print roundtrip corpus (test_ast_printer.ml). *)
+
 open Sanpou.Generic_ast
 
 (* Trailing-comma markers are not represented in the AST; the [tc] parameters
@@ -8,41 +13,24 @@ let node desc = { desc; loc = loc0 }
 let cl0 = []
 let cl1 x = [ x ]
 let cl2 x y = [ x; y ]
-let cl3 x y z = [ x; y; z ]
 let intlit v = node (IntLit v)
 let boollit v = node (BoolLit v)
 let var s = node (Var s)
-let self_ = node Self
 let unop op r = node (UnOp (op, r))
 let binop op l r = node (BinOp (op, l, r))
 let app f args = node (App (f, args))
 let builtin_ b args = node (Builtin (b, args))
-let subscript lhs index = node (Subscript (lhs, index))
-let map_init binder lo hi value = node (MapInit { binder; lo; hi; value })
 let tuple elems _tc = node (Tuple elems)
 let sequence elems _tc = node (Sequence elems)
 let paren e = e
 let assign x e = node (Assign (VarTarget x, e))
-let index_assign x index e = node (Assign (SubscriptTarget (x, index), e))
-let call f args = node (Call (f, args))
 let return_ e = node (Return e)
-let break_ = node Break
-let continue_ = node Continue
 let await_ e = node (Await e)
 let simple_step stmts = node (SimpleStep stmts)
 let empty_step = node EmptyStep
-let block_step s = node (BlockStep s)
-let while_ cond body = While { cond; body }
-let if_ cond body = If { cond; body; else_body = None }
-let if_else cond body else_body = If { cond; body; else_body = Some else_body }
 let const_def x e = node (ConstDef { name = x; value = e })
 let fun_def f ps e = node (FunDef { name = f; params = ps; body_expr = e })
-let var_decl x e = node (VarDecl { name = x; value = e })
 let proc_def f ps body = node (ProcDef { name = f; params = ps; body })
-
-let process_ ?(fair = false) nm pr lo hi =
-  node (Process { name = nm; proc = pr; fair; lo; hi })
-
 let param s = s
 let var_step x e = node (VarStep (x, e))
 
@@ -54,361 +42,31 @@ let parse_items input =
   | [ { items; _ } ] -> items
   | _ -> failwith "expected single module"
 
-let full_example =
-  {|
-mod rwlock {
-  def readerNum = 2;
-  def writerNum = 2;
+let items_t =
+  Alcotest.(
+    list (testable (pp_item pp_id pp_id) (equal_item equal_id equal_id)))
 
-  def foo(x) = x + 1;
-
-  var rcnt = 0;
-  var wcnt = 0;
-  var lock = false;
-
-  fn lockAcquire() {
-    await lock == false,
-    lock = true;
-    return ();
-  }
-
-  fn lockRelease() {
-    lock = false;
-    return ();
-  }
-
-  fn rwlockReadAcquire() {
-    while (true) {
-      while (0 < wcnt) {}
-      rcnt = rcnt + 1;
-      if (wcnt == 0) {
-        break;
-      }
-      rcnt = rcnt - 1;
-    }
-    return ();
-  }
-
-  fn rwlockReadRelease() {
-    rcnt = rcnt - 1;
-    return ();
-  }
-
-  fn rwlockWriteAcquire() {
-    wcnt = wcnt + 1;
-    while (0 < rcnt) {}
-    lockAcquire();
-    return ();
-  }
-
-  fn rwlockWriteRelease() {
-    lockRelease();
-    wcnt = wcnt - 1;
-    return ();
-  }
-
-  fn reader() {
-    while (true) {
-      rwlockWriteAcquire();
-      ;
-      rwlockReadRelease();
-    }
-  }
-
-  fn writer() {
-    while (true) {
-      rwlockWriteAcquire();
-      ;
-      rwlockWriteRelease();
-    }
-  }
-
-  process readers = reader in 1..readerNum;
-  process writers = writer in 1..writerNum;
-}
-|}
+let check_items input expected =
+  Alcotest.check items_t "parse" expected (parse_items input)
 
 let () =
   let open Alcotest in
   run "Parse"
     [
-      ( "const_def",
+      ( "step_atomicity",
         [
-          Alcotest.test_case "simple" `Quick (fun () ->
-              let actual = parse_items "def x = 42;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (intlit 42) ]
-                actual);
-          Alcotest.test_case "expr" `Quick (fun () ->
-              let actual = parse_items "def x = 1 + 2;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (binop Plus (intlit 1) (intlit 2)) ]
-                actual);
-          Alcotest.test_case "inequality expr" `Quick (fun () ->
-              let actual = parse_items "def x = 1 != 2;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (binop Neq (intlit 1) (intlit 2)) ]
-                actual);
-          Alcotest.test_case "or expr" `Quick (fun () ->
-              let actual = parse_items "def x = true || false;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (binop Or (boollit true) (boollit false)) ]
-                actual);
-          Alcotest.test_case "unary minus literal" `Quick (fun () ->
-              let actual = parse_items "def x = -1;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (unop Neg (intlit 1)) ]
-                actual);
-          Alcotest.test_case "unary minus paren expr" `Quick (fun () ->
-              let actual = parse_items "def x = -(1 + 2);" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  const_def "x"
-                    (unop Neg (paren (binop Plus (intlit 1) (intlit 2))));
-                ]
-                actual);
-          Alcotest.test_case "subtract negative" `Quick (fun () ->
-              let actual = parse_items "def x = y - -1;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (binop Minus (var "y") (unop Neg (intlit 1))) ]
-                actual);
-        ] );
-      ( "fun_def",
-        [
-          Alcotest.test_case "simple" `Quick (fun () ->
-              let actual = parse_items "def foo(x) = x + 1;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  fun_def "foo"
-                    (cl1 (param "x"))
-                    (binop Plus (var "x") (intlit 1));
-                ]
-                actual);
-        ] );
-      ( "builtin",
-        [
-          Alcotest.test_case "application resolves to builtin" `Quick (fun () ->
-              let actual = parse_items "def x = head(xs);" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  const_def "x" (builtin_ Sanpou.Builtin.Head (cl1 (var "xs")));
-                ]
-                actual);
-          Alcotest.test_case "non-builtin stays an app" `Quick (fun () ->
-              let actual = parse_items "def x = first(xs);" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (app "first" (cl1 (var "xs"))) ]
-                actual);
-        ] );
-      ( "var_decl",
-        [
-          Alcotest.test_case "int" `Quick (fun () ->
-              let actual = parse_items "var x = 0;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ var_decl "x" (intlit 0) ]
-                actual);
-          Alcotest.test_case "bool" `Quick (fun () ->
-              let actual = parse_items "var b = false;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ var_decl "b" (boollit false) ]
-                actual);
-          Alcotest.test_case "map init" `Quick (fun () ->
-              let actual = parse_items "var xs = { x in 1..2: false; };" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  var_decl "xs"
-                    (map_init "x" (intlit 1) (intlit 2) (boollit false));
-                ]
-                actual);
-        ] );
-      ( "proc_def",
-        [
-          Alcotest.test_case "simple return" `Quick (fun () ->
-              let actual = parse_items "fn foo() { return (); }" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  proc_def "foo" cl0
-                    [ simple_step (cl1 (return_ (tuple cl0 None))) ];
-                ]
-                actual);
-          Alcotest.test_case "assign and return" `Quick (fun () ->
-              let actual = parse_items "fn foo() { x = 1; return (); }" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
+          test_case "statements split into separate steps" `Quick (fun () ->
+              check_items "fn foo() { x = 1; return (); }"
                 [
                   proc_def "foo" cl0
                     [
                       simple_step (cl1 (assign "x" (intlit 1)));
                       simple_step (cl1 (return_ (tuple cl0 None)));
                     ];
-                ]
-                actual);
-          Alcotest.test_case "skip step" `Quick (fun () ->
-              let actual = parse_items "fn foo() { ; }" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ proc_def "foo" cl0 [ empty_step ] ]
-                actual);
-          Alcotest.test_case "return value" `Quick (fun () ->
-              let actual = parse_items "fn foo() { return 42; }" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  proc_def "foo" cl0 [ simple_step (cl1 (return_ (intlit 42))) ];
-                ]
-                actual);
-          Alcotest.test_case "return tuple" `Quick (fun () ->
-              let actual = parse_items "fn foo() { return (1, 2); }" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  proc_def "foo" cl0
-                    [
-                      simple_step
-                        (cl1 (return_ (tuple (cl2 (intlit 1) (intlit 2)) None)));
-                    ];
-                ]
-                actual);
-          Alcotest.test_case "continue and indexed assign" `Quick (fun () ->
-              let actual =
-                parse_items "fn foo() { xs[1] = self; continue; return (); }"
-              in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  proc_def "foo" cl0
-                    [
-                      simple_step (cl1 (index_assign "xs" (intlit 1) self_));
-                      simple_step (cl1 continue_);
-                      simple_step (cl1 (return_ (tuple cl0 None)));
-                    ];
-                ]
-                actual);
-          Alcotest.test_case "if else" `Quick (fun () ->
-              let actual =
-                parse_items
-                  "fn foo() { if (true) { break; } else { continue; } }"
-              in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  proc_def "foo" cl0
-                    [
-                      block_step
-                        (if_else (boollit true)
-                           [ simple_step (cl1 break_) ]
-                           [ simple_step (cl1 continue_) ]);
-                    ];
-                ]
-                actual);
-        ] );
-      ( "atomic_step",
-        [
-          Alcotest.test_case "await with comma" `Quick (fun () ->
-              let actual =
-                parse_items
-                  "fn foo() { await lock == false, lock = true; return (); }"
-              in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
+                ]);
+          test_case "await with comma merges into one step" `Quick (fun () ->
+              check_items
+                "fn foo() { await lock == false, lock = true; return (); }"
                 [
                   proc_def "foo" cl0
                     [
@@ -418,211 +76,73 @@ let () =
                            (assign "lock" (boollit true)));
                       simple_step (cl1 (return_ (tuple cl0 None)));
                     ];
-                ]
-                actual);
+                ]);
+          test_case "bare semicolon is an empty step" `Quick (fun () ->
+              check_items "fn foo() { ; }" [ proc_def "foo" cl0 [ empty_step ] ]);
         ] );
-      ( "while",
+      ( "tuple_vs_paren",
         [
-          Alcotest.test_case "while with body" `Quick (fun () ->
-              let actual = parse_items "fn f() { while (true) { break; } }" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  proc_def "f" cl0
-                    [
-                      block_step
-                        (while_ (boollit true) [ simple_step (cl1 break_) ]);
-                    ];
-                ]
-                actual);
-          Alcotest.test_case "while wait" `Quick (fun () ->
-              let actual = parse_items "fn f() { while (0 < x) {} }" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  proc_def "f" cl0
-                    [ block_step (while_ (binop Lt (intlit 0) (var "x")) []) ];
-                ]
-                actual);
-        ] );
-      ( "tuple",
-        [
-          Alcotest.test_case "empty" `Quick (fun () ->
-              let actual = parse_items "def x = ();" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (tuple cl0 None) ]
-                actual);
-          Alcotest.test_case "single" `Quick (fun () ->
-              let actual = parse_items "def x = (1,);" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (tuple (cl1 (intlit 1)) (Some n)) ]
-                actual);
-          Alcotest.test_case "pair" `Quick (fun () ->
-              let actual = parse_items "def x = (1, 2);" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (tuple (cl2 (intlit 1) (intlit 2)) None) ]
-                actual);
-          Alcotest.test_case "triple" `Quick (fun () ->
-              let actual = parse_items "def x = (1, 2, 3);" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  const_def "x"
-                    (tuple (cl3 (intlit 1) (intlit 2) (intlit 3)) None);
-                ]
-                actual);
-          Alcotest.test_case "nested" `Quick (fun () ->
-              let actual = parse_items "def x = ((1, 2), 3);" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  const_def "x"
-                    (tuple
-                       (cl2 (tuple (cl2 (intlit 1) (intlit 2)) None) (intlit 3))
-                       None);
-                ]
-                actual);
+          test_case "empty" `Quick (fun () ->
+              check_items "def x = ();" [ const_def "x" (tuple cl0 None) ]);
+          test_case "single needs trailing comma" `Quick (fun () ->
+              check_items "def x = (1,);"
+                [ const_def "x" (tuple (cl1 (intlit 1)) (Some n)) ]);
+          test_case "pair" `Quick (fun () ->
+              check_items "def x = (1, 2);"
+                [ const_def "x" (tuple (cl2 (intlit 1) (intlit 2)) None) ]);
         ] );
       ( "sequence",
         [
-          Alcotest.test_case "empty" `Quick (fun () ->
-              let actual = parse_items "def x = [];" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (sequence cl0 None) ]
-                actual);
-          Alcotest.test_case "single" `Quick (fun () ->
-              let actual = parse_items "def x = [1];" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (sequence (cl1 (intlit 1)) None) ]
-                actual);
-          Alcotest.test_case "single trailing comma" `Quick (fun () ->
-              let actual = parse_items "def x = [1,];" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (sequence (cl1 (intlit 1)) (Some n)) ]
-                actual);
-          Alcotest.test_case "pair" `Quick (fun () ->
-              let actual = parse_items "def x = [1, 2];" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ const_def "x" (sequence (cl2 (intlit 1) (intlit 2)) None) ]
-                actual);
+          test_case "empty" `Quick (fun () ->
+              check_items "def x = [];" [ const_def "x" (sequence cl0 None) ]);
+          test_case "single trailing comma" `Quick (fun () ->
+              check_items "def x = [1,];"
+                [ const_def "x" (sequence (cl1 (intlit 1)) (Some n)) ]);
         ] );
-      ( "process",
+      ( "builtin",
         [
-          Alcotest.test_case "simple" `Quick (fun () ->
-              let actual = parse_items "process ps = foo in 1..n;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ process_ "ps" "foo" (intlit 1) (var "n") ]
-                actual);
-          Alcotest.test_case "fair" `Quick (fun () ->
-              let actual = parse_items "fair process ps = foo in 1..n;" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [ process_ ~fair:true "ps" "foo" (intlit 1) (var "n") ]
-                actual);
+          test_case "application resolves to builtin" `Quick (fun () ->
+              check_items "def x = head(xs);"
+                [
+                  const_def "x" (builtin_ Sanpou.Builtin.Head (cl1 (var "xs")));
+                ]);
+          test_case "non-builtin stays an app" `Quick (fun () ->
+              check_items "def x = first(xs);"
+                [ const_def "x" (app "first" (cl1 (var "xs"))) ]);
         ] );
-      ( "full_example",
+      ( "unary_minus",
         [
-          Alcotest.test_case "parses without error" `Quick (fun () ->
-              let _ast = parse full_example in
-              ());
+          test_case "literal" `Quick (fun () ->
+              check_items "def x = -1;" [ const_def "x" (unop Neg (intlit 1)) ]);
+          test_case "paren expr" `Quick (fun () ->
+              check_items "def x = -(1 + 2);"
+                [
+                  const_def "x"
+                    (unop Neg (paren (binop Plus (intlit 1) (intlit 2))));
+                ]);
+          test_case "subtract negative" `Quick (fun () ->
+              check_items "def x = y - -1;"
+                [ const_def "x" (binop Minus (var "y") (unop Neg (intlit 1))) ]);
         ] );
-      ( "var_step",
+      ( "definitions",
         [
-          Alcotest.test_case "simple" `Quick (fun () ->
-              let actual = parse_items "fn foo() { var x = 5; return (); }" in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
+          test_case "fun_def with params" `Quick (fun () ->
+              check_items "def foo(x) = x + 1;"
+                [
+                  fun_def "foo"
+                    (cl1 (param "x"))
+                    (binop Plus (var "x") (intlit 1));
+                ]);
+          test_case "var step" `Quick (fun () ->
+              check_items "fn foo() { var x = 5; return (); }"
                 [
                   proc_def "foo" cl0
                     [
                       var_step "x" (intlit 5);
                       simple_step (cl1 (return_ (tuple cl0 None)));
                     ];
-                ]
-                actual);
-          Alcotest.test_case "with expression" `Quick (fun () ->
-              let actual =
-                parse_items "fn foo() { var y = 1 + 2; return (); }"
-              in
-              Alcotest.(
-                check
-                  (list
-                     (testable (pp_item pp_id pp_id)
-                        (equal_item equal_id equal_id))))
-                "parse"
-                [
-                  proc_def "foo" cl0
-                    [
-                      var_step "y" (binop Plus (intlit 1) (intlit 2));
-                      simple_step (cl1 (return_ (tuple cl0 None)));
-                    ];
-                ]
-                actual);
-          Alcotest.test_case "let is rejected" `Quick (fun () ->
+                ]);
+          test_case "let is rejected" `Quick (fun () ->
               try
                 let _ = parse_items "let x = 0;" in
                 Alcotest.fail "Expected parse error"
