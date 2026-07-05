@@ -49,6 +49,38 @@ Type error:
   add_bool.snp:4:13: Type error: cannot unify bool with int
   [1]
 
+Temporal operators live in module-level defs only; using one (or a def
+containing one) in a runtime context is rejected:
+
+  $ cat > temporal.snp <<'EOF'
+  > mod m {
+  >   var x = 0;
+  >   fn f() {
+  >     await globally(x == 0);
+  >     return ();
+  >   }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ sanpou compile temporal.snp -o out
+  temporal.snp:4:11: globally is a temporal operator and is only allowed in a module-level def
+  [1]
+
+  $ cat > temporal_ref.snp <<'EOF'
+  > mod m {
+  >   var x = 0;
+  >   def p = globally(x == 0);
+  >   fn f() {
+  >     await p;
+  >     return ();
+  >   }
+  >   process ps = f in 1..1;
+  > }
+  > EOF
+  $ sanpou compile temporal_ref.snp -o out
+  temporal_ref.snp:5:11: p is a temporal property and can only be referenced from another module-level def
+  [1]
+
 Redefining a builtin callable is rejected — applications always resolve to
 the builtin, so the definition could never be called:
 
