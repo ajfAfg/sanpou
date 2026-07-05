@@ -4,7 +4,9 @@ type state_var = { var_name : string; value : string }
 
 type step_header =
   | InitialPredicate
-  | Action of { label : string; process_id : int }
+  (* TLC's action headers name the label but not the acting process;
+     [process_id] is only present in the older "<Label(pid) ...>" form. *)
+  | Action of { label : string; process_id : int option }
 
 type trace_step = {
   step_num : int;
@@ -24,7 +26,10 @@ let starts_with prefix s =
   let plen = String.length prefix in
   String.length s >= plen && String.sub s 0 plen = prefix
 
-(* Parse header like "1: <Initial predicate>" or "2: <L34(1) line ...>" *)
+(* Parse header like "1: <Initial predicate>" or
+   "2: <L34 line 16, col 5 to line 18, col 31 of module m>". TLC does not
+   say which process moved; the older "2: <L34(1) line ...>" form carries a
+   process id and is still accepted. *)
 let parse_header line =
   try
     let colon = String.index line ':' in
@@ -34,24 +39,32 @@ let parse_header line =
     in
     if rest = "<Initial predicate>" then Some (step_num, InitialPredicate)
     else
-      (* Expected: <Label(ProcessId) line ... > *)
       let len = String.length rest in
       if len > 2 && rest.[0] = '<' then
         let inner = String.sub rest 1 (len - 2) in
         (* strip < > *)
-        (* Find label and process_id: "L34(1) line ..." *)
-        let paren_open = try String.index inner '(' with Not_found -> -1 in
-        if paren_open > 0 then
-          let label = String.sub inner 0 paren_open in
-          let paren_close = try String.index inner ')' with Not_found -> -1 in
-          if paren_close > paren_open then
-            let pid_s =
-              String.sub inner (paren_open + 1) (paren_close - paren_open - 1)
-            in
-            let process_id = try int_of_string pid_s with Failure _ -> 0 in
-            Some (step_num, Action { label; process_id })
-          else None
-        else None
+        (* The label ends at '(' (process id) or ' ' (location info) *)
+        let label_end =
+          match (String.index_opt inner '(', String.index_opt inner ' ') with
+          | Some p, Some s -> min p s
+          | Some p, None -> p
+          | None, Some s -> s
+          | None, None -> String.length inner
+        in
+        let label = String.sub inner 0 label_end in
+        if label = "" then None
+        else
+          let process_id =
+            if label_end < String.length inner && inner.[label_end] = '(' then
+              match String.index_from_opt inner label_end ')' with
+              | Some paren_close ->
+                  int_of_string_opt
+                    (String.sub inner (label_end + 1)
+                       (paren_close - label_end - 1))
+              | None -> None
+            else None
+          in
+          Some (step_num, Action { label; process_id })
       else None
   with _ -> None
 

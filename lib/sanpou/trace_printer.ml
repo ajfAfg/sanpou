@@ -130,15 +130,41 @@ let split_record_fields (s : string) : (string * string) list option =
 
 (* ===== Rendering ===== *)
 
-let render_header (header : step_header) (smap : Source_map.t) : string =
+(* TLC's action headers do not say which process moved, so recover it from
+   the state: every action updates pc[self] for exactly one process. *)
+let infer_process_id (prev_state : state_var list) (state : state_var list) :
+    int option =
+  let pc_elems st =
+    Option.bind
+      (List.find_opt (fun v -> v.var_name = "pc") st)
+      (fun v -> split_tuple_elements v.value)
+  in
+  match (pc_elems prev_state, pc_elems state) with
+  | Some prev, Some curr when List.length prev = List.length curr ->
+      let rec first_diff i prev curr =
+        match (prev, curr) with
+        | p :: ps, c :: cs ->
+            if p <> c then Some (i + 1) else first_diff (i + 1) ps cs
+        | _ -> None
+      in
+      first_diff 0 prev curr
+  | _ -> None
+
+let render_header (header : step_header) (process_id : int option)
+    (smap : Source_map.t) : string =
   match header with
   | InitialPredicate -> "Initial state"
-  | Action { label; process_id } -> (
+  | Action { label; _ } -> (
+      let process_part =
+        match process_id with
+        | Some pid -> Printf.sprintf " (process %d)" pid
+        | None -> ""
+      in
       match find_source_info smap label with
       | Some entry ->
-          Printf.sprintf "%s (process %d): %s  [line %d]" entry.proc_name
-            process_id entry.description entry.line
-      | None -> Printf.sprintf "%s(process %d)" label process_id)
+          Printf.sprintf "%s%s: %s  [line %d]" entry.proc_name process_part
+            entry.description entry.line
+      | None -> label ^ process_part)
 
 (* ===== Frame-resident locals ===== *)
 
@@ -227,7 +253,13 @@ let render_var_lines (smap : Source_map.t) (vars : state_var list) : string list
     vars
 
 let render_step ~prev_state (step : trace_step) (smap : Source_map.t) : string =
-  let header_str = render_header step.header smap in
+  let process_id =
+    match step.header with
+    | InitialPredicate -> None
+    | Action { process_id = Some pid; _ } -> Some pid
+    | Action { process_id = None; _ } -> infer_process_id prev_state step.state
+  in
+  let header_str = render_header step.header process_id smap in
   let global_lines =
     match step.header with
     | InitialPredicate ->
@@ -236,10 +268,10 @@ let render_step ~prev_state (step : trace_step) (smap : Source_map.t) : string =
         render_var_lines smap (changed_vars smap prev_state step.state)
   in
   let local_lines =
-    match step.header with
-    | InitialPredicate -> [] (* stacks are empty: no locals exist yet *)
-    | Action { process_id; _ } ->
-        render_local_lines smap ~prev_state step.state process_id
+    match (step.header, process_id) with
+    | InitialPredicate, _ -> [] (* stacks are empty: no locals exist yet *)
+    | Action _, Some pid -> render_local_lines smap ~prev_state step.state pid
+    | Action _, None -> []
   in
   let lines =
     match global_lines @ local_lines with
