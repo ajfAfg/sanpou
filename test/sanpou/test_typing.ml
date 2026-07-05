@@ -180,12 +180,12 @@ let () =
           test_case "sequence literal" `Quick (fun () ->
               check_ok "mod m { def xs = [1, 2, 3]; }");
           test_case "map init and subscript" `Quick (fun () ->
-              check_ok "mod m { var xs = { x in 1..3: 0; }; def y = xs[1]; }");
+              check_ok "mod m { var xs = map (x in 1..3) { 0 }; def y = xs[1]; }");
           test_case "self and continue" `Quick (fun () ->
               check_ok
-                "mod m { var xs = { x in 1..2: 0; }; fn foo() { while (true) { \
-                 xs[self] = 1; continue; } return (); } process ps = foo in \
-                 1..2; }");
+                "mod m { var xs = map (x in 1..2) { 0 }; fn foo() { while \
+                 (true) { xs[self] = 1; continue; } return (); } process ps = \
+                 foo in 1..2; }");
           test_case "if else" `Quick (fun () ->
               check_ok
                 "mod m { fn foo() { if (true) { ; } else { ; } return (); } \
@@ -368,7 +368,7 @@ let () =
           test_case "len on tuple" `Quick (fun () ->
               check_fails "mod m { def x = len((1, 2)); }");
           test_case "head on map" `Quick (fun () ->
-              check_fails "mod m { def x = head({ i in 1..2: 0; }); }");
+              check_fails "mod m { def x = head(map (i in 1..2) { 0 }); }");
           test_case "continue outside loop" `Quick (fun () ->
               check_fails
                 "mod m { fn foo() { continue; return (); } process ps = foo in \

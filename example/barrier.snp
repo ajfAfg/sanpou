@@ -4,11 +4,11 @@ mod bakery_algorithm {
   def numLoop = 3;
 
   var count = 0;
-  var entering = {
-    x in 1..numThreads: false;
+  var entering = map (x in 1..numThreads) {
+    false
   };
-  var tickets = {
-    x in 1..numThreads: null;
+  var tickets = map (x in 1..numThreads) {
+    null
   };
 
   def lossless = finally(count == numThreads * numLoop);

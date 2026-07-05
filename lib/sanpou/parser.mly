@@ -11,10 +11,10 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token <string> ID
 %token TRUE FALSE
 %token DEF VAR FN MOD FAIR PROCESS IN SELF
-%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS
+%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS MAP
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
-%token SEMI COMMA COLON DOTDOT
+%token SEMI COMMA DOTDOT
 %token EOF
 
 (* Precedence is encoded structurally in the stratified expr rules
@@ -42,7 +42,6 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %type <Surface_ast.expr list> loption(separated_nonempty_list(COMMA, expr))
 %type <Generic_ast.id list> separated_nonempty_list(COMMA, ID)
 %type <Generic_ast.id list> loption(separated_nonempty_list(COMMA, ID))
-%type <unit option> option(SEMI)
 %type <Generic_ast.fairness> fairness_marker
 %%
 
@@ -182,7 +181,8 @@ primary_expr:
           | Some b -> Builtin (b, args)
           | None -> App (name, args)) }
   | name=ID { mk $startpos (Var name) }
-  | LBRACE binder=ID IN lo=expr DOTDOT hi=expr COLON value=expr option(SEMI) RBRACE
+  | MAP LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+      LBRACE value=expr RBRACE
       { mk $startpos (MapInit { binder; lo; hi; value }) }
   | LPAREN RPAREN
       { mk $startpos (Tuple []) }
