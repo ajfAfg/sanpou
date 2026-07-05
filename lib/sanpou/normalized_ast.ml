@@ -39,6 +39,12 @@ and step_desc =
   | EmptyStep
   | BlockStep of block_stmt
   | VarStep of Resolved_ast.ident * expr
+  | WithStep of {
+      binder : Resolved_ast.ident;
+      lo : expr;
+      hi : expr;
+      stmts : simple_stmt list;
+    }
   | CallBindStep of {
       bind : Resolved_ast.ident;
       callee : Generic_ast.id;

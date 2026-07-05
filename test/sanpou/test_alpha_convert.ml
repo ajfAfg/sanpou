@@ -43,7 +43,7 @@ let rec var_step_idents (steps : Sanpou.Resolved_ast.body) :
           var_step_idents body
           @ match else_body with Some b -> var_step_idents b | None -> [])
       | BlockStep (Either arms) -> List.concat_map var_step_idents arms
-      | SimpleStep _ | EmptyStep -> [])
+      | WithStep _ | SimpleStep _ | EmptyStep -> [])
     steps
 
 let local_names m proc_name =

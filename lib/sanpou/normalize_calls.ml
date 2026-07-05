@@ -186,6 +186,30 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
       in
       List.rev steps_rev
       @ [ at (Normalized_ast.SimpleStep (List.rev stmts_rev)) ]
+  | WithStep { binder; lo; hi; stmts } ->
+      let lo_steps, lo = normalize_expr st lo in
+      let hi_steps, hi = normalize_expr st hi in
+      (* The whole body runs in one action under the binder, so a call —
+         which spans several actions — cannot appear in it, neither as a
+         statement nor inside an expression. *)
+      let stmts =
+        List.map
+          (fun (stmt : Resolved_ast.simple_stmt) ->
+            match stmt.desc with
+            | Call _ ->
+                error "procedure calls are not allowed inside a with statement"
+                  stmt.loc
+            | _ -> (
+                match normalize_simple_stmt st stmt with
+                | [], stmt -> stmt
+                | first :: _, _ ->
+                    error
+                      "procedure calls are not allowed inside a with statement"
+                      first.loc))
+          stmts
+      in
+      lo_steps @ hi_steps
+      @ [ at (Normalized_ast.WithStep { binder; lo; hi; stmts }) ]
   | BlockStep (While { cond; body }) ->
       let pre, cond = normalize_expr st cond in
       [

@@ -259,9 +259,23 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
     | [] -> []
     | unchanged -> [ TUnchanged (List.map (fun v -> TId v) unchanged) ]
   in
-  guard_conjuncts @ global_assign_conjuncts @ stack_op_conjuncts
-  @ stack_conjuncts
-  @ (pc_conjunct :: unchanged_conjuncts)
+  let base =
+    guard_conjuncts @ global_assign_conjuncts @ stack_op_conjuncts
+    @ stack_conjuncts
+    @ (pc_conjunct :: unchanged_conjuncts)
+  in
+  (* An action with binders fires for any binder value satisfying its
+     guard: the whole effect is wrapped in \E over the range. *)
+  match action.binders with
+  | [] -> base
+  | binders ->
+      [
+        List.fold_right
+          (fun (name, lo, hi) body ->
+            TExists (name, TRange (to_tla lo, to_tla hi), body))
+          binders
+          (TConj (Block, base));
+      ]
 
 let node_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
     (node : action_node) : tla_decl =

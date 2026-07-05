@@ -59,10 +59,16 @@ let rec render_expr = function
   | TDisj (Block, es) ->
       String.concat "\n"
         (List.map (fun e -> bullet "\\/ " (render_expr e)) es)
+  (* [bullet] pads a multi-line body so a nested bullet list keeps its
+     column alignment after the binder prefix. *)
   | TExists (x, set, body) ->
-      "\\E " ^ x ^ " \\in " ^ render_expr set ^ ": " ^ render_expr body
+      bullet
+        ("\\E " ^ x ^ " \\in " ^ render_expr set ^ ": ")
+        (render_expr body)
   | TForall (x, set, body) ->
-      "\\A " ^ x ^ " \\in " ^ render_expr set ^ ": " ^ render_expr body
+      bullet
+        ("\\A " ^ x ^ " \\in " ^ render_expr set ^ ": ")
+        (render_expr body)
   | TCase cases -> (
       let rendered =
         List.map

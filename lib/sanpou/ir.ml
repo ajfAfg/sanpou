@@ -44,6 +44,9 @@ type assignment =
 
 type action = {
   label : string;
+  binders : (string * Normalized_ast.expr * Normalized_ast.expr) list;
+      (* existentially quantified over an integer range: the action fires
+         for any binder value that satisfies its guard *)
   guard : Normalized_ast.expr option;
   assignments : assignment list;
   pc_dest : pc_dest;
@@ -51,9 +54,9 @@ type action = {
   source : source_info;
 }
 
-let make_action ?guard ?(assignments = []) ?(stack_op = StackNone) ~label
-    ~pc_dest ~source () =
-  { label; guard; assignments; pc_dest; stack_op; source }
+let make_action ?(binders = []) ?guard ?(assignments = [])
+    ?(stack_op = StackNone) ~label ~pc_dest ~source () =
+  { label; binders; guard; assignments; pc_dest; stack_op; source }
 
 (* A [Choice] is an either statement: one pc value whose transition is the
    disjunction of its arms' first actions. Embedding the arm actions (rather
