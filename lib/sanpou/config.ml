@@ -1,8 +1,17 @@
 type checks = { deadlock : bool; termination : bool }
-type t = { checks : checks; properties : string list }
+
+type t = {
+  checks : checks;
+  properties : string list;
+  invariants : string list;
+}
 
 let default =
-  { checks = { deadlock = true; termination = false }; properties = [] }
+  {
+    checks = { deadlock = true; termination = false };
+    properties = [];
+    invariants = [];
+  }
 
 let bool_field_with_default key default_value json =
   match Json.field_opt key json with
@@ -32,7 +41,10 @@ let of_json json =
   let properties =
     string_list_field_with_default "properties" default.properties json
   in
-  { checks; properties }
+  let invariants =
+    string_list_field_with_default "invariants" default.invariants json
+  in
+  { checks; properties; invariants }
 
 let from_string s = Json.parse s |> of_json
 
@@ -54,6 +66,13 @@ let to_cfg_string ?(default_init_value = false) config =
       [ ""; "CONSTANT defaultInitValue = defaultInitValue" ]
     else []
   in
+  let invariant_lines =
+    match config.invariants with
+    | [] -> []
+    | invariants ->
+        "" :: "INVARIANTS"
+        :: List.map (fun invariant -> "    " ^ invariant) invariants
+  in
   let property_lines =
     match cfg_properties config with
     | [] -> []
@@ -64,6 +83,6 @@ let to_cfg_string ?(default_init_value = false) config =
   let lines =
     [ "SPECIFICATION Spec" ] @ constant_lines
     @ [ ""; "CHECK_DEADLOCK " ^ bool_to_upper_string config.checks.deadlock ]
-    @ property_lines
+    @ invariant_lines @ property_lines
   in
   String.concat "\n" lines ^ "\n"
