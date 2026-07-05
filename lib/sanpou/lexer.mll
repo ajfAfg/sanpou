@@ -18,7 +18,6 @@ let reservedWords = [
   ("await", Parser.AWAIT);
   ("forall", Parser.FORALL);
   ("exists", Parser.EXISTS);
-  ("map", Parser.MAP);
   ("self", Parser.SELF);
   ("true", Parser.TRUE);
   ("false", Parser.FALSE);
@@ -42,6 +41,8 @@ rule main = parse
     { Parser.NEQ }
 | ".."
     { Parser.DOTDOT }
+| "->"
+    { Parser.ARROW }
 | "("
     { Parser.LPAREN }
 | ")"

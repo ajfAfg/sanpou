@@ -123,7 +123,7 @@ let () =
           test_case "sequence pair" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = [1, 2]; }");
           test_case "map init" `Quick (fun () ->
-              pretty_roundtrip "mod m { var xs = map (x in 1..2) { false }; }");
+              pretty_roundtrip "mod m { var xs = { x in 1..2 -> false }; }");
           test_case "subscript" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = xs[1 + 2]; }");
           test_case "process" `Quick (fun () ->

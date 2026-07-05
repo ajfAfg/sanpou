@@ -73,11 +73,11 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
   | Subscript (lhs, index) ->
       at 6 lhs ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
   | MapInit { binder; lo; hi; value } ->
-      "map (" ^ name_of binder ^ " in "
+      "{ " ^ name_of binder ^ " in "
       ^ pretty_expr name_of callee_of lo
       ^ ".."
       ^ pretty_expr name_of callee_of hi
-      ^ ") { "
+      ^ " -> "
       ^ pretty_expr name_of callee_of value
       ^ " }"
   | Tuple elems -> (
