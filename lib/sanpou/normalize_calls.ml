@@ -82,6 +82,18 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
   | Sequence elems ->
       let steps, elems = normalize_expr_list st elems in
       (steps, at (Sequence elems))
+  | Quant { quant; binder; lo; hi; body } ->
+      let lo_steps, lo = normalize_expr st lo in
+      let hi_steps, hi = normalize_expr st hi in
+      let body_steps, body = normalize_expr st body in
+      (match body_steps with
+      | [] -> ()
+      | first :: _ ->
+          (* the call would be hoisted out of the binder's scope and run
+             once instead of per element *)
+          error "procedure calls are not allowed inside a quantifier body"
+            first.loc);
+      (lo_steps @ hi_steps, at (Quant { quant; binder; lo; hi; body }))
   | IfExpr (cond, then_e, else_e) ->
       let cond_steps, cond = normalize_expr st cond in
       (* Hoisting a call out of a branch would run it unconditionally,

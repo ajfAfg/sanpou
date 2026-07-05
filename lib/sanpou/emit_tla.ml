@@ -81,6 +81,18 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
            ( expr_to_tla local_vars cond,
              expr_to_tla local_vars then_e,
              expr_to_tla local_vars else_e ))
+  | Generic_ast.Quant { quant; binder; lo; hi; body } ->
+      (* Parenthesized because TLA+'s \A and \E extend to the right: an
+         unparenthesized quantifier as a binop operand would swallow the
+         rest of the enclosing expression. *)
+      let range =
+        TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi)
+      in
+      let body = expr_to_tla local_vars body in
+      TParens
+        (match quant with
+        | Generic_ast.Forall -> TForall (binder.name, range, body)
+        | Generic_ast.Exists -> TExists (binder.name, range, body))
 
 (* Module-level expressions have no local vars *)
 let expr_to_tla_global = expr_to_tla []

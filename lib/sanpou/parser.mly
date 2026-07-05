@@ -11,7 +11,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token <string> ID
 %token TRUE FALSE
 %token DEF VAR FN MOD FAIR PROCESS IN SELF
-%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT
+%token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT FORALL EXISTS
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token SEMI COMMA COLON DOTDOT
@@ -154,6 +154,15 @@ primary_expr:
   | IF LPAREN cond=expr RPAREN LBRACE then_e=expr RBRACE
       ELSE LBRACE else_e=expr RBRACE
       { mk $startpos (IfExpr (cond, then_e, else_e)) }
+  (* The braces delimit the body, so a quantifier composes as an ordinary
+     primary expression — unlike TLA+'s \A/\E, whose bodies extend as far
+     right as possible. *)
+  | FORALL LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+      LBRACE body=expr RBRACE
+      { mk $startpos (Quant { quant = Forall; binder; lo; hi; body }) }
+  | EXISTS LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+      LBRACE body=expr RBRACE
+      { mk $startpos (Quant { quant = Exists; binder; lo; hi; body }) }
   | value=INTV { mk $startpos (IntLit value) }
   | TRUE { mk $startpos (BoolLit true) }
   | FALSE { mk $startpos (BoolLit false) }

@@ -44,7 +44,7 @@ let prec (e : ('n, 'c) expr) =
   | Subscript _ -> 6
   | UnOp _ -> 7
   | IntLit _ | BoolLit _ | Var _ | Self | App _ | Builtin _ | MapInit _
-  | Tuple _ | Sequence _ | IfExpr _ ->
+  | Tuple _ | Sequence _ | IfExpr _ | Quant _ ->
       8
 
 let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
@@ -99,6 +99,15 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       ^ pretty_expr name_of callee_of then_e
       ^ " } else { "
       ^ pretty_expr name_of callee_of else_e
+      ^ " }"
+  | Quant { quant; binder; lo; hi; body } ->
+      (match quant with Forall -> "forall (" | Exists -> "exists (")
+      ^ name_of binder ^ " in "
+      ^ pretty_expr name_of callee_of lo
+      ^ ".."
+      ^ pretty_expr name_of callee_of hi
+      ^ ") { "
+      ^ pretty_expr name_of callee_of body
       ^ " }"
 
 let pretty_assign_target name_of callee_of = function
