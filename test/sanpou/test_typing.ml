@@ -54,21 +54,24 @@ let () =
                 \  process ps = foo in 1..1;\n\
                 \  }");
           test_case "forall over range" `Quick (fun () ->
-              check_ok "mod m { def p = forall i in 1..3: i < 4; }");
+              check_ok "mod m { def p = forall (i in 1..3) { i < 4 }; }");
           test_case "exists over range" `Quick (fun () ->
-              check_ok "mod m { def p = exists i in 1..3: i == 2; }");
+              check_ok "mod m { def p = exists (i in 1..3) { i == 2 }; }");
           test_case "nested quantifiers" `Quick (fun () ->
               check_ok
-                "mod m { def p = forall i in 1..2: exists j in 1..2: i == j; \
-                 }");
-          test_case "parenthesized quantifier as operand" `Quick (fun () ->
+                "mod m { def p = forall (i in 1..2) { exists (j in 1..2) { i \
+                 == j } }; }");
+          test_case "quantifier as operand" `Quick (fun () ->
               check_ok
-                "mod m { def p = (forall i in 1..2: i < 3) && true; }");
+                "mod m { def p = forall (i in 1..2) { i < 3 } && true; }");
           test_case "quantifier in await" `Quick (fun () ->
               check_ok
                 "mod m {\n\
                 \  var xs = [1, 2, 3];\n\
-                \  fn foo() { await forall i in 1..3: xs[i] > 0; return (); }\n\
+                \  fn foo() {\n\
+                \    await forall (i in 1..3) { xs[i] > 0 };\n\
+                \    return ();\n\
+                \  }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
           test_case "else if chain" `Quick (fun () ->
@@ -345,11 +348,13 @@ let () =
           test_case "if expression non-bool condition" `Quick (fun () ->
               check_fails "mod m { def x = if (1) { 2 } else { 3 }; }");
           test_case "quantifier body non-bool" `Quick (fun () ->
-              check_fails "mod m { def x = forall i in 1..2: i; }");
+              check_fails "mod m { def x = forall (i in 1..2) { i }; }");
           test_case "quantifier bounds non-int" `Quick (fun () ->
-              check_fails "mod m { def x = forall i in true..false: true; }");
+              check_fails
+                "mod m { def x = forall (i in true..false) { true }; }");
           test_case "quantifier binder is int" `Quick (fun () ->
-              check_fails "mod m { def x = forall i in 1..2: i && true; }");
+              check_fails
+                "mod m { def x = forall (i in 1..2) { i && true }; }");
           test_case "if expression branch mismatch" `Quick (fun () ->
               check_fails "mod m { def x = if (true) { 1 } else { false }; }");
           test_case "len on tuple" `Quick (fun () ->

@@ -100,8 +100,8 @@ let () =
               let ast =
                 parse
                   "mod m {\n\
-                   def inv = forall i in 1..3: i < 4;\n\
-                   def can = exists i in 1..3: i == 2;\n\
+                   def inv = forall (i in 1..3) { i < 4 };\n\
+                   def can = exists (i in 1..3) { i == 2 };\n\
                    fn main() { return (); }\n\
                    process ps = main in 1..1;\n\
                    }\n"

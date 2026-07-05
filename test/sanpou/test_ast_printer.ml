@@ -74,17 +74,18 @@ let () =
           test_case "logical not of compound operand" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = !(a && b); }");
           test_case "forall" `Quick (fun () ->
-              pretty_roundtrip "mod m { def x = forall i in 1..3: i < 4; }");
-          test_case "exists greedy body" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { def x = exists i in 1..3: p && q; }");
-          test_case "parenthesized quantifier as operand" `Quick (fun () ->
+                "mod m { def x = forall (i in 1..3) { i < 4 }; }");
+          test_case "exists with compound body" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { def x = (forall i in 1..2: p) && q; }");
+                "mod m { def x = exists (i in 1..3) { p && q }; }");
+          test_case "quantifier as operand" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { def x = forall (i in 1..2) { p } && q; }");
           test_case "nested quantifiers" `Quick (fun () ->
               pretty_roundtrip
-                "mod m { def x = forall i in 1..2: exists j in 1..2: i == j; \
-                 }");
+                "mod m { def x = forall (i in 1..2) { exists (j in 1..2) { i \
+                 == j } }; }");
           test_case "if expression" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = if (a) { 1 } else { 2 }; }");
           test_case "if expression as operand" `Quick (fun () ->
