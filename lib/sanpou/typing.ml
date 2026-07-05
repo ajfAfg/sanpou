@@ -370,8 +370,15 @@ let check_module (m : Surface_ast.module_def) : unit =
             let body_ty = infer_expr fresh_tyvar (param_env @ env) body_expr in
             let fn_ty = TyFun (param_tys, body_ty) in
             (name, generalize env fn_ty) :: env
-        | VarDecl { name; value } ->
-            let ty = infer_expr fresh_tyvar env value in
+        | VarDecl { name; init } ->
+            let ty =
+              match init with
+              | InitValue value -> infer_expr fresh_tyvar env value
+              | InitRange (lo, hi) ->
+                  unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
+                  unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
+                  TyInt
+            in
             (name, tysc_of_ty ty) :: env
         | ProcDef { name = proc_name; params; body } ->
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in

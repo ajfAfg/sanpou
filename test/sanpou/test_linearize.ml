@@ -45,7 +45,14 @@ let make_process ?(fair = false) name proc lo hi :
 
 let make_module ?(const_defs = []) ?(fun_defs = []) ?(var_decls = [])
     ?(processes = []) name procs : Sanpou.Normalized_ast.module_def =
-  { name; const_defs; fun_defs; var_decls; procs; processes }
+  {
+    name;
+    const_defs;
+    fun_defs;
+    var_decls = List.map (fun (n, v) -> (n, InitValue v)) var_decls;
+    procs;
+    processes;
+  }
 
 let default_process = make_process "ps" "foo" (intlit 1) (intlit 2)
 

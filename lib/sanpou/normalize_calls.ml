@@ -225,7 +225,14 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
     var_decls =
       partition (fun (item : Resolved_ast.item) ->
           match item.desc with
-          | VarDecl { name; value } -> Some (name, call_free_expr st value)
+          | VarDecl { name; init } ->
+              let init =
+                match init with
+                | InitValue value -> InitValue (call_free_expr st value)
+                | InitRange (lo, hi) ->
+                    InitRange (call_free_expr st lo, call_free_expr st hi)
+              in
+              Some (name, init)
           | _ -> None);
     procs =
       partition (fun (item : Resolved_ast.item) ->

@@ -43,7 +43,7 @@ let make_const name value : Sanpou.Resolved_ast.item =
   node (ConstDef { name; value })
 
 let make_var name value : Sanpou.Resolved_ast.item =
-  node (VarDecl { name; value })
+  node (VarDecl { name; init = InitValue value })
 
 let make_process name proc : Sanpou.Resolved_ast.item =
   node (Process { name; proc; fair = false; lo = intlit 1; hi = intlit 1 })

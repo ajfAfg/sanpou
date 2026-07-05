@@ -78,7 +78,7 @@ type module_ir = {
   name : string;
   const_defs : (string * Normalized_ast.expr) list;
   fun_defs : (string * string list * Normalized_ast.expr) list;
-  var_decls : (string * Normalized_ast.expr) list;
+  var_decls : (string * Normalized_ast.var_init) list;
   local_var_decls : string list;
   var_infos : var_info list;
   procs : proc_ir list;

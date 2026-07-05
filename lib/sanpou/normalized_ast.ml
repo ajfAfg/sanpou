@@ -14,9 +14,15 @@ let callee_name (Fun name) = name
 type expr = (Resolved_ast.ident, callee) Generic_ast.expr
 type assign_target = (Resolved_ast.ident, callee) Generic_ast.assign_target
 type simple_stmt = (Resolved_ast.ident, callee) Generic_ast.simple_stmt
+type var_init = (Resolved_ast.ident, callee) Generic_ast.var_init
 
 let equal_expr = Generic_ast.equal_expr Resolved_ast.equal_ident equal_callee
 let pp_expr = Generic_ast.pp_expr Resolved_ast.pp_ident pp_callee
+
+let equal_var_init =
+  Generic_ast.equal_var_init Resolved_ast.equal_ident equal_callee
+
+let pp_var_init = Generic_ast.pp_var_init Resolved_ast.pp_ident pp_callee
 
 let equal_simple_stmt =
   Generic_ast.equal_simple_stmt Resolved_ast.equal_ident equal_callee
@@ -76,7 +82,7 @@ type module_def = {
   name : Generic_ast.id;
   const_defs : (Generic_ast.id * expr) list;
   fun_defs : (Generic_ast.id * Generic_ast.id list * expr) list;
-  var_decls : (Generic_ast.id * expr) list;
+  var_decls : (Generic_ast.id * var_init) list;
   procs : proc_def list;
   processes : process_def list;
 }

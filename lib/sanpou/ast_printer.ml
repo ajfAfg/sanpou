@@ -190,10 +190,18 @@ let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
       indent ^ "def " ^ name ^ "(" ^ String.concat ", " params ^ ") = "
       ^ pretty_expr name_of callee_of body_expr
       ^ ";\n"
-  | VarDecl { name; value } ->
-      indent ^ "var " ^ name ^ " = "
-      ^ pretty_expr name_of callee_of value
-      ^ ";\n"
+  | VarDecl { name; init } -> (
+      match init with
+      | InitValue value ->
+          indent ^ "var " ^ name ^ " = "
+          ^ pretty_expr name_of callee_of value
+          ^ ";\n"
+      | InitRange (lo, hi) ->
+          indent ^ "var " ^ name ^ " in "
+          ^ pretty_expr name_of callee_of lo
+          ^ ".."
+          ^ pretty_expr name_of callee_of hi
+          ^ ";\n")
   | ProcDef { name; params; body } ->
       indent ^ "fn " ^ name ^ "("
       ^ String.concat ", " (List.map name_of params)

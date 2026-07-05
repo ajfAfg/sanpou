@@ -158,7 +158,14 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
           | ConstDef { name; value } -> ConstDef { name; value = plain value }
           | FunDef { name; params; body_expr } ->
               FunDef { name; params; body_expr = plain body_expr }
-          | VarDecl { name; value } -> VarDecl { name; value = plain value }
+          | VarDecl { name; init } ->
+              VarDecl
+                {
+                  name;
+                  init =
+                    Generic_ast.map_var_init Resolved_ast.ident
+                      (resolve_callee st) init;
+                }
           | Process { name; proc; fair; lo; hi } ->
               Process { name; proc; fair; lo = plain lo; hi = plain hi }
           | ProcDef { name; params; body } ->
