@@ -208,9 +208,12 @@ let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
       ^ ") {\n"
       ^ pretty_body name_of callee_of (indent ^ "  ") body
       ^ indent ^ "}\n"
-  | Process { name; proc; fair; lo; hi } ->
+  | Process { name; proc; fairness; lo; hi } ->
       indent
-      ^ (if fair then "fair process " else "process ")
+      ^ (match fairness with
+        | Unfair -> "process "
+        | WeakFair -> "fair process "
+        | StrongFair -> "fair+ process ")
       ^ name ^ " = " ^ proc ^ " in "
       ^ pretty_expr name_of callee_of lo
       ^ ".."

@@ -42,7 +42,8 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %type <Surface_ast.expr list> loption(separated_nonempty_list(COMMA, expr))
 %type <Generic_ast.id list> separated_nonempty_list(COMMA, ID)
 %type <Generic_ast.id list> loption(separated_nonempty_list(COMMA, ID))
-%type <unit option> option(FAIR) option(SEMI)
+%type <unit option> option(SEMI)
+%type <Generic_ast.fairness> fairness_marker
 %%
 
 program:
@@ -63,8 +64,14 @@ item:
       { mk $startpos (VarDecl { name; init = InitRange (lo, hi) }) }
   | FN name=ID LPAREN params=separated_list(COMMA, ID) RPAREN LBRACE body=body RBRACE
       { mk $startpos (ProcDef { name; params; body }) }
-  | fair=option(FAIR) PROCESS name=ID EQ proc=ID IN lo=expr DOTDOT hi=expr SEMI
-      { mk $startpos (Process { name; proc; fair = Option.is_some fair; lo; hi }) }
+  | fairness=fairness_marker PROCESS name=ID EQ proc=ID IN lo=expr DOTDOT hi=expr SEMI
+      { mk $startpos (Process { name; proc; fairness; lo; hi }) }
+
+(* `fair+` lexes as FAIR PLUS; there is no dedicated token. *)
+fairness_marker:
+  | (* empty *) { Unfair }
+  | FAIR { WeakFair }
+  | FAIR PLUS { StrongFair }
 
 body:
   | steps=list(step) { steps }

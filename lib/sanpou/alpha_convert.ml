@@ -166,8 +166,8 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
                     Generic_ast.map_var_init Resolved_ast.ident
                       (resolve_callee st) init;
                 }
-          | Process { name; proc; fair; lo; hi } ->
-              Process { name; proc; fair; lo = plain lo; hi = plain hi }
+          | Process { name; proc; fairness; lo; hi } ->
+              Process { name; proc; fairness; lo = plain lo; hi = plain hi }
           | ProcDef { name; params; body } ->
               let env_rev, params_rev =
                 List.fold_left

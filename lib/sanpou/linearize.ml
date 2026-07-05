@@ -360,7 +360,7 @@ let linearize_module (m : Normalized_ast.module_def) : module_ir =
         {
           name = p.name;
           proc = p.proc;
-          fair = p.fair;
+          fairness = p.fairness;
           lo = p.lo;
           hi = p.hi;
           loc = p.loc;

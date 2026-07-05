@@ -45,6 +45,19 @@ let () =
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_not_in "WF_vars(foo(self))" tla);
+          Alcotest.test_case "fair+ process emits strong fairness" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod foo {\n\
+                   var x = 0;\n\
+                   fn foo() { x = 1 - x; }\n\
+                   fair+ process ps = foo in 1..2;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "SF_vars(foo(self))" tla;
+              has_not_in "WF_vars" tla);
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
               let ast =

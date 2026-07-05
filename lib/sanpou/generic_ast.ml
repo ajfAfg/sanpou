@@ -29,6 +29,9 @@ type binop =
 type unop = Neg | Not [@@deriving show, eq]
 type quantifier = Forall | Exists [@@deriving show, eq]
 
+(* Process fairness: none, weak (WF_vars), or strong (SF_vars). *)
+type fairness = Unfair | WeakFair | StrongFair [@@deriving show, eq]
+
 (* The tree is parameterized by the type ['n] of variable names and the type
    ['c] of applied callees: the parser produces [Surface_ast.program] (plain
    source names, undistinguished callees) and later passes may instantiate
@@ -117,7 +120,7 @@ and ('n, 'c) item_desc =
   | Process of {
       name : id;
       proc : id;
-      fair : bool;
+      fairness : fairness;
       lo : ('n, 'c) expr;
       hi : ('n, 'c) expr;
     }

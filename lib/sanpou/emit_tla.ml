@@ -428,22 +428,29 @@ let spec_decls (ir : module_ir) : tla_decl list =
   let fairness_conjuncts =
     List.concat_map
       (fun (p : process_ir) ->
-        if p.fair then
-          let process_range =
-            TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi)
-          in
-          let fairness_for proc_name =
-            TParens
-              (TForall
-                 ( "self",
-                   process_range,
-                   TApp ("WF_vars", [ TApp (proc_name, [ TId "self" ]) ]) ))
-          in
-          fairness_for p.wrapper.proc_name
-          :: List.map
-               (fun (proc : proc_ir) -> fairness_for proc.proc_name)
-               ir.procs
-        else [])
+        match p.fairness with
+        | Generic_ast.Unfair -> []
+        | Generic_ast.WeakFair | Generic_ast.StrongFair ->
+            let fairness_op =
+              match p.fairness with
+              | Generic_ast.StrongFair -> "SF_vars"
+              | _ -> "WF_vars"
+            in
+            let process_range =
+              TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi)
+            in
+            let fairness_for proc_name =
+              TParens
+                (TForall
+                   ( "self",
+                     process_range,
+                     TApp (fairness_op, [ TApp (proc_name, [ TId "self" ]) ])
+                   ))
+            in
+            fairness_for p.wrapper.proc_name
+            :: List.map
+                 (fun (proc : proc_ir) -> fairness_for proc.proc_name)
+                 ir.procs)
       ir.processes
   in
   [

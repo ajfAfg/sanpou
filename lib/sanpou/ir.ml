@@ -65,7 +65,7 @@ type proc_ir = {
 type process_ir = {
   name : string;
   proc : string;
-  fair : bool;
+  fairness : Generic_ast.fairness;
   lo : Normalized_ast.expr;
   hi : Normalized_ast.expr;
   loc : Generic_ast.loc;

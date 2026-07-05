@@ -245,12 +245,12 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
     processes =
       partition (fun (item : Resolved_ast.item) ->
           match item.desc with
-          | Process { name; proc; fair; lo; hi } ->
+          | Process { name; proc; fairness; lo; hi } ->
               Some
                 ({
                    name;
                    proc;
-                   fair;
+                   fairness;
                    lo = call_free_expr st lo;
                    hi = call_free_expr st hi;
                    loc = item.loc;
