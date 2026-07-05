@@ -31,7 +31,13 @@ let compile ?config (source : string) : (output list, diagnostic) result =
       | exception Typing.Type_error (err, loc) ->
           Error { loc; message = Typing.string_of_type_error err }
       | () -> (
-          match Alpha_convert.transform prog |> Normalize_calls.normalize with
+          let resolved = Alpha_convert.transform prog in
+          match
+            Check_temporal.check resolved;
+            Normalize_calls.normalize resolved
+          with
+          | exception Check_temporal.Error (message, loc) ->
+              Error { loc; message }
           | exception Normalize_calls.Error (message, loc) ->
               Error { loc; message }
           | normalized ->
