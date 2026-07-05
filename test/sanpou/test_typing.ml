@@ -74,6 +74,13 @@ let () =
                 \  }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "nested subscript assignment" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var grid = { i in 1..2 -> { j in 1..2 -> 0 } };\n\
+                \  fn foo() { grid[1][2] = 5; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "with statement" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -398,6 +405,20 @@ let () =
               check_fails "mod m { var x in true..false; }");
           test_case "var decl range used as bool" `Quick (fun () ->
               check_fails "mod m { var x in 1..3; def p = x && true; }");
+          test_case "nested subscript value mismatch" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var grid = { i in 1..2 -> { j in 1..2 -> 0 } };\n\
+                \  fn foo() { grid[1][2] = true; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "too many subscripts" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var xs = { i in 1..2 -> 0 };\n\
+                \  fn foo() { xs[1][2] = 3; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "with binder not assignable" `Quick (fun () ->
               check_fails
                 "mod m {\n\

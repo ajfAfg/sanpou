@@ -17,7 +17,7 @@ let fun_app f args : Sanpou.Resolved_ast.expr =
   node (App (Sanpou.Resolved_ast.Fun f, args))
 
 let assign x e = node (Assign (VarTarget (ident x), e))
-let assign_idx x i e = node (Assign (SubscriptTarget (ident x, i), e))
+let assign_idx x i e = node (Assign (SubscriptTarget (ident x, [ i ]), e))
 let await_ e = node (Await e)
 let return_ e = node (Return e)
 let call_ f args = node (Call (f, args))
@@ -65,7 +65,7 @@ let n_assign x e : Sanpou.Normalized_ast.simple_stmt =
   node (Assign (VarTarget (ident x), e))
 
 let n_assign_idx x i e : Sanpou.Normalized_ast.simple_stmt =
-  node (Assign (SubscriptTarget (ident x, i), e))
+  node (Assign (SubscriptTarget (ident x, [ i ]), e))
 
 let n_await e : Sanpou.Normalized_ast.simple_stmt = node (Await e)
 let n_return e : Sanpou.Normalized_ast.simple_stmt = node (Return e)

@@ -148,9 +148,9 @@ let normalize_simple_stmt st (stmt : Resolved_ast.simple_stmt) :
       let target_steps, target =
         match target with
         | VarTarget i -> ([], VarTarget i)
-        | SubscriptTarget (i, index) ->
-            let steps, index = normalize_expr st index in
-            (steps, SubscriptTarget (i, index))
+        | SubscriptTarget (i, indices) ->
+            let steps, indices = normalize_expr_list st indices in
+            (steps, SubscriptTarget (i, indices))
       in
       let value_steps, value = normalize_expr st value in
       (target_steps @ value_steps, at (Assign (target, value)))

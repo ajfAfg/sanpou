@@ -38,7 +38,8 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %type <Surface_ast.assign_target> assign_target
 %type <Surface_ast.block_stmt> block_stmt if_stmt
 %type <Surface_ast.expr> expr or_expr and_expr comparison_expr add_expr
-%type <Surface_ast.expr> mult_expr postfix_expr primary_expr
+%type <Surface_ast.expr> mult_expr postfix_expr primary_expr subscript_index
+%type <Surface_ast.expr list> nonempty_list(subscript_index)
 %type <Surface_ast.expr list> separated_nonempty_list(COMMA, expr)
 %type <Surface_ast.expr list> loption(separated_nonempty_list(COMMA, expr))
 %type <Generic_ast.id list> separated_nonempty_list(COMMA, ID)
@@ -108,8 +109,11 @@ simple_stmt:
 assign_target:
   | name=ID
       { VarTarget name }
-  | name=ID LBRACKET index=expr RBRACKET
-      { SubscriptTarget (name, index) }
+  | name=ID indices=nonempty_list(subscript_index)
+      { SubscriptTarget (name, indices) }
+
+subscript_index:
+  | LBRACKET index=expr RBRACKET { index }
 
 block_stmt:
   | WHILE LPAREN cond=expr RPAREN LBRACE body=body RBRACE

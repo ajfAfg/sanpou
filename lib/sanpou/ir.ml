@@ -40,7 +40,8 @@ type pc_dest =
 
 type assignment =
   | AssignVar of string * Normalized_ast.expr
-  | AssignIndex of string * Normalized_ast.expr * Normalized_ast.expr
+  | AssignIndex of string * Normalized_ast.expr list * Normalized_ast.expr
+    (* variable, index path (outermost first), value *)
 
 type action = {
   label : string;

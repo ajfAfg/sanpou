@@ -71,7 +71,8 @@ and ('n, 'c) expr_desc =
 
 type ('n, 'c) assign_target =
   | VarTarget of 'n
-  | SubscriptTarget of 'n * ('n, 'c) expr
+  | SubscriptTarget of 'n * ('n, 'c) expr list
+      (* one entry per [.] level, outermost first; never empty *)
 [@@deriving show, eq]
 
 type ('n, 'c) simple_stmt = ('n, 'c) simple_stmt_desc node
