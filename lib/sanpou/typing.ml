@@ -221,10 +221,25 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       let ty2 = infer_expr fresh_tyvar env rhs in
       ty_prim fresh_tyvar ~lhs_loc:lhs.loc ~rhs_loc:rhs.loc op ty1 ty2
   | App (name, args) ->
+      (* Lexical resolution, mirroring Alpha_convert: a definition in the
+         environment shadows the builtin of the same name; builtins are the
+         outermost scope. *)
       let fn_ty =
         match List.assoc_opt name env with
         | Some tysc -> instantiate fresh_tyvar tysc
-        | None -> type_error (Unbound_variable name) e.loc
+        | None -> (
+            match Builtin.of_name name with
+            | Some b ->
+                (* Arity is checked here so the error is an Arity_mismatch
+                   rather than a TyFun clash. *)
+                let param_tys, ret_ty = builtin_signature fresh_tyvar b in
+                if List.length param_tys <> List.length args then
+                  type_error
+                    (Arity_mismatch
+                       (Builtin.name b, List.length param_tys, List.length args))
+                    e.loc;
+                TyFun (param_tys, ret_ty)
+            | None -> type_error (Unbound_variable name) e.loc)
       in
       infer_app fresh_tyvar env e.loc fn_ty args
   | Builtin (b, args) ->
