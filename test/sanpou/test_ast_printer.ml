@@ -65,6 +65,18 @@ let () =
               pretty_roundtrip "mod m { def x = !true; }");
           test_case "logical not of compound operand" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = !(a && b); }");
+          test_case "if expression" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = if (a) { 1 } else { 2 }; }");
+          test_case "if expression as operand" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { def x = if (a) { 1 } else { 2 } + 3; }");
+          test_case "if expression nested" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { def x = if (a) { if (b) { 1 } else { 2 } } else { 3 \
+                 }; }");
+          test_case "if expression in assignment" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { fn foo() { x = if (x == 0) { 1 } else { x }; } }");
           test_case "unary minus literal" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = -1; }");
           test_case "unary minus paren expr" `Quick (fun () ->

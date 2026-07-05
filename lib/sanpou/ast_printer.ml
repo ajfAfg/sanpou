@@ -44,7 +44,7 @@ let prec (e : ('n, 'c) expr) =
   | Subscript _ -> 6
   | UnOp _ -> 7
   | IntLit _ | BoolLit _ | Var _ | Self | App _ | Builtin _ | MapInit _
-  | Tuple _ | Sequence _ ->
+  | Tuple _ | Sequence _ | IfExpr _ ->
       8
 
 let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
@@ -92,6 +92,14 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       "["
       ^ String.concat ", " (List.map (pretty_expr name_of callee_of) elems)
       ^ "]"
+  | IfExpr (cond, then_e, else_e) ->
+      "if ("
+      ^ pretty_expr name_of callee_of cond
+      ^ ") { "
+      ^ pretty_expr name_of callee_of then_e
+      ^ " } else { "
+      ^ pretty_expr name_of callee_of else_e
+      ^ " }"
 
 let pretty_assign_target name_of callee_of = function
   | VarTarget n -> name_of n

@@ -59,6 +59,11 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
           }
     | Tuple elems -> Tuple (List.map (alpha_expr env st) elems)
     | Sequence elems -> Sequence (List.map (alpha_expr env st) elems)
+    | IfExpr (cond, then_e, else_e) ->
+        IfExpr
+          ( alpha_expr env st cond,
+            alpha_expr env st then_e,
+            alpha_expr env st else_e )
   in
   { desc; loc = e.loc }
 

@@ -82,6 +82,23 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
   | Sequence elems ->
       let steps, elems = normalize_expr_list st elems in
       (steps, at (Sequence elems))
+  | IfExpr (cond, then_e, else_e) ->
+      let cond_steps, cond = normalize_expr st cond in
+      (* Hoisting a call out of a branch would run it unconditionally,
+         changing which calls the program performs; only the condition is
+         evaluated on every path, so only its calls may be hoisted. *)
+      let branch_call_free label e =
+        match normalize_expr st e with
+        | [], e -> e
+        | first :: _, _ ->
+            error
+              ("procedure calls are not allowed in the " ^ label
+             ^ " branch of an if-expression")
+              first.loc
+      in
+      let then_e = branch_call_free "then" then_e in
+      let else_e = branch_call_free "else" else_e in
+      (cond_steps, at (IfExpr (cond, then_e, else_e)))
 
 and normalize_expr_list st (exprs : Resolved_ast.expr list) :
     Normalized_ast.step list * Normalized_ast.expr list =

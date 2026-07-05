@@ -31,6 +31,7 @@ let if_block cond body : Sanpou.Resolved_ast.step =
   node (BlockStep (If { cond; body; else_body = None }))
 
 let map_init lo hi value = node (MapInit { binder = ident "i"; lo; hi; value })
+let if_expr c t f = node (IfExpr (c, t, f))
 
 let make_proc name body : Sanpou.Resolved_ast.item =
   node (ProcDef { name; params = []; body })
@@ -80,6 +81,8 @@ let n_while pre cond body : Sanpou.Normalized_ast.step =
 
 let n_if cond body : Sanpou.Normalized_ast.step =
   node (Sanpou.Normalized_ast.BlockStep (If { cond; body; else_body = None }))
+
+let n_if_expr c t f : Sanpou.Normalized_ast.expr = node (IfExpr (c, t, f))
 
 (* ----- harness ----- *)
 
@@ -268,6 +271,53 @@ let () =
         ] );
       ( "errors",
         [
+          test_case "call in if-expression condition is hoisted" `Quick
+            (fun () ->
+              let body =
+                [
+                  var_step "y"
+                    (if_expr
+                       (binop Lt (proc_app "foo" []) (intlit 3))
+                       (intlit 1) (intlit 2));
+                ]
+              in
+              check_body "condition call hoisted before the step"
+                [
+                  n_call_bind "callRet__1" "foo" [];
+                  n_var_step "y"
+                    (n_if_expr
+                       (n_binop Lt (n_var "callRet__1") (n_intlit 3))
+                       (n_intlit 1) (n_intlit 2));
+                ]
+                (normalize_proc_body body));
+          test_case "call in if-expression then branch rejected" `Quick
+            (fun () ->
+              let body =
+                [
+                  var_step "y"
+                    (if_expr (var "b") (proc_app "foo" []) (intlit 2));
+                ]
+              in
+              check_raises "located error"
+                (Sanpou.Normalize_calls.Error
+                   ( "procedure calls are not allowed in the then branch of \
+                      an if-expression",
+                     loc0 ))
+                (fun () -> ignore (normalize_proc_body body)));
+          test_case "call in if-expression else branch rejected" `Quick
+            (fun () ->
+              let body =
+                [
+                  var_step "y"
+                    (if_expr (var "b") (intlit 1) (proc_app "foo" []));
+                ]
+              in
+              check_raises "located error"
+                (Sanpou.Normalize_calls.Error
+                   ( "procedure calls are not allowed in the else branch of \
+                      an if-expression",
+                     loc0 ))
+                (fun () -> ignore (normalize_proc_body body)));
           test_case "call in map-init value rejected" `Quick (fun () ->
               let body =
                 [
