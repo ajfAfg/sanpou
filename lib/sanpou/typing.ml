@@ -414,6 +414,9 @@ let check_module (m : Surface_ast.module_def) : unit =
         | ConstDef { name; value } ->
             let ty = infer_expr fresh_tyvar env value in
             ((name, generalize env ty) :: env, proc_names)
+        | PropDef { name; value } ->
+            unify value.loc (infer_expr fresh_tyvar env value) TyBool;
+            ((name, tysc_of_ty TyBool) :: env, proc_names)
         | FunDef { name; params; body_expr } ->
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =

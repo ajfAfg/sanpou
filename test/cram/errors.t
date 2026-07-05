@@ -74,8 +74,8 @@ previously crash the emitter or compile to invalid TLA+ are diagnosed:
   higher_order.snp:2:18: g is not a function
   [1]
 
-Temporal operators live in module-level defs only; using one (or a def
-containing one) in a runtime context is rejected:
+Temporal operators live in property items only; using one elsewhere, or
+referencing a property from a runtime context, is rejected:
 
   $ cat > temporal.snp <<'EOF'
   > mod m {
@@ -88,13 +88,13 @@ containing one) in a runtime context is rejected:
   > }
   > EOF
   $ sanpou compile temporal.snp -o out
-  temporal.snp:4:11: globally is a temporal operator and is only allowed in a module-level def
+  temporal.snp:4:11: globally is a temporal operator and is only allowed in a property
   [1]
 
   $ cat > temporal_ref.snp <<'EOF'
   > mod m {
   >   var x = 0;
-  >   def p = globally(x == 0);
+  >   property p = globally(x == 0);
   >   procedure f() {
   >     await p;
   >     return ();
@@ -103,7 +103,7 @@ containing one) in a runtime context is rejected:
   > }
   > EOF
   $ sanpou compile temporal_ref.snp -o out
-  temporal_ref.snp:5:11: p is a temporal property and can only be referenced from another module-level def
+  temporal_ref.snp:5:11: p is a property and can only be referenced from another property
   [1]
 
 Syntax error:

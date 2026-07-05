@@ -374,6 +374,10 @@ let const_and_fun_decls (ir : module_ir) : tla_decl list =
          (fun (name, params, expr) ->
            DOpDef (name, params, expr_to_tla_global expr))
          ir.fun_defs)
+  @ with_trailing_sep
+      (List.map
+         (fun (name, expr) -> DOpDef (name, [], expr_to_tla_global expr))
+         ir.prop_defs)
 
 let proc_set_decls (ir : module_ir) : tla_decl list =
   let parts =

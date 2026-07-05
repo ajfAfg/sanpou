@@ -82,7 +82,7 @@ Example:
 
 - `checks.deadlock` controls `CHECK_DEADLOCK` in the generated `.cfg`.
 - `checks.termination` adds `Terminating` and `Termination` to the generated TLA+ and automatically includes `Termination` in the generated `.cfg` properties.
-- `properties` lists temporal properties (module-level `def`s using `globally`/`finally`) to place in the generated `.cfg`.
+- `properties` lists `property` items to place in the generated `.cfg`.
 - `invariants` lists boolean `def`s to check as `INVARIANTS` — cheaper for TLC than the equivalent `globally(...)` property.
 
 ### trace: Annotate TLC output
@@ -124,10 +124,10 @@ mod example {
   var start in 1..n;               // non-deterministic initial value
   var grid = { i in 1..n -> { j in 1..n -> 0 } };
 
-  // temporal properties: globally/finally are allowed only in
-  // module-level defs like these (list them in the sidecar config)
-  def counted = finally(count > 0);
-  def bounded = globally(forall (i in 1..n) { grid[i][1] >= 0 });
+  // temporal properties: globally/finally are allowed only here
+  // (list property names in the sidecar config)
+  property counted = finally(count > 0);
+  property bounded = globally(forall (i in 1..n) { grid[i][1] >= 0 });
 
   procedure worker() {                    // procedure definition
     while (count < n) {            // while loop
@@ -169,9 +169,10 @@ mod example {
 - **Processes**: `process name = proc in lo..hi;` instantiates a procedure
   per id in the range (readable as `self`). `fair` adds weak fairness,
   `fair+` strong fairness.
-- **Temporal properties**: `globally(p)` / `finally(p)` may appear only in
-  module-level `def`s; reference those defs from the sidecar config's
-  `properties` (and plain boolean defs from `invariants`).
+- **Temporal properties**: `property name = ...;` is the only place
+  `globally(p)` / `finally(p)` may appear, and only properties may
+  reference other properties; list property names in the sidecar config's
+  `properties` (and plain boolean `def`s in `invariants`).
 
 ### If expressions and atomicity
 

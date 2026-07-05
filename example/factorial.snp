@@ -1,7 +1,7 @@
 mod factorial {
   var x = 0;
 
-  def testing = finally(x == 120);
+  property testing = finally(x == 120);
 
   procedure fact(x) {
     if (x == 0) {

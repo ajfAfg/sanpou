@@ -183,6 +183,9 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
           | ConstDef { name; value } ->
               ( ConstDef { name; value = plain value },
                 (name, Resolved_ast.Fun name) :: defs )
+          | PropDef { name; value } ->
+              ( PropDef { name; value = plain value },
+                (name, Resolved_ast.Fun name) :: defs )
           | FunDef { name; params; body_expr } ->
               (* The body sees the preceding definitions, not the function
                  itself: defs are not recursive, matching the type

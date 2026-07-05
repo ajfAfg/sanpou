@@ -51,6 +51,7 @@ let make_module ?(const_defs = []) ?(fun_defs = []) ?(var_decls = [])
   {
     name;
     const_defs;
+    prop_defs = [];
     fun_defs;
     var_decls = List.map (fun (n, v) -> (n, InitValue v)) var_decls;
     procs;

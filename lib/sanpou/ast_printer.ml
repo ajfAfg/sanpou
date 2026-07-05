@@ -206,6 +206,10 @@ let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
       indent ^ "def " ^ name ^ " = "
       ^ pretty_expr name_of callee_of value
       ^ ";\n"
+  | PropDef { name; value } ->
+      indent ^ "property " ^ name ^ " = "
+      ^ pretty_expr name_of callee_of value
+      ^ ";\n"
   | FunDef { name; params; body_expr } ->
       indent ^ "def " ^ name ^ "(" ^ String.concat ", " params ^ ") = "
       ^ pretty_expr name_of callee_of body_expr

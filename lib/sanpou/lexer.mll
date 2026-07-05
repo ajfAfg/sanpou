@@ -5,6 +5,7 @@ let reservedWords = [
   ("def", Parser.DEF);
   ("var", Parser.VAR);
   ("procedure", Parser.PROCEDURE_KW);
+  ("property", Parser.PROPERTY);
   ("mod", Parser.MOD);
   ("fair", Parser.FAIR);
   ("process", Parser.PROCESS);
