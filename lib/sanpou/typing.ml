@@ -33,6 +33,8 @@ type type_error =
   | Return_type_mismatch
   | Assign_to_non_variable of id
   | Recursive_type
+  | Callable_as_value of id
+  | Not_a_procedure of id
 
 exception Type_error of type_error * loc
 
@@ -207,7 +209,13 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
   | BoolLit _ -> TyBool
   | Var name -> (
       match List.assoc_opt name env with
-      | Some tysc -> instantiate fresh_tyvar tysc
+      | Some tysc -> (
+          (* Functions and procedures are second-class: TLA+ operators
+             cannot be passed as plain values. Nothing but a callable can
+             carry a function type, so the type is the complete signal. *)
+          match repr (instantiate fresh_tyvar tysc) with
+          | TyFun _ -> type_error (Callable_as_value name) e.loc
+          | ty -> ty)
       | None -> type_error (Unbound_variable name) e.loc)
   | Self -> TyInt
   | UnOp (Neg, rhs) ->
@@ -226,7 +234,13 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
          outermost scope. *)
       let fn_ty =
         match List.assoc_opt name env with
-        | Some tysc -> instantiate fresh_tyvar tysc
+        | Some tysc -> (
+            (* Unifying a parameter or local with a function type would
+               accept first-class usage that TLA+ operators cannot express,
+               so only names already known to be functions are applicable. *)
+            match repr (instantiate fresh_tyvar tysc) with
+            | TyFun _ as fn_ty -> fn_ty
+            | _ -> type_error (Not_a_function name) e.loc)
         | None -> (
             match Builtin.of_name name with
             | Some b ->
@@ -283,6 +297,7 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
 type proc_ctx = {
   env : tyenv;
   mutable_vars : (id * ty) list;
+  proc_names : id list; (* procedures visible so far, including self *)
   return_ty : ty;
   in_loop : bool;
   fresh_tyvar : unit -> ty;
@@ -316,6 +331,11 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
               unify value.loc elem_ty value_ty
           | None -> type_error (Assign_to_non_variable name) loc))
   | Call (name, args) -> (
+      (* A statement call discards no value only a procedure can produce
+         steps for; a def function here would reach the emitter's
+         procedure table and crash. *)
+      if not (List.mem name ctx.proc_names) then
+        type_error (Not_a_procedure name) loc;
       match List.assoc_opt name ctx.env with
       | None -> type_error (Unbound_variable name) loc
       | Some tysc ->
@@ -387,13 +407,13 @@ let check_module (m : Surface_ast.module_def) : unit =
     incr tyvar_counter;
     TyVar (ref (Unbound v))
   in
-  let _env =
+  let (_ : tyenv * id list) =
     List.fold_left
-      (fun env (item : Surface_ast.item) ->
+      (fun (env, proc_names) (item : Surface_ast.item) ->
         match item.desc with
         | ConstDef { name; value } ->
             let ty = infer_expr fresh_tyvar env value in
-            (name, generalize env ty) :: env
+            ((name, generalize env ty) :: env, proc_names)
         | FunDef { name; params; body_expr } ->
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
@@ -403,7 +423,7 @@ let check_module (m : Surface_ast.module_def) : unit =
             in
             let body_ty = infer_expr fresh_tyvar (param_env @ env) body_expr in
             let fn_ty = TyFun (param_tys, body_ty) in
-            (name, generalize env fn_ty) :: env
+            ((name, generalize env fn_ty) :: env, proc_names)
         | VarDecl { name; init } ->
             let ty =
               match init with
@@ -413,7 +433,7 @@ let check_module (m : Surface_ast.module_def) : unit =
                   unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
                   TyInt
             in
-            (name, tysc_of_ty ty) :: env
+            ((name, tysc_of_ty ty) :: env, proc_names)
         | ProcDef { name = proc_name; params; body } ->
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
@@ -442,25 +462,28 @@ let check_module (m : Surface_ast.module_def) : unit =
                   | _ -> None)
                 env
             in
+            let proc_names = proc_name :: proc_names in
             let ctx =
               {
                 env = proc_env;
                 mutable_vars;
+                proc_names;
                 return_ty;
                 in_loop = false;
                 fresh_tyvar;
               }
             in
             check_body ctx body;
-            (proc_name, generalize env fn_ty) :: env
+            ((proc_name, generalize env fn_ty) :: env, proc_names)
         | Process { proc; lo; hi; _ } ->
-            (match List.assoc_opt proc env with
-            | None -> type_error (Unbound_variable proc) item.loc
-            | Some _ -> ());
+            (* The root must be a procedure: a def function here would
+               reach the emitter's procedure table and crash. *)
+            if not (List.mem proc proc_names) then
+              type_error (Not_a_procedure proc) item.loc;
             unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
             unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
-            env)
-      [] m.items
+            (env, proc_names))
+      ([], []) m.items
   in
   ()
 
@@ -505,6 +528,12 @@ let string_of_type_error = function
       Printf.sprintf "Function %s expects %d arguments but got %d" id expected
         actual
   | Not_a_function id -> Printf.sprintf "%s is not a function" id
+  | Callable_as_value id ->
+      Printf.sprintf
+        "%s is a function or procedure and cannot be used as a value; apply \
+         it instead"
+        id
+  | Not_a_procedure id -> Printf.sprintf "%s is not a procedure" id
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
   | Return_type_mismatch -> "return type mismatch"

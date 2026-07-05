@@ -49,6 +49,31 @@ Type error:
   add_bool.snp:4:13: Type error: cannot unify bool with int
   [1]
 
+Functions and procedures are second-class; first-class uses that would
+previously crash the emitter or compile to invalid TLA+ are diagnosed:
+
+  $ cat > call_fun.snp <<'EOF'
+  > mod m {
+  >   def f(x) = x;
+  >   fn g() { f(1); return (); }
+  >   process p = g in 1..1;
+  > }
+  > EOF
+  $ sanpou compile call_fun.snp -o out
+  call_fun.snp:3:12: f is not a procedure
+  [1]
+
+  $ cat > higher_order.snp <<'EOF'
+  > mod m {
+  >   def apply(g) = g(1);
+  >   def inc(x) = x + 1;
+  >   def y = apply(inc);
+  > }
+  > EOF
+  $ sanpou compile higher_order.snp -o out
+  higher_order.snp:2:18: g is not a function
+  [1]
+
 Temporal operators live in module-level defs only; using one (or a def
 containing one) in a runtime context is rejected:
 

@@ -437,6 +437,26 @@ let () =
               (* head is still the builtin here: seq argument required *)
               check_fails
                 "mod m { def y = head(2); def head(x) = x + 1; }");
+          test_case "statement call to a def function" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  def f(x) = x;\n\
+                \  fn g() { f(1); return (); }\n\
+                \  process p = g in 1..1;\n\
+                \  }");
+          test_case "applying a parameter" `Quick (fun () ->
+              check_fails "mod m { def apply(g) = g(1); }");
+          test_case "function used as a value" `Quick (fun () ->
+              check_fails "mod m { def f(x) = x; def alias = f; }");
+          test_case "procedure used as a value" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  fn f() { return (); }\n\
+                \  fn g() { var h = f; return (); }\n\
+                \  process p = g in 1..1;\n\
+                \  }");
+          test_case "def function as process root" `Quick (fun () ->
+              check_fails "mod m { def f(x) = x; process p = f in 1..1; }");
           test_case "assert non-bool" `Quick (fun () ->
               check_fails
                 "mod m {\n\
