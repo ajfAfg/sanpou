@@ -188,6 +188,17 @@ or reused in either direction:
   atom_clash2.snp:3:3: A collides with an atom of the same name: an atom's name is its identity (in traces and the TLC config), so it cannot be shadowed or reused
   [1]
 
+Names the emitter generates (or pulls in via EXTENDS) are reserved:
+
+  $ cat > reserved.snp <<'EOF'
+  > mod m {
+  >   atom defaultInitValue;
+  > }
+  > EOF
+  $ sanpou compile reserved.snp -o out
+  reserved.snp:2:3: defaultInitValue is reserved: it collides with a name in the emitted TLA+ module
+  [1]
+
 Lexical error:
 
   $ cat > lexical.snp <<'EOF'
