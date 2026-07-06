@@ -111,15 +111,17 @@ let () =
                 with Not_found -> false
               in
               check bool "duplicated" false duplicated);
-          test_case "assigns defaultInitValue a model value when requested"
-            `Quick (fun () ->
+          test_case "assigns each declared constant a model value" `Quick
+            (fun () ->
               let config = Sanpou.Config.default in
-              let with_constant =
-                Sanpou.Config.to_cfg_string ~default_init_value:true config
+              let with_constants =
+                Sanpou.Config.to_cfg_string
+                  ~constants:[ "defaultInitValue"; "NoValue" ] config
               in
               check_has "CONSTANT defaultInitValue = defaultInitValue"
-                with_constant;
-              check_before "SPECIFICATION Spec" "CONSTANT" with_constant;
+                with_constants;
+              check_has "CONSTANT NoValue = NoValue" with_constants;
+              check_before "SPECIFICATION Spec" "CONSTANT" with_constants;
               check_not_has "CONSTANT" (Sanpou.Config.to_cfg_string config));
         ] );
       ( "emit",

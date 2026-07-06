@@ -46,13 +46,13 @@ let cmd_compile file outdir =
           (match config_opt with
           | Some config ->
               let cfg_path = Filename.concat outdir (name ^ ".cfg") in
-              let default_init_value =
-                List.exists
-                  (function Tla.Tla_ast.DConstants _ -> true | _ -> false)
+              let constants =
+                List.concat_map
+                  (function
+                    | Tla.Tla_ast.DConstants names -> names | _ -> [])
                   o.tla_module.body
               in
-              write_all cfg_path
-                (Sanpou.Config.to_cfg_string ~default_init_value config)
+              write_all cfg_path (Sanpou.Config.to_cfg_string ~constants config)
           | None -> ());
           let json_path = Filename.concat outdir (name ^ ".sourcemap.json") in
           write_all json_path (Sanpou.Source_map.to_json o.source_map))

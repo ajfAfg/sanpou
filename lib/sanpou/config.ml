@@ -56,15 +56,15 @@ let cfg_properties config =
 
 let bool_to_upper_string b = if b then "TRUE" else "FALSE"
 
-(* [default_init_value]: when the module declares CONSTANT defaultInitValue
-   (the null sentinel for unassigned frame fields), the cfg must assign it.
-   Assigning the constant to its own name makes TLC create a model value,
-   which compares unequal to every user value without a type error. *)
-let to_cfg_string ?(default_init_value = false) config =
+(* [constants]: the names of every CONSTANT the module declares — user model
+   values plus the internal null sentinel [defaultInitValue]. Assigning a
+   constant to its own name makes TLC create a model value, which compares
+   unequal to every other value without a type error. *)
+let to_cfg_string ?(constants = []) config =
   let constant_lines =
-    if default_init_value then
-      [ ""; "CONSTANT defaultInitValue = defaultInitValue" ]
-    else []
+    match constants with
+    | [] -> []
+    | _ -> "" :: List.map (fun c -> "CONSTANT " ^ c ^ " = " ^ c) constants
   in
   let invariant_lines =
     match config.invariants with

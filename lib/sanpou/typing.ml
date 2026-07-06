@@ -9,6 +9,7 @@ type ty =
   | TyInt
   | TyBool
   | TyString
+  | TyAtom (* opaque model values; only equality/inequality *)
   | TyUnit
   | TyTuple of ty list
   | TySeq of ty
@@ -62,7 +63,7 @@ let rec repr = function
 
 let rec freevar_ty ty =
   match repr ty with
-  | TyInt | TyBool | TyString | TyUnit -> []
+  | TyInt | TyBool | TyString | TyAtom | TyUnit -> []
   | TyVar { contents = Unbound v } -> [ v ]
   | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
   | TyTuple tys -> List.concat_map freevar_ty tys
@@ -93,7 +94,12 @@ let rec unify loc ty1 ty2 =
   | ty, TyVar ({ contents = Unbound v } as r) ->
       if occurs v ty then type_error Recursive_type loc;
       r := Link ty
-  | TyInt, TyInt | TyBool, TyBool | TyString, TyString | TyUnit, TyUnit -> ()
+  | TyInt, TyInt
+  | TyBool, TyBool
+  | TyString, TyString
+  | TyAtom, TyAtom
+  | TyUnit, TyUnit ->
+      ()
   | TyFun (ps1, r1), TyFun (ps2, r2) ->
       if List.length ps1 <> List.length ps2 then
         type_error (Type_clash (ty1, ty2)) loc;
@@ -133,7 +139,7 @@ let instantiate fresh_tyvar (TyScheme (bound, ty)) =
     | TyVar { contents = Unbound v } as t -> (
         match List.assoc_opt v mapping with Some fresh -> fresh | None -> t)
     | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
-    | (TyInt | TyBool | TyString | TyUnit) as t -> t
+    | (TyInt | TyBool | TyString | TyAtom | TyUnit) as t -> t
     | TyTuple tys -> TyTuple (List.map copy tys)
     | TySeq ty -> TySeq (copy ty)
     | TySet ty -> TySet (copy ty)
@@ -484,6 +490,13 @@ let check_module (m : Surface_ast.module_def) : unit =
     List.fold_left
       (fun (env, proc_names) (item : Surface_ast.item) ->
         match item.desc with
+        | AtomDecl { names } ->
+            let env =
+              List.fold_left
+                (fun env name -> (name, tysc_of_ty TyAtom) :: env)
+                env names
+            in
+            (env, proc_names)
         | ConstDef { name; value } ->
             let ty = infer_expr fresh_tyvar env value in
             ((name, generalize env ty) :: env, proc_names)
@@ -578,6 +591,7 @@ let rec string_of_ty ty =
   | TyInt -> "int"
   | TyBool -> "bool"
   | TyString -> "string"
+  | TyAtom -> "atom"
   | TyUnit -> "unit"
   | TyVar { contents = Unbound v } ->
       let c = Char.chr (Char.code 'a' + (v mod 26)) in

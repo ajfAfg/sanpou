@@ -50,6 +50,7 @@ let make_module ?(const_defs = []) ?(fun_defs = []) ?(var_decls = [])
     ?(processes = []) name procs : Sanpou.Normalized_ast.module_def =
   {
     name;
+    atoms = [];
     const_defs;
     prop_defs = [];
     fun_defs;

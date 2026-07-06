@@ -220,6 +220,7 @@ and pretty_body name_of callee_of indent steps =
 
 let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
   match item.desc with
+  | AtomDecl { names } -> indent ^ "atom " ^ String.concat ", " names ^ ";\n"
   | ConstDef { name; value } ->
       indent ^ "def " ^ name ^ " = "
       ^ pretty_expr name_of callee_of value

@@ -3,6 +3,7 @@ exception Error of string
 
 let reservedWords = [
   ("def", Parser.DEF);
+  ("atom", Parser.ATOM);
   ("var", Parser.VAR);
   ("procedure", Parser.PROCEDURE_KW);
   ("property", Parser.PROPERTY);

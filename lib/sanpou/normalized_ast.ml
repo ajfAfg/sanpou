@@ -86,6 +86,7 @@ type process_def = {
    list. Module-level expressions are call-free by construction. *)
 type module_def = {
   name : Generic_ast.id;
+  atoms : Generic_ast.id list;
   const_defs : (Generic_ast.id * expr) list;
   prop_defs : (Generic_ast.id * expr) list;
   fun_defs : (Generic_ast.id * Generic_ast.id list * expr) list;
