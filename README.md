@@ -113,6 +113,7 @@ sanpou trace dist/rwlock.out -o dist
 
 ```sanpou
 mod example {
+  atom Red, Green, Blue;           // opaque model values (distinct constants)
   def n = 3;                       // constant definition
   def inc(x) = x + 1;              // function definition (pure expression)
   def abs(x) = if (x < 0) { -x } else { x };   // if expression
@@ -164,6 +165,11 @@ mod example {
   Records `{f1: e1, f2: e2}` have fixed named fields (field types may differ);
   read a field with `r.f`. Records are structural: two record types match only
   when their field sets are identical (no row polymorphism).
+- **Model values**: `atom Red, Green, Blue;` declares opaque constants that
+  compare unequal to everything else — the idiomatic way to write sentinels
+  and enumeration-like tags without integer encodings. They share one type,
+  support only `==` / `!=`, and are referenced by name (`state = Red`). Each
+  becomes a TLA+ `CONSTANT` assigned a model value in the generated `.cfg`.
 - **Subscript and field paths**: read with `a[i]` and `r.f`, and they compose
   (`grid[i].tag`). An assignment target is a variable followed by any mix of
   `[i]` and `.f` steps (`grid[i].tag = e`), compiling to a TLA+ `EXCEPT`

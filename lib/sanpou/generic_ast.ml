@@ -152,6 +152,9 @@ type ('n, 'c) var_init =
 type ('n, 'c) item = ('n, 'c) item_desc node
 
 and ('n, 'c) item_desc =
+  | AtomDecl of { names : id list }
+      (* opaque model values: each name is a distinct constant that compares
+         unequal to every other value; declared with [atom a, b, c;] *)
   | ConstDef of { name : id; value : ('n, 'c) expr }
   | PropDef of { name : id; value : ('n, 'c) expr }
     (* a temporal property: the only place temporal operators may appear *)

@@ -281,3 +281,28 @@ access, and multi-field EXCEPT all check under TLC.
   $ sanpou compile rec_check.snp -o rec_check
   $ tlc rec_check rec_check
   No error has been found
+
+Model values end-to-end: a state variable holds opaque atoms, transitions on
+atom-equality guards and set membership, and runs to completion. TLC assigns
+each atom a model value (from the generated .cfg), so termination confirms the
+emitted CONSTANTs compare as distinct opaque values.
+
+  $ cat > mv_check.snp <<'EOF'
+  > mod mv_check {
+  >   atom Idle, Busy;
+  >   def states = {Idle, Busy};
+  >   var state = Idle;
+  >   procedure f() {
+  >     while (state == Idle) {
+  >       await state in states,
+  >       state = Busy;
+  >     }
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json mv_check.json
+  $ sanpou compile mv_check.snp -o mv_check
+  $ tlc mv_check mv_check
+  No error has been found

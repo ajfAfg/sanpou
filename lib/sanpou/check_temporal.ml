@@ -101,6 +101,7 @@ let check_module (m : Resolved_ast.module_def) : unit =
     List.fold_left
       (fun props (item : Resolved_ast.item) ->
         match item.desc with
+        | AtomDecl _ -> props
         | PropDef { name; _ } ->
             (* Temporal operators and references to preceding properties
                are exactly what a property body is for. *)

@@ -98,6 +98,7 @@ type process_ir = {
 
 type module_ir = {
   name : string;
+  atoms : string list;
   const_defs : (string * Normalized_ast.expr) list;
   prop_defs : (string * Normalized_ast.expr) list;
   fun_defs : (string * string list * Normalized_ast.expr) list;

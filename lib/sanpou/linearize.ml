@@ -496,6 +496,7 @@ let linearize_module (m : Normalized_ast.module_def) : module_ir =
   in
   {
     name = m.name;
+    atoms = m.atoms;
     const_defs = m.const_defs;
     prop_defs = m.prop_defs;
     fun_defs = m.fun_defs;

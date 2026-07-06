@@ -197,6 +197,11 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
         let plain = alpha_expr [] mst in
         let desc, defs =
           match item.desc with
+          | AtomDecl { names } ->
+              ( AtomDecl { names },
+                List.fold_left
+                  (fun defs name -> (name, Resolved_ast.Fun name) :: defs)
+                  defs names )
           | ConstDef { name; value } ->
               ( ConstDef { name; value = plain value },
                 (name, Resolved_ast.Fun name) :: defs )

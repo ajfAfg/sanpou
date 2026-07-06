@@ -285,6 +285,14 @@ let () =
               check_ok {|mod m { def x = "idle" != "busy"; }|});
           test_case "set of strings" `Quick (fun () ->
               check_ok {|mod m { def x = {"idle", "busy"}; def y = "idle" in x; }|});
+          test_case "atom declaration and reference" `Quick (fun () ->
+              check_ok "mod m { atom NoValue; def x = NoValue; }");
+          test_case "atom equality" `Quick (fun () ->
+              check_ok "mod m { atom A, B; def x = A == B; def y = A != B; }");
+          test_case "set of atoms and membership" `Quick (fun () ->
+              check_ok "mod m { atom R, G, B; def s = {R, G, B}; def m2 = R in s; }");
+          test_case "atom as record field" `Quick (fun () ->
+              check_ok "mod m { atom Idle; def r = {phase: Idle, n: 0}; }");
           test_case "record literal" `Quick (fun () ->
               check_ok {|mod m { def r = {kind: "req", src: 1}; }|});
           test_case "field access" `Quick (fun () ->
@@ -499,6 +507,14 @@ let () =
               check_fails "mod m { def x = [1, true]; }");
           test_case "heterogeneous set literal" `Quick (fun () ->
               check_fails "mod m { def x = {1, true}; }");
+          test_case "atom arithmetic" `Quick (fun () ->
+              check_fails "mod m { atom A; def x = A + 1; }");
+          test_case "atom compared to int" `Quick (fun () ->
+              check_fails "mod m { atom A; def x = A == 1; }");
+          test_case "atom ordering" `Quick (fun () ->
+              check_fails "mod m { atom A, B; def x = A < B; }");
+          test_case "set mixing atoms and ints" `Quick (fun () ->
+              check_fails "mod m { atom A; def x = {A, 1}; }");
           test_case "field access on non-record" `Quick (fun () ->
               check_fails "mod m { def x = 1; def y = x.f; }");
           test_case "unknown field" `Quick (fun () ->

@@ -126,6 +126,40 @@ let () =
               has "tags == {\"idle\", \"busy\"}";
               has "s = \"idle\"";
               has "s' = \"busy\"");
+          Alcotest.test_case "model values compile to tla constants" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod mv {\n\
+                  \  atom NoValue;\n\
+                  \  atom Red, Green;\n\
+                  \  def missing = NoValue;\n\
+                  \  def colors = {Red, Green};\n\
+                  \  procedure main() { return (); }\n\
+                  \  process ps = main in 1..1;\n\
+                  \  }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "CONSTANT NoValue, Red, Green";
+              has "missing == NoValue";
+              has "colors == {Red, Green}");
+          Alcotest.test_case "user atoms and the null sentinel coexist" `Quick
+            (fun () ->
+              (* the recursive proc uses defaultInitValue for unbound frame
+                 fields; the user atom is listed alongside it *)
+              let ast =
+                parse
+                  "mod m {\n\
+                  \  atom A;\n\
+                  \  var g = A;\n\
+                  \  procedure f(n) { if (n == 0) { return 1; } else { var r = f(n - 1); return r; } }\n\
+                  \  procedure main() { g = A; return (); }\n\
+                  \  process ps = main in 1..1;\n\
+                  \  }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "CONSTANT A, defaultInitValue" tla);
           Alcotest.test_case "records compile to tla records" `Quick (fun () ->
               let ast =
                 parse

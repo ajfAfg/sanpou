@@ -495,10 +495,15 @@ let header_decls ~uses_default_init_value ~uses_finite_sets (ir : module_ir) :
     [ "TLC"; "Sequences"; "Integers" ]
     @ if uses_finite_sets then [ "FiniteSets" ] else []
   in
+  (* User model values and the null sentinel are both CONSTANTs; the .cfg
+     assigns each to its own name (see Config.to_cfg_string). *)
+  let constants =
+    ir.atoms @ if uses_default_init_value then [ default_init_value ] else []
+  in
   [ DExtends extends; DSeparator ]
-  @ (if uses_default_init_value then
-       [ DConstants [ default_init_value ]; DSeparator ]
-     else [])
+  @ (match constants with
+    | [] -> []
+    | _ -> [ DConstants constants; DSeparator ])
   @ [
       DVariables all_tla_vars;
       DSeparator;

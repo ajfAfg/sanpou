@@ -290,6 +290,11 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
   let partition f = List.filter_map f m.items in
   {
     name = m.mod_name;
+    atoms =
+      List.concat_map
+        (fun (item : Resolved_ast.item) ->
+          match item.desc with AtomDecl { names } -> names | _ -> [])
+        m.items;
     const_defs =
       partition (fun (item : Resolved_ast.item) ->
           match item.desc with
