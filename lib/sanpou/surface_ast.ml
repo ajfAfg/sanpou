@@ -6,6 +6,7 @@
    [Alpha_convert] turns this tree into [Resolved_ast]. *)
 
 type expr = (Generic_ast.id, Generic_ast.id) Generic_ast.expr
+type accessor = (Generic_ast.id, Generic_ast.id) Generic_ast.accessor
 type assign_target = (Generic_ast.id, Generic_ast.id) Generic_ast.assign_target
 type simple_stmt = (Generic_ast.id, Generic_ast.id) Generic_ast.simple_stmt
 type step = (Generic_ast.id, Generic_ast.id) Generic_ast.step

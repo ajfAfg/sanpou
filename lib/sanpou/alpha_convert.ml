@@ -66,6 +66,9 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
     | Builtin (b, args) -> Builtin (b, List.map (alpha_expr env st) args)
     | Subscript (lhs, index) ->
         Subscript (alpha_expr env st lhs, alpha_expr env st index)
+    | Field (record, label) -> Field (alpha_expr env st record, label)
+    | Record fields ->
+        Record (List.map (fun (l, e) -> (l, alpha_expr env st e)) fields)
     | Range (lo, hi) -> Range (alpha_expr env st lo, alpha_expr env st hi)
     | MapInit { binder; domain; value } ->
         let binder' = fresh st binder in
@@ -106,11 +109,16 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
   in
   { desc; loc = e.loc }
 
+let alpha_accessor env st :
+    Surface_ast.accessor -> Resolved_ast.accessor = function
+  | AccIndex e -> AccIndex (alpha_expr env st e)
+  | AccField f -> AccField f
+
 let alpha_assign_target env st :
     Surface_ast.assign_target -> Resolved_ast.assign_target = function
   | VarTarget name -> VarTarget (resolve env name)
-  | SubscriptTarget (name, indices) ->
-      SubscriptTarget (resolve env name, List.map (alpha_expr env st) indices)
+  | PathTarget (name, path) ->
+      PathTarget (resolve env name, List.map (alpha_accessor env st) path)
 
 (* ===== Step and body alpha conversion ===== *)
 

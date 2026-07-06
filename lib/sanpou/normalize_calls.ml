@@ -65,6 +65,18 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
       let lhs_steps, lhs = normalize_expr st lhs in
       let index_steps, index = normalize_expr st index in
       (lhs_steps @ index_steps, at (Subscript (lhs, index)))
+  | Field (record, label) ->
+      let steps, record = normalize_expr st record in
+      (steps, at (Field (record, label)))
+  | Record fields ->
+      let steps_rev, fields_rev =
+        List.fold_left
+          (fun (steps_acc, fields_acc) (label, e) ->
+            let steps, e = normalize_expr st e in
+            (List.rev_append steps steps_acc, (label, e) :: fields_acc))
+          ([], []) fields
+      in
+      (List.rev steps_rev, at (Record (List.rev fields_rev)))
   | Range (lo, hi) ->
       let lo_steps, lo = normalize_expr st lo in
       let hi_steps, hi = normalize_expr st hi in
@@ -165,9 +177,21 @@ let normalize_simple_stmt st (stmt : Resolved_ast.simple_stmt) :
       let target_steps, target =
         match target with
         | VarTarget i -> ([], VarTarget i)
-        | SubscriptTarget (i, indices) ->
-            let steps, indices = normalize_expr_list st indices in
-            (steps, SubscriptTarget (i, indices))
+        | PathTarget (i, path) ->
+            (* Only subscript indices carry expressions to hoist; field steps
+               pass through. Order is preserved so evaluation stays
+               left-to-right. *)
+            let steps_rev, path_rev =
+              List.fold_left
+                (fun (steps_acc, path_acc) accessor ->
+                  match accessor with
+                  | AccIndex e ->
+                      let steps, e = normalize_expr st e in
+                      (List.rev_append steps steps_acc, AccIndex e :: path_acc)
+                  | AccField f -> (steps_acc, AccField f :: path_acc))
+                ([], []) path
+            in
+            (List.rev steps_rev, PathTarget (i, List.rev path_rev))
       in
       let value_steps, value = normalize_expr st value in
       (target_steps @ value_steps, at (Assign (target, value)))

@@ -152,6 +152,33 @@ let () =
           test_case "empty string" `Quick (fun () ->
               check_items {|def x = "";|} [ const_def "x" (strlit "") ]);
         ] );
+      ( "record_vs_comprehension",
+        [
+          (* A `key : value` brace form is a record unless it is a single
+             `x in S : p` (membership key). Record fields are stored
+             label-sorted. *)
+          test_case "single label key is a record" `Quick (fun () ->
+              check_items {|def x = {n: 0};|}
+                [ const_def "x" (node (Record [ ("n", intlit 0) ])) ]);
+          test_case "record fields are label-sorted" `Quick (fun () ->
+              check_items {|def x = {src: 1, kind: 2};|}
+                [
+                  const_def "x"
+                    (node (Record [ ("kind", intlit 2); ("src", intlit 1) ]));
+                ]);
+          test_case "membership key is a comprehension" `Quick (fun () ->
+              check_items {|def x = {i in s : true};|}
+                [
+                  const_def "x"
+                    (node
+                       (SetComp
+                          {
+                            binder = "i";
+                            domain = var "s";
+                            pred = boollit true;
+                          }));
+                ]);
+        ] );
       ( "unary_minus",
         [
           test_case "literal" `Quick (fun () ->

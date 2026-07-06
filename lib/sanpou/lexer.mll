@@ -50,6 +50,8 @@ rule main = parse
     { Parser.NEQ }
 | ".."
     { Parser.DOTDOT }
+| "."
+    { Parser.DOT }
 | "->"
     { Parser.ARROW }
 | "("

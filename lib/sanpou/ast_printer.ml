@@ -43,11 +43,11 @@ let prec (e : ('n, 'c) expr) =
   match e.desc with
   | BinOp (op, _, _) -> binop_prec op
   | Range _ -> 4
-  | Subscript _ -> 7
+  | Subscript _ | Field _ -> 7
   | UnOp _ -> 8
   | IntLit _ | BoolLit _ | StrLit _ | Var _ | Self | App _ | Builtin _
-  | MapInit _ | SetLit _ | SetComp _ | Tuple _ | Sequence _ | IfExpr _ | Quant _
-    ->
+  | MapInit _ | SetLit _ | SetComp _ | Record _ | Tuple _ | Sequence _
+  | IfExpr _ | Quant _ ->
       9
 
 let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
@@ -76,6 +76,15 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       ^ ")"
   | Subscript (lhs, index) ->
       at 7 lhs ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
+  | Field (record, label) -> at 7 record ^ "." ^ label
+  | Record fields ->
+      "{"
+      ^ String.concat ", "
+          (List.map
+             (fun (label, e) ->
+               label ^ ": " ^ pretty_expr name_of callee_of e)
+             fields)
+      ^ "}"
   | Range (lo, hi) -> at 5 lo ^ ".." ^ at 5 hi
   | MapInit { binder; domain; value } ->
       "{ " ^ name_of binder ^ " in "
@@ -121,15 +130,15 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       ^ pretty_expr name_of callee_of body
       ^ " }"
 
+let pretty_accessor name_of callee_of = function
+  | AccIndex index -> "[" ^ pretty_expr name_of callee_of index ^ "]"
+  | AccField field -> "." ^ field
+
 let pretty_assign_target name_of callee_of = function
   | VarTarget n -> name_of n
-  | SubscriptTarget (n, indices) ->
+  | PathTarget (n, path) ->
       name_of n
-      ^ String.concat ""
-          (List.map
-             (fun index ->
-               "[" ^ pretty_expr name_of callee_of index ^ "]")
-             indices)
+      ^ String.concat "" (List.map (pretty_accessor name_of callee_of) path)
 
 let pretty_simple_stmt name_of callee_of (stmt : ('n, 'c) simple_stmt) =
   match stmt.desc with

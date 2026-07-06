@@ -13,6 +13,9 @@ type ty =
   | TyTuple of ty list
   | TySeq of ty
   | TySet of ty
+  | TyRecord of (id * ty) list
+      (* fixed-field structural record; fields kept label-sorted so identical
+         field sets compare and unify regardless of order *)
   | TyMap of ty * ty
   | TyVar of tyvar ref
   | TyFun of ty list * ty
@@ -37,6 +40,8 @@ type type_error =
   | Recursive_type
   | Callable_as_value of id
   | Not_a_procedure of id
+  | Not_a_record of ty
+  | Unknown_field of id * ty
 
 exception Type_error of type_error * loc
 
@@ -63,6 +68,7 @@ let rec freevar_ty ty =
   | TyTuple tys -> List.concat_map freevar_ty tys
   | TySeq ty -> freevar_ty ty
   | TySet ty -> freevar_ty ty
+  | TyRecord fields -> List.concat_map (fun (_, t) -> freevar_ty t) fields
   | TyMap (key_ty, value_ty) -> freevar_ty key_ty @ freevar_ty value_ty
   | TyFun (params, ret) -> List.concat_map freevar_ty params @ freevar_ty ret
 
@@ -99,6 +105,13 @@ let rec unify loc ty1 ty2 =
       List.iter2 (unify loc) ts1 ts2
   | TySeq t1, TySeq t2 -> unify loc t1 t2
   | TySet t1, TySet t2 -> unify loc t1 t2
+  | TyRecord fs1, TyRecord fs2 ->
+      (* Structural, no row polymorphism: identical field sets required.
+         Fields are label-sorted at construction, so a positional walk
+         matches labels. *)
+      if List.map fst fs1 <> List.map fst fs2 then
+        type_error (Type_clash (ty1, ty2)) loc;
+      List.iter2 (fun (_, t1) (_, t2) -> unify loc t1 t2) fs1 fs2
   | TyMap (k1, v1), TyMap (k2, v2) ->
       unify loc k1 k2;
       unify loc v1 v2
@@ -124,6 +137,7 @@ let instantiate fresh_tyvar (TyScheme (bound, ty)) =
     | TyTuple tys -> TyTuple (List.map copy tys)
     | TySeq ty -> TySeq (copy ty)
     | TySet ty -> TySet (copy ty)
+    | TyRecord fields -> TyRecord (List.map (fun (l, t) -> (l, copy t)) fields)
     | TyMap (key_ty, value_ty) -> TyMap (copy key_ty, copy value_ty)
     | TyFun (params, ret) -> TyFun (List.map copy params, copy ret)
   in
@@ -204,6 +218,16 @@ let infer_indexed_access fresh_tyvar ~collection_loc ~index_loc collection_ty
   | TyMap _ -> unify collection_loc collection_ty (TyMap (TyInt, elem_ty))
   | _ -> unify collection_loc collection_ty (TySeq elem_ty));
   elem_ty
+
+(* Record field access. Without row polymorphism the record's full type must
+   be known here: an unresolved type variable cannot be a record. *)
+let infer_field_access ~loc collection_ty field =
+  match repr collection_ty with
+  | TyRecord fields -> (
+      match List.assoc_opt field fields with
+      | Some ty -> ty
+      | None -> type_error (Unknown_field (field, repr collection_ty)) loc)
+  | ty -> type_error (Not_a_record ty) loc
 
 let rec infer_sequence_literal fresh_tyvar env elems =
   let elem_ty = fresh_tyvar () in
@@ -290,6 +314,12 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       let index_ty = infer_expr fresh_tyvar env index in
       infer_indexed_access fresh_tyvar ~collection_loc:lhs.loc
         ~index_loc:index.loc lhs_ty index_ty
+  | Field (record, label) ->
+      let record_ty = infer_expr fresh_tyvar env record in
+      infer_field_access ~loc:record.loc record_ty label
+  | Record fields ->
+      TyRecord
+        (List.map (fun (l, e) -> (l, infer_expr fresh_tyvar env e)) fields)
   | Range (lo, hi) ->
       unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
       unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
@@ -351,18 +381,23 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
           | Some var_ty ->
               unify value.loc var_ty (infer_expr ctx.fresh_tyvar ctx.env value)
           | None -> type_error (Assign_to_non_variable name) loc)
-      | SubscriptTarget (name, indices) -> (
+      | PathTarget (name, path) -> (
           match List.assoc_opt name ctx.mutable_vars with
           | Some container_ty ->
               let value_ty = infer_expr ctx.fresh_tyvar ctx.env value in
-              (* Walk the index path: each level peels one collection. *)
+              (* Walk the access path: each step peels one collection level,
+                 by index for a subscript or by label for a field. *)
               let elem_ty =
                 List.fold_left
-                  (fun collection_ty (index : Surface_ast.expr) ->
-                    let index_ty = infer_expr ctx.fresh_tyvar ctx.env index in
-                    infer_indexed_access ctx.fresh_tyvar ~collection_loc:loc
-                      ~index_loc:index.loc collection_ty index_ty)
-                  container_ty indices
+                  (fun collection_ty accessor ->
+                    match accessor with
+                    | AccIndex index ->
+                        let index_ty = infer_expr ctx.fresh_tyvar ctx.env index in
+                        infer_indexed_access ctx.fresh_tyvar ~collection_loc:loc
+                          ~index_loc:index.loc collection_ty index_ty
+                    | AccField field ->
+                        infer_field_access ~loc collection_ty field)
+                  container_ty path
               in
               unify value.loc elem_ty value_ty
           | None -> type_error (Assign_to_non_variable name) loc))
@@ -551,6 +586,11 @@ let rec string_of_ty ty =
   | TyTuple tys -> "(" ^ String.concat ", " (List.map string_of_ty tys) ^ ")"
   | TySeq ty -> "[" ^ string_of_ty ty ^ "]"
   | TySet ty -> "{" ^ string_of_ty ty ^ "}"
+  | TyRecord fields ->
+      "{"
+      ^ String.concat ", "
+          (List.map (fun (l, t) -> l ^ ": " ^ string_of_ty t) fields)
+      ^ "}"
   | TyMap (key_ty, value_ty) ->
       "{" ^ string_of_ty key_ty ^ " -> " ^ string_of_ty value_ty ^ "}"
   | TyFun (params, ret) ->
@@ -581,6 +621,11 @@ let string_of_type_error = function
          it instead"
         id
   | Not_a_procedure id -> Printf.sprintf "%s is not a procedure" id
+  | Not_a_record ty ->
+      Printf.sprintf "%s is not a record; cannot access a field of it"
+        (string_of_ty ty)
+  | Unknown_field (field, ty) ->
+      Printf.sprintf "record %s has no field %s" (string_of_ty ty) field
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
   | Return_type_mismatch -> "return type mismatch"
