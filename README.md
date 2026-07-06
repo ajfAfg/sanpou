@@ -183,6 +183,12 @@ mod example {
 - **Set builtins**: `union`, `intersection`, `difference` (binary set
   operations), `cardinality` (element count), `subseteq` (subset test).
   Builtins are lexically shadowed by module definitions of the same name.
+- **Scoping**: name resolution is sequential and lexical everywhere, module
+  level included — a later `def`/`var`/`procedure`/`process` of the same
+  name shadows the earlier one from its point onward (the compiler renames
+  the shadowed declarations apart in the emitted TLA+). Atoms are the
+  exception: an atom's name is the model value's identity in traces and the
+  TLC config, so atom names cannot be shadowed or reused.
 - **Quantifiers**: `forall (x in S) { p }` and `exists (x in S) { p }` are
   boolean expressions ranging over the set `S`.
 - **Statements**: assignment (including nested subscripts `a[i][j] = e`),

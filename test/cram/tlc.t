@@ -231,6 +231,32 @@ emission; the spec parses and the guard computes through them.
   $ tlc shadow shadow
   No error has been found
 
+Module-level shadowing end-to-end: the second `def limit` reads the first,
+`probe` (defined between the two `var seen`) writes the first seen while
+`main` reads and writes the second, and the assert only holds if every
+reference resolved to the binding in scope at its position.
+
+  $ cat > shadow_seq.snp <<'EOF'
+  > mod shadow_seq {
+  >   def limit = 1;
+  >   def limit = limit + 1;
+  >   var seen = 0;
+  >   procedure probe() { seen = limit; return (); }
+  >   var seen = 10;
+  >   procedure main() {
+  >     probe();
+  >     seen = seen + limit;
+  >     assert seen == 12;
+  >     return ();
+  >   }
+  >   fair process p = main in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json shadow_seq.json
+  $ sanpou compile shadow_seq.snp -o shadow_seq
+  $ tlc shadow_seq shadow_seq
+  No error has been found
+
 Sets end-to-end: two processes drawn from a set literal each unblock only if
 the set operations (union, comprehension, cardinality, difference, subseteq)
 and membership all evaluate as expected, then run to completion. Termination

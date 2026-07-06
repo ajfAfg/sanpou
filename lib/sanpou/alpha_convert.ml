@@ -37,20 +37,24 @@ type state = {
          independent: they all become top-level TLA+ symbols *)
 }
 
+(* A fresh [__N] name that collides with no module-level name. *)
+let rename st name : Resolved_ast.ident =
+  let rec next () =
+    incr st.var_name_counter;
+    let candidate = name ^ "__" ^ string_of_int !(st.var_name_counter) in
+    if List.mem candidate st.module_names then next ()
+    else { Resolved_ast.name = candidate; original = name }
+  in
+  next ()
+
 (* [env] holds the bindings in scope at the binder site: its domain is
    exactly the enclosing binder (and, in procedures, local) names. *)
 let fresh st env name : Resolved_ast.ident =
-  let rec rename () =
-    incr st.var_name_counter;
-    let candidate = name ^ "__" ^ string_of_int !(st.var_name_counter) in
-    if List.mem candidate st.module_names then rename ()
-    else { Resolved_ast.name = candidate; original = name }
-  in
   if
     st.rename_binders
     || List.mem name st.module_names
     || List.mem_assoc name env
-  then rename ()
+  then rename st name
   else Resolved_ast.ident name
 
 (* [env] maps a source name to its renamed ident; names bound outside the
@@ -205,7 +209,8 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
   let counter = ref 0 in
   (* All module-level names, collected up front: TLA+ scopes them over the
      whole module (VARIABLES and defs alike), so a binder collides with a
-     name declared *after* it in the source just the same. *)
+     name declared *after* it in the source just the same. Duplicates are
+     kept — their multiplicity drives the shadow renaming below. *)
   let module_names =
     List.concat_map
       (fun (item : Surface_ast.item) ->
@@ -220,29 +225,63 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
             [ name ])
       m.items
   in
+  let total_count name =
+    List.length (List.filter (( = ) name) module_names)
+  in
   (* Module-level binders keep their source name unless it collides (see
      [fresh]); their names display as themselves. *)
   let module_st defs =
     { var_name_counter = counter; defs; rename_binders = false; module_names }
   in
-  let items_rev, _ =
+  (* Module-level declarations shadow sequentially like any other binding,
+     but the emitted TLA+ namespace is flat, so shadowed declarations are
+     renamed apart: every occurrence of a name except the last gets a
+     [__N] name, and the last keeps the bare one — the binding visible at
+     the end of the module is the one the emitted spec, traces, and the
+     sidecar config refer to by its source name. (Atoms never rename:
+     typing keeps their names module-wide unique.) [menv] maps each source
+     name to its current ident so later references resolve to the right
+     binding; [seen] counts occurrences processed so far. *)
+  let declare seen name =
+    let n =
+      (match List.assoc_opt name seen with Some n -> n | None -> 0) + 1
+    in
+    let seen = (name, n) :: List.remove_assoc name seen in
+    let ident =
+      if n < total_count name then rename (module_st []) name
+      else Resolved_ast.ident name
+    in
+    (seen, ident)
+  in
+  let items_rev, _, _, _ =
     List.fold_left
-      (fun (acc, defs) (item : Surface_ast.item) ->
+      (fun (acc, defs, menv, seen) (item : Surface_ast.item) ->
         let mst = module_st defs in
-        let plain = alpha_expr [] mst in
-        let desc, defs =
+        let plain = alpha_expr menv mst in
+        let desc, defs, menv, seen =
           match item.desc with
           | AtomDecl { names } ->
               ( AtomDecl { names },
                 List.fold_left
                   (fun defs name -> (name, Resolved_ast.Fun name) :: defs)
-                  defs names )
+                  defs names,
+                menv,
+                seen )
           | ConstDef { name; value } ->
-              ( ConstDef { name; value = plain value },
-                (name, Resolved_ast.Fun name) :: defs )
+              (* the value sees the preceding bindings, not the new one *)
+              let value = plain value in
+              let seen, id_ = declare seen name in
+              ( ConstDef { name = id_.name; value },
+                (name, Resolved_ast.Fun id_.name) :: defs,
+                (name, id_) :: menv,
+                seen )
           | PropDef { name; value } ->
-              ( PropDef { name; value = plain value },
-                (name, Resolved_ast.Fun name) :: defs )
+              let value = plain value in
+              let seen, id_ = declare seen name in
+              ( PropDef { name = id_.name; value },
+                (name, Resolved_ast.Fun id_.name) :: defs,
+                (name, id_) :: menv,
+                seen )
           | FunDef { name; params; body_expr } ->
               (* The body sees the preceding definitions, not the function
                  itself: defs are not recursive, matching the type checker.
@@ -256,28 +295,42 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
                       renamed.Resolved_ast.name :: params_acc ))
                   ([], []) params
               in
+              let body_expr =
+                alpha_expr (List.rev env_rev @ menv) (module_st defs) body_expr
+              in
+              let seen, id_ = declare seen name in
               ( FunDef
-                  {
-                    name;
-                    params = List.rev params_rev;
-                    body_expr =
-                      alpha_expr (List.rev env_rev) (module_st defs) body_expr;
-                  },
-                (name, Resolved_ast.Fun name) :: defs )
+                  { name = id_.name; params = List.rev params_rev; body_expr },
+                (name, Resolved_ast.Fun id_.name) :: defs,
+                (name, id_) :: menv,
+                seen )
           | VarDecl { name; init } ->
               let init =
                 match init with
                 | InitValue value -> InitValue (plain value)
                 | InitIn domain -> InitIn (plain domain)
               in
-              (VarDecl { name; init }, (name, Resolved_ast.Fun name) :: defs)
+              let seen, id_ = declare seen name in
+              ( VarDecl { name = id_.name; init },
+                (name, Resolved_ast.Fun id_.name) :: defs,
+                (name, id_) :: menv,
+                seen )
           | Process { name; proc; fairness; domain } ->
-              ( Process { name; proc; fairness; domain = plain domain },
-                defs )
+              let domain = plain domain in
+              let seen, id_ = declare seen name in
+              (* the root resolves like a callee: to the procedure binding
+                 in scope at this point *)
+              let proc =
+                match List.assoc_opt proc defs with
+                | Some (Resolved_ast.Proc n) | Some (Resolved_ast.Fun n) -> n
+                | None -> proc
+              in
+              (Process { name = id_.name; proc; fairness; domain }, defs, menv, seen)
           | ProcDef { name; params; body } ->
+              let seen, id_ = declare seen name in
               (* The procedure sees itself (self-recursion), again matching
                  the type checker's environment. *)
-              let defs = (name, Resolved_ast.Proc name) :: defs in
+              let defs = (name, Resolved_ast.Proc id_.name) :: defs in
               let pst =
                 {
                   var_name_counter = counter;
@@ -293,12 +346,15 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
                     ((param, renamed) :: env_acc, renamed :: params_acc))
                   ([], []) params
               in
-              let env = List.rev env_rev in
+              let env = List.rev env_rev @ menv in
               let params = List.rev params_rev in
-              (ProcDef { name; params; body = alpha_body pst env body }, defs)
+              ( ProcDef { name = id_.name; params; body = alpha_body pst env body },
+                defs,
+                (name, id_) :: menv,
+                seen )
         in
-        ({ desc; loc = item.loc } :: acc, defs))
-      ([], []) m.items
+        ({ desc; loc = item.loc } :: acc, defs, menv, seen))
+      ([], [], [], []) m.items
   in
   { mod_name = m.mod_name; items = List.rev items_rev; mod_loc = m.mod_loc }
 

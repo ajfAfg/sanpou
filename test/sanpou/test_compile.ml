@@ -82,6 +82,33 @@ let () =
               has "s == {x__2 \\in 1..3 : (x__2 > 0)}";
               has "(\\A i \\in s: (\\E i__3 \\in 1..3: (i__3 >= 1)))";
               has "keep == [j \\in 1..2 |-> j]");
+          Alcotest.test_case "shadowed module-level names are renamed apart"
+            `Quick (fun () ->
+              (* sequential shadowing: earlier occurrences get __N names,
+                 the last keeps the source name, and references resolve to
+                 the binding in scope at their position *)
+              let ast =
+                parse
+                  "mod m {\n\
+                   def a = 1;\n\
+                   def a = a + 1;\n\
+                   def b = a;\n\
+                   var x = 0;\n\
+                   procedure f() { x = a; return (); }\n\
+                   var x = 100;\n\
+                   procedure main() { x = x + b, f(); return (); }\n\
+                   process p = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "a__1 == 1";
+              has "a == (a__1 + 1)";
+              has "b == a";
+              has "VARIABLES pc, x__2, x, stack";
+              (* f writes the first x; main writes the second *)
+              has "x__2' = a";
+              has "x' = (x + b)");
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
               let ast =
