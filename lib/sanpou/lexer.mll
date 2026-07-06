@@ -40,6 +40,10 @@ rule main = parse
     { Parser.EOF }
 | ['0'-'9']+
     { Parser.INTV (int_of_string (Lexing.lexeme lexbuf)) }
+(* Minimal string literals: any run of characters other than a double quote
+   or newline, with no escape sequences. *)
+| '"' ([^ '"' '\n']* as s) '"'
+    { Parser.STRINGV s }
 | "=="
     { Parser.EQEQ }
 | "!="

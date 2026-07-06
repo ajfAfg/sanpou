@@ -232,3 +232,29 @@ therefore proves the emitted set constructs check under TLC's FiniteSets.
   $ sanpou compile sets_check.snp -o sets_check
   $ tlc sets_check sets_check
   No error has been found
+
+Strings end-to-end: a state variable toggles between two string tags, driven
+by string-equality guards. The process never blocks (one guard always holds),
+so deadlock checking passes and confirms the emitted string literals compare
+correctly under TLC.
+
+  $ cat > str_check.snp <<'EOF'
+  > mod str_check {
+  >   var s = "idle";
+  >   procedure f() {
+  >     while (true) {
+  >       await s == "idle",
+  >       s = "busy";
+  >       await s == "busy",
+  >       s = "idle";
+  >     }
+  >   }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ cat > str_check.json <<'EOF'
+  > { "checks": { "deadlock": true, "termination": false }, "properties": [] }
+  > EOF
+  $ sanpou compile str_check.snp -o str_check
+  $ tlc str_check str_check
+  No error has been found

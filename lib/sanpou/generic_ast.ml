@@ -50,6 +50,7 @@ type ('n, 'c) expr = ('n, 'c) expr_desc node
 and ('n, 'c) expr_desc =
   | IntLit of int
   | BoolLit of bool
+  | StrLit of string
   | Var of 'n
   | Self
   | UnOp of unop * ('n, 'c) expr
@@ -168,6 +169,7 @@ let rec map_expr (f : 'n -> 'm) (g : 'c -> 'd) (e : ('n, 'c) expr) :
     match e.desc with
     | IntLit v -> IntLit v
     | BoolLit b -> BoolLit b
+    | StrLit s -> StrLit s
     | Var n -> Var (f n)
     | Self -> Self
     | UnOp (op, rhs) -> UnOp (op, map_expr f g rhs)

@@ -153,6 +153,12 @@ let () =
               pretty_roundtrip "mod m { def x = [1,]; }");
           test_case "sequence pair" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = [1, 2]; }");
+          test_case "string literal" `Quick (fun () ->
+              pretty_roundtrip {|mod m { def x = "idle"; }|});
+          test_case "string equality" `Quick (fun () ->
+              pretty_roundtrip {|mod m { def x = s == "busy"; }|});
+          test_case "set of strings" `Quick (fun () ->
+              pretty_roundtrip {|mod m { def x = {"idle", "busy"}; }|});
           test_case "map init" `Quick (fun () ->
               pretty_roundtrip "mod m { var xs = { x in 1..2 -> false }; }");
           test_case "map init over set literal" `Quick (fun () ->
@@ -264,6 +270,9 @@ let () =
           test_case "empty set" `Quick (fun () ->
               pretty_prints "mod m { def x = {}; }"
                 "mod m {\n  def x = {};\n}\n");
+          test_case "string literal" `Quick (fun () ->
+              pretty_prints {|mod m { def x = "idle"; }|}
+                "mod m {\n  def x = \"idle\";\n}\n");
           test_case "set comprehension" `Quick (fun () ->
               pretty_prints "mod m { def x = { y in s : y > 1 }; }"
                 "mod m {\n  def x = { y in s : y > 1 };\n}\n");

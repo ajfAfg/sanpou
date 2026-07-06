@@ -20,6 +20,7 @@ let binder_of (e : Surface_ast.expr) ~what : id * Surface_ast.expr =
 %}
 
 %token <int> INTV
+%token <string> STRINGV
 %token <string> ID
 %token TRUE FALSE
 %token DEF VAR PROCEDURE_KW PROPERTY MOD FAIR PROCESS IN SELF
@@ -211,6 +212,7 @@ primary_expr:
       LBRACE body=expr RBRACE
       { mk $startpos (Quant { quant = Exists; binder; domain; body }) }
   | value=INTV { mk $startpos (IntLit value) }
+  | value=STRINGV { mk $startpos (StrLit value) }
   | TRUE { mk $startpos (BoolLit true) }
   | FALSE { mk $startpos (BoolLit false) }
   | SELF { mk $startpos Self }

@@ -8,6 +8,7 @@ open Generic_ast
 type ty =
   | TyInt
   | TyBool
+  | TyString
   | TyUnit
   | TyTuple of ty list
   | TySeq of ty
@@ -56,7 +57,7 @@ let rec repr = function
 
 let rec freevar_ty ty =
   match repr ty with
-  | TyInt | TyBool | TyUnit -> []
+  | TyInt | TyBool | TyString | TyUnit -> []
   | TyVar { contents = Unbound v } -> [ v ]
   | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
   | TyTuple tys -> List.concat_map freevar_ty tys
@@ -86,7 +87,7 @@ let rec unify loc ty1 ty2 =
   | ty, TyVar ({ contents = Unbound v } as r) ->
       if occurs v ty then type_error Recursive_type loc;
       r := Link ty
-  | TyInt, TyInt | TyBool, TyBool | TyUnit, TyUnit -> ()
+  | TyInt, TyInt | TyBool, TyBool | TyString, TyString | TyUnit, TyUnit -> ()
   | TyFun (ps1, r1), TyFun (ps2, r2) ->
       if List.length ps1 <> List.length ps2 then
         type_error (Type_clash (ty1, ty2)) loc;
@@ -119,7 +120,7 @@ let instantiate fresh_tyvar (TyScheme (bound, ty)) =
     | TyVar { contents = Unbound v } as t -> (
         match List.assoc_opt v mapping with Some fresh -> fresh | None -> t)
     | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
-    | (TyInt | TyBool | TyUnit) as t -> t
+    | (TyInt | TyBool | TyString | TyUnit) as t -> t
     | TyTuple tys -> TyTuple (List.map copy tys)
     | TySeq ty -> TySeq (copy ty)
     | TySet ty -> TySet (copy ty)
@@ -224,6 +225,7 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
   match e.desc with
   | IntLit _ -> TyInt
   | BoolLit _ -> TyBool
+  | StrLit _ -> TyString
   | Var name -> (
       match List.assoc_opt name env with
       | Some tysc -> (
@@ -540,6 +542,7 @@ let rec string_of_ty ty =
   match repr ty with
   | TyInt -> "int"
   | TyBool -> "bool"
+  | TyString -> "string"
   | TyUnit -> "unit"
   | TyVar { contents = Unbound v } ->
       let c = Char.chr (Char.code 'a' + (v mod 26)) in

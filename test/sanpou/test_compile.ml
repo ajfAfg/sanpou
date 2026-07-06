@@ -108,6 +108,24 @@ let () =
               has "quotient == (7 \\div 2)";
               has "remainder == (7 % 2)";
               has "negated == ~(TRUE)");
+          Alcotest.test_case "string literals compile to tla strings" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod strs {\n\
+                  \  def idle = \"idle\";\n\
+                  \  def tags = {\"idle\", \"busy\"};\n\
+                  \  var s = \"idle\";\n\
+                  \  procedure main() { s = \"busy\"; return (); }\n\
+                  \  process ps = main in 1..1;\n\
+                  \  }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "idle == \"idle\"";
+              has "tags == {\"idle\", \"busy\"}";
+              has "s = \"idle\"";
+              has "s' = \"busy\"");
           Alcotest.test_case "set literals, membership and comprehension" `Quick
             (fun () ->
               let ast =
