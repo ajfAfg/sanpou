@@ -45,6 +45,7 @@ type type_error =
   | Unknown_field of id * ty
   | Self_outside_procedure
   | Reserved_module_name of id
+  | Conflicting_assignments of id
 
 exception Type_error of type_error * loc
 
@@ -443,6 +444,33 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
   | Assert cond ->
       unify cond.loc (infer_expr ctx.fresh_tyvar ctx.env cond) TyBool
 
+(* One statement list (SimpleStep / WithStep) is one atomic action: its
+   assignments become one conjunction of primed equations. Multiple path
+   updates to a variable compose left-to-right into a single EXCEPT, but a
+   whole-variable write cannot be combined with any other write to the same
+   variable in the same step — there is no consistent value for the primed
+   variable, and the emitter would have to drop one silently. *)
+let check_no_conflicting_writes (stmts : Surface_ast.simple_stmt list) : unit =
+  let write (stmt : Surface_ast.simple_stmt) =
+    match stmt.desc with
+    | Assign (VarTarget name, _) -> Some (name, `Whole, stmt.loc)
+    | Assign (PathTarget (name, _), _) -> Some (name, `Path, stmt.loc)
+    | _ -> None
+  in
+  let (_ : (id * [ `Whole | `Path ]) list) =
+    List.fold_left
+      (fun seen (name, kind, loc) ->
+        if
+          List.exists
+            (fun (n, k) -> n = name && (k = `Whole || kind = `Whole))
+            seen
+        then type_error (Conflicting_assignments name) loc;
+        (name, kind) :: seen)
+      []
+      (List.filter_map write stmts)
+  in
+  ()
+
 let rec check_body (ctx : proc_ctx) (steps : Surface_ast.body) : unit =
   match steps with
   | [] -> ()
@@ -454,6 +482,7 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
   match step.desc with
   | EmptyStep -> ctx
   | SimpleStep stmts ->
+      check_no_conflicting_writes stmts;
       List.iter (check_simple_stmt ctx) stmts;
       ctx
   | BlockStep (While { cond; body }) ->
@@ -480,6 +509,7 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
       let binder_ctx =
         { ctx with env = (binder, tysc_of_ty elem_ty) :: ctx.env }
       in
+      check_no_conflicting_writes stmts;
       List.iter (check_simple_stmt binder_ctx) stmts;
       ctx
   | VarStep (name, value) ->
@@ -682,6 +712,12 @@ let string_of_type_error = function
   | Reserved_module_name id ->
       Printf.sprintf
         "%s is reserved: it collides with a name in the emitted TLA+ module"
+        id
+  | Conflicting_assignments id ->
+      Printf.sprintf
+        "conflicting assignments to %s in one step: a whole-variable \
+         assignment cannot be combined with another assignment to the same \
+         variable"
         id
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
