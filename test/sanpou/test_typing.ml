@@ -277,6 +277,14 @@ let () =
                  def ws = concat(xs, append([], 3)); }");
           test_case "tuple remains heterogeneous" `Quick (fun () ->
               check_ok "mod m { def x = (1, true); }");
+          test_case "string literal" `Quick (fun () ->
+              check_ok {|mod m { def x = "idle"; }|});
+          test_case "string equality" `Quick (fun () ->
+              check_ok {|mod m { def x = "idle" == "busy"; }|});
+          test_case "string inequality" `Quick (fun () ->
+              check_ok {|mod m { def x = "idle" != "busy"; }|});
+          test_case "set of strings" `Quick (fun () ->
+              check_ok {|mod m { def x = {"idle", "busy"}; def y = "idle" in x; }|});
           test_case "range is a set of ints" `Quick (fun () ->
               check_ok "mod m { def s = 1..3; def y = 1 in s; }");
           test_case "set literal homogeneous" `Quick (fun () ->
@@ -468,6 +476,14 @@ let () =
               check_fails "mod m { def x = [1, true]; }");
           test_case "heterogeneous set literal" `Quick (fun () ->
               check_fails "mod m { def x = {1, true}; }");
+          test_case "string arithmetic" `Quick (fun () ->
+              check_fails {|mod m { def x = "a" + 1; }|});
+          test_case "string ordering" `Quick (fun () ->
+              check_fails {|mod m { def x = "a" < "b"; }|});
+          test_case "string/int equality mismatch" `Quick (fun () ->
+              check_fails {|mod m { def x = "a" == 1; }|});
+          test_case "set mixing strings and ints" `Quick (fun () ->
+              check_fails {|mod m { def x = {"a", 1}; }|});
           test_case "membership element/set mismatch" `Quick (fun () ->
               check_fails "mod m { def b = 1 in {true}; }");
           test_case "membership on non-set" `Quick (fun () ->

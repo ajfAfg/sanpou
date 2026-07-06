@@ -41,7 +41,7 @@ let rec temporal_occurrence (props : id list) (e : Resolved_ast.expr) :
                property",
             e.loc )
       else None
-  | IntLit _ | BoolLit _ | Self -> None
+  | IntLit _ | BoolLit _ | StrLit _ | Self -> None
   | UnOp (_, rhs) -> find rhs
   | BinOp (_, lhs, rhs) -> first [ lhs; rhs ]
   | App (_, args) -> first args

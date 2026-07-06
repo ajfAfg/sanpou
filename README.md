@@ -118,6 +118,7 @@ mod example {
   def abs(x) = if (x < 0) { -x } else { x };   // if expression
   def pair = (1, true);            // tuple value
   def queue = [1, 2, 3];           // sequence value
+  def label = "idle";              // string value
   def ids = {1, 2, 3};             // set value
   def evens = { i in 1..n : i % 2 == 0 };  // set comprehension (filter)
   def table = { i in 1..n -> 0 };  // map with domain 1..n (a set of ints)
@@ -157,7 +158,8 @@ mod example {
   `< > <= >= == !=`, `&& || !`, and `in` (set membership: `x in S`).
 - **Values**: tuples `(a, b)` may mix types; sequences `[a, b, c]` are
   homogeneous; sets `{a, b, c}` (and `{}`) are homogeneous; maps
-  `{ x in S -> e }` have an integer-set domain.
+  `{ x in S -> e }` have an integer-set domain. Strings `"idle"` support
+  only equality (`==` / `!=`); there is no concatenation or indexing.
 - **Sets**: `lo..hi` is the set of integers in that range, and a first-class
   value like any other set. Set comprehension `{ x in S : p }` keeps the
   elements of `S` satisfying `p`. Any binder domain — quantifiers, `with`,

@@ -34,6 +34,7 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
   match e.desc with
   | IntLit v -> ([], at (IntLit v))
   | BoolLit b -> ([], at (BoolLit b))
+  | StrLit s -> ([], at (StrLit s))
   | Var i -> ([], at (Var i))
   | Self -> ([], at Self)
   | UnOp (op, rhs) ->

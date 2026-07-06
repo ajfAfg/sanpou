@@ -45,8 +45,9 @@ let prec (e : ('n, 'c) expr) =
   | Range _ -> 4
   | Subscript _ -> 7
   | UnOp _ -> 8
-  | IntLit _ | BoolLit _ | Var _ | Self | App _ | Builtin _ | MapInit _
-  | SetLit _ | SetComp _ | Tuple _ | Sequence _ | IfExpr _ | Quant _ ->
+  | IntLit _ | BoolLit _ | StrLit _ | Var _ | Self | App _ | Builtin _
+  | MapInit _ | SetLit _ | SetComp _ | Tuple _ | Sequence _ | IfExpr _ | Quant _
+    ->
       9
 
 let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
@@ -57,6 +58,7 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
   match e.desc with
   | IntLit value -> string_of_int value
   | BoolLit value -> if value then "true" else "false"
+  | StrLit s -> "\"" ^ s ^ "\""
   | Var n -> name_of n
   | Self -> "self"
   | UnOp (op, rhs) -> unop_str op ^ at 8 rhs

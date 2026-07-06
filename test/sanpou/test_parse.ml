@@ -15,6 +15,7 @@ let cl1 x = [ x ]
 let cl2 x y = [ x; y ]
 let intlit v = node (IntLit v)
 let boollit v = node (BoolLit v)
+let strlit s = node (StrLit s)
 let var s = node (Var s)
 let unop op r = node (UnOp (op, r))
 let binop op l r = node (BinOp (op, l, r))
@@ -140,6 +141,16 @@ let () =
           test_case "non-builtin stays an app" `Quick (fun () ->
               check_items "def x = first(xs);"
                 [ const_def "x" (app "first" (cl1 (var "xs"))) ]);
+        ] );
+      ( "string_literal",
+        [
+          (* The lexer captures the raw content: spaces are preserved and
+             keyword-looking words stay part of the string. *)
+          test_case "words and spaces are preserved" `Quick (fun () ->
+              check_items {|def x = "in process";|}
+                [ const_def "x" (strlit "in process") ]);
+          test_case "empty string" `Quick (fun () ->
+              check_items {|def x = "";|} [ const_def "x" (strlit "") ]);
         ] );
       ( "unary_minus",
         [

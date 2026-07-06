@@ -49,6 +49,7 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
     match e.desc with
     | IntLit v -> IntLit v
     | BoolLit b -> BoolLit b
+    | StrLit s -> StrLit s
     | Self -> Self
     | Var name -> Var (resolve env name)
     | UnOp (op, rhs) -> UnOp (op, alpha_expr env st rhs)
