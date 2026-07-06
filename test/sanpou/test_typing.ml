@@ -349,6 +349,29 @@ let () =
                 \  procedure foo() { return (); }\n\
                 \  process ps = foo in {1, 2, 3};\n\
                 \  }");
+          test_case "process over a string id set; self is that type" `Quick
+            (fun () ->
+              check_ok
+                {|mod m {
+                    def clients = {"alice", "bob"};
+                    var turn = "alice";
+                    procedure client() { await turn == self; return (); }
+                    process cs = client in clients;
+                  }|});
+          test_case "process over an atom id set" `Quick (fun () ->
+              check_ok
+                {|mod m {
+                    atom Main;
+                    procedure f() { return (); }
+                    process p = f in {Main};
+                  }|});
+          test_case "self as int when id set is a range" `Quick (fun () ->
+              check_ok
+                {|mod m {
+                    var a = { i in 1..3 -> 0 };
+                    procedure f() { a[self] = self; return (); }
+                    process p = f in 1..3;
+                  }|});
           test_case "with over set" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -550,12 +573,21 @@ let () =
               check_fails "mod m { def x = cardinality([1, 2]); }");
           test_case "map domain non-int set" `Quick (fun () ->
               check_fails "mod m { def x = { i in {true} -> i }; }");
-          test_case "process over non-int set" `Quick (fun () ->
+          test_case "self used outside a procedure" `Quick (fun () ->
+              check_fails "mod m { def d = self; }");
+          test_case "self used at two id types" `Quick (fun () ->
               check_fails
-                "mod m {\n\
-                \  procedure foo() { return (); }\n\
-                \  process ps = foo in {true};\n\
-                \  }");
+                {|mod m {
+                    procedure f() { var x = self + 1; return (); }
+                    process p = f in {"a"};
+                  }|});
+          test_case "processes with different id types" `Quick (fun () ->
+              check_fails
+                {|mod m {
+                    procedure f() { return (); }
+                    process a = f in 1..2;
+                    process b = f in {"x"};
+                  }|});
           test_case "comprehension predicate non-bool" `Quick (fun () ->
               check_fails "mod m { def s = { x in 1..3 : x }; }");
           test_case "head on tuple" `Quick (fun () ->

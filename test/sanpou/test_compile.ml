@@ -239,6 +239,21 @@ let () =
               has "sub == (a \\subseteq b)";
               (* cardinality pulls in FiniteSets *)
               has "EXTENDS TLC, Sequences, Integers, FiniteSets");
+          Alcotest.test_case "process over a string id set" `Quick (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                  \  def clients = {\"a\", \"b\"};\n\
+                  \  var turn = \"a\";\n\
+                  \  procedure client() { turn = self; return (); }\n\
+                  \  process cs = client in clients;\n\
+                  \  }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "ProcSet == (clients)";
+              (* self flows through as the process id; the assignment reads it *)
+              has "turn' = self");
           Alcotest.test_case "process over a set literal" `Quick (fun () ->
               let ast =
                 parse
