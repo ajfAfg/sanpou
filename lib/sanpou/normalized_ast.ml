@@ -41,8 +41,7 @@ and step_desc =
   | VarStep of Resolved_ast.ident * expr
   | WithStep of {
       binder : Resolved_ast.ident;
-      lo : expr;
-      hi : expr;
+      domain : expr;
       stmts : simple_stmt list;
     }
   | CallBindStep of {
@@ -77,8 +76,7 @@ type process_def = {
   name : Generic_ast.id;
   proc : Generic_ast.id;
   fairness : Generic_ast.fairness;
-  lo : expr;
-  hi : expr;
+  domain : expr;
   loc : Generic_ast.loc;
 }
 [@@deriving show, eq]

@@ -65,32 +65,41 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
     | Builtin (b, args) -> Builtin (b, List.map (alpha_expr env st) args)
     | Subscript (lhs, index) ->
         Subscript (alpha_expr env st lhs, alpha_expr env st index)
-    | MapInit { binder; lo; hi; value } ->
+    | Range (lo, hi) -> Range (alpha_expr env st lo, alpha_expr env st hi)
+    | MapInit { binder; domain; value } ->
         let binder' = fresh st binder in
         let env' = (binder, binder') :: env in
         MapInit
           {
             binder = binder';
-            lo = alpha_expr env st lo;
-            hi = alpha_expr env st hi;
+            domain = alpha_expr env st domain;
             value = alpha_expr env' st value;
           }
     | Tuple elems -> Tuple (List.map (alpha_expr env st) elems)
     | Sequence elems -> Sequence (List.map (alpha_expr env st) elems)
+    | SetLit elems -> SetLit (List.map (alpha_expr env st) elems)
+    | SetComp { binder; domain; pred } ->
+        let binder' = fresh st binder in
+        let env' = (binder, binder') :: env in
+        SetComp
+          {
+            binder = binder';
+            domain = alpha_expr env st domain;
+            pred = alpha_expr env' st pred;
+          }
     | IfExpr (cond, then_e, else_e) ->
         IfExpr
           ( alpha_expr env st cond,
             alpha_expr env st then_e,
             alpha_expr env st else_e )
-    | Quant { quant; binder; lo; hi; body } ->
+    | Quant { quant; binder; domain; body } ->
         let binder' = fresh st binder in
         let env' = (binder, binder') :: env in
         Quant
           {
             quant;
             binder = binder';
-            lo = alpha_expr env st lo;
-            hi = alpha_expr env st hi;
+            domain = alpha_expr env st domain;
             body = alpha_expr env' st body;
           }
   in
@@ -125,14 +134,13 @@ let rec alpha_step st env (step : Surface_ast.step) : Resolved_ast.step =
     | SimpleStep stmts -> SimpleStep (List.map (alpha_simple_stmt env st) stmts)
     | EmptyStep -> EmptyStep
     | BlockStep stmt -> BlockStep (alpha_block_stmt st env stmt)
-    | WithStep { binder; lo; hi; stmts } ->
+    | WithStep { binder; domain; stmts } ->
         let binder' = fresh st binder in
         let env' = (binder, binder') :: env in
         WithStep
           {
             binder = binder';
-            lo = alpha_expr env st lo;
-            hi = alpha_expr env st hi;
+            domain = alpha_expr env st domain;
             stmts = List.map (alpha_simple_stmt env' st) stmts;
           }
     | VarStep _ -> failwith "VarStep should be handled in alpha_body"
@@ -196,11 +204,11 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
               let init =
                 match init with
                 | InitValue value -> InitValue (plain value)
-                | InitRange (lo, hi) -> InitRange (plain lo, plain hi)
+                | InitIn domain -> InitIn (plain domain)
               in
               (VarDecl { name; init }, (name, Resolved_ast.Fun name) :: defs)
-          | Process { name; proc; fairness; lo; hi } ->
-              ( Process { name; proc; fairness; lo = plain lo; hi = plain hi },
+          | Process { name; proc; fairness; domain } ->
+              ( Process { name; proc; fairness; domain = plain domain },
                 defs )
           | ProcDef { name; params; body } ->
               (* The procedure sees itself (self-recursion), again matching

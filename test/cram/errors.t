@@ -119,6 +119,27 @@ Syntax error:
   syntax.snp:4:3: Syntax error
   [1]
 
+A map initializer or set comprehension whose binder is not a plain
+`x in <set>` is diagnosed at the offending expression:
+
+  $ cat > bad_map.snp <<'EOF'
+  > mod m {
+  >   def d = { 1 -> 2 };
+  > }
+  > EOF
+  $ sanpou compile bad_map.snp -o out
+  bad_map.snp:2:13: a map initializer requires a binder of the form `x in <set>`
+  [1]
+
+  $ cat > bad_comp.snp <<'EOF'
+  > mod m {
+  >   def d = { 1 : true };
+  > }
+  > EOF
+  $ sanpou compile bad_comp.snp -o out
+  bad_comp.snp:2:13: a set comprehension requires a binder of the form `x in <set>`
+  [1]
+
 Lexical error:
 
   $ cat > lexical.snp <<'EOF'

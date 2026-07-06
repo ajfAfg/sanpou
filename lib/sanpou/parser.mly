@@ -5,6 +5,18 @@ let loc_of_pos (pos : Lexing.position) : loc =
   { line = pos.pos_lnum; col = pos.pos_cnum - pos.pos_bol + 1 }
 
 let mk pos desc = { desc; loc = loc_of_pos pos }
+
+(* A map initializer and a set comprehension share the `x in <set>` binder
+   prefix with a membership expression, so the brace body is parsed as a
+   single expression and destructured here once the [->]/[:] separator has
+   disambiguated it. *)
+let binder_of (e : Surface_ast.expr) ~what : id * Surface_ast.expr =
+  match e.desc with
+  | BinOp (In, { desc = Var name; _ }, domain) -> (name, domain)
+  | _ ->
+      raise
+        (Parse_error
+           (e.loc, "a " ^ what ^ " requires a binder of the form `x in <set>`"))
 %}
 
 %token <int> INTV
@@ -14,7 +26,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT ASSERT FORALL EXISTS EITHER OR WITH
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
-%token SEMI COMMA DOTDOT ARROW
+%token SEMI COMMA COLON DOTDOT ARROW
 %token EOF
 
 (* Precedence is encoded structurally in the stratified expr rules
@@ -37,7 +49,7 @@ let mk pos desc = { desc; loc = loc_of_pos pos }
 %type <Surface_ast.simple_stmt list> separated_nonempty_list(COMMA, simple_stmt)
 %type <Surface_ast.assign_target> assign_target
 %type <Surface_ast.block_stmt> block_stmt if_stmt
-%type <Surface_ast.expr> expr or_expr and_expr comparison_expr add_expr
+%type <Surface_ast.expr> expr or_expr and_expr comparison_expr range_expr add_expr
 %type <Surface_ast.expr> mult_expr postfix_expr primary_expr subscript_index
 %type <Surface_ast.expr list> nonempty_list(subscript_index)
 %type <Surface_ast.expr list> separated_nonempty_list(COMMA, expr)
@@ -63,12 +75,12 @@ item:
       { mk $startpos (PropDef { name; value }) }
   | VAR name=ID EQ value=expr SEMI
       { mk $startpos (VarDecl { name; init = InitValue value }) }
-  | VAR name=ID IN lo=expr DOTDOT hi=expr SEMI
-      { mk $startpos (VarDecl { name; init = InitRange (lo, hi) }) }
+  | VAR name=ID IN domain=expr SEMI
+      { mk $startpos (VarDecl { name; init = InitIn domain }) }
   | PROCEDURE_KW name=ID LPAREN params=separated_list(COMMA, ID) RPAREN LBRACE body=body RBRACE
       { mk $startpos (ProcDef { name; params; body }) }
-  | fairness=fairness_marker PROCESS name=ID EQ proc=ID IN lo=expr DOTDOT hi=expr SEMI
-      { mk $startpos (Process { name; proc; fairness; lo; hi }) }
+  | fairness=fairness_marker PROCESS name=ID EQ proc=ID IN domain=expr SEMI
+      { mk $startpos (Process { name; proc; fairness; domain }) }
 
 (* `fair+` lexes as FAIR PLUS; there is no dedicated token. *)
 fairness_marker:
@@ -90,9 +102,9 @@ step:
       { mk $startpos (VarStep (name, value)) }
   (* The body is a single atomic step: simple statements only, so the
      chosen binder never has to survive past one action. *)
-  | WITH LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+  | WITH LPAREN binder=ID IN domain=expr RPAREN
       LBRACE stmts=separated_nonempty_list(COMMA, simple_stmt) SEMI RBRACE
-      { mk $startpos (WithStep { binder; lo; hi; stmts }) }
+      { mk $startpos (WithStep { binder; domain; stmts }) }
 
 simple_stmt:
   | target=assign_target EQ value=expr
@@ -151,13 +163,21 @@ and_expr:
   | e1=and_expr ANDAND e2=comparison_expr { mk $startpos (BinOp (And, e1, e2)) }
 
 comparison_expr:
+  | e=range_expr { e }
+  | e1=comparison_expr LT e2=range_expr { mk $startpos (BinOp (Lt, e1, e2)) }
+  | e1=comparison_expr GT e2=range_expr { mk $startpos (BinOp (Gt, e1, e2)) }
+  | e1=comparison_expr EQEQ e2=range_expr { mk $startpos (BinOp (Eq, e1, e2)) }
+  | e1=comparison_expr NEQ e2=range_expr { mk $startpos (BinOp (Neq, e1, e2)) }
+  | e1=comparison_expr LTEQ e2=range_expr { mk $startpos (BinOp (LtEq, e1, e2)) }
+  | e1=comparison_expr GTEQ e2=range_expr { mk $startpos (BinOp (GtEq, e1, e2)) }
+  | e1=comparison_expr IN e2=range_expr { mk $startpos (BinOp (In, e1, e2)) }
+
+(* [lo..hi] is a set expression; non-associative, so [a..b..c] is rejected.
+   Binds looser than arithmetic ([k+1..n-1] groups as expected) but tighter
+   than comparison. *)
+range_expr:
   | e=add_expr { e }
-  | e1=comparison_expr LT e2=add_expr { mk $startpos (BinOp (Lt, e1, e2)) }
-  | e1=comparison_expr GT e2=add_expr { mk $startpos (BinOp (Gt, e1, e2)) }
-  | e1=comparison_expr EQEQ e2=add_expr { mk $startpos (BinOp (Eq, e1, e2)) }
-  | e1=comparison_expr NEQ e2=add_expr { mk $startpos (BinOp (Neq, e1, e2)) }
-  | e1=comparison_expr LTEQ e2=add_expr { mk $startpos (BinOp (LtEq, e1, e2)) }
-  | e1=comparison_expr GTEQ e2=add_expr { mk $startpos (BinOp (GtEq, e1, e2)) }
+  | lo=add_expr DOTDOT hi=add_expr { mk $startpos (Range (lo, hi)) }
 
 add_expr:
   | e=mult_expr { e }
@@ -184,12 +204,12 @@ primary_expr:
   (* The braces delimit the body, so a quantifier composes as an ordinary
      primary expression — unlike TLA+'s \A/\E, whose bodies extend as far
      right as possible. *)
-  | FORALL LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+  | FORALL LPAREN binder=ID IN domain=expr RPAREN
       LBRACE body=expr RBRACE
-      { mk $startpos (Quant { quant = Forall; binder; lo; hi; body }) }
-  | EXISTS LPAREN binder=ID IN lo=expr DOTDOT hi=expr RPAREN
+      { mk $startpos (Quant { quant = Forall; binder; domain; body }) }
+  | EXISTS LPAREN binder=ID IN domain=expr RPAREN
       LBRACE body=expr RBRACE
-      { mk $startpos (Quant { quant = Exists; binder; lo; hi; body }) }
+      { mk $startpos (Quant { quant = Exists; binder; domain; body }) }
   | value=INTV { mk $startpos (IntLit value) }
   | TRUE { mk $startpos (BoolLit true) }
   | FALSE { mk $startpos (BoolLit false) }
@@ -200,10 +220,21 @@ primary_expr:
   | name=ID LPAREN args=separated_list(COMMA, expr) RPAREN
       { mk $startpos (App (name, args)) }
   | name=ID { mk $startpos (Var name) }
-  (* Mirrors the map type's notation ({int -> t}). The arrow separator
-     leaves `{ x in S : p }` free for a future set filter form. *)
-  | LBRACE binder=ID IN lo=expr DOTDOT hi=expr ARROW value=expr RBRACE
-      { mk $startpos (MapInit { binder; lo; hi; value }) }
+  (* Braces cover the empty set, set literals, map initializers, and set
+     comprehensions. The three non-empty forms share a leading expression;
+     the `->` / `:` / `,`/`}` that follows selects between them, so no binder
+     lookahead is needed and the grammar stays conflict-free. *)
+  | LBRACE RBRACE
+      { mk $startpos (SetLit []) }
+  | LBRACE elems=separated_nonempty_list(COMMA, expr) RBRACE
+      { mk $startpos (SetLit elems) }
+  (* Mirrors the map type's notation ({int -> t}). *)
+  | LBRACE e=expr ARROW value=expr RBRACE
+      { let binder, domain = binder_of e ~what:"map initializer" in
+        mk $startpos (MapInit { binder; domain; value }) }
+  | LBRACE e=expr COLON pred=expr RBRACE
+      { let binder, domain = binder_of e ~what:"set comprehension" in
+        mk $startpos (SetComp { binder; domain; pred }) }
   | LPAREN RPAREN
       { mk $startpos (Tuple []) }
   | LPAREN e=expr COMMA RPAREN

@@ -176,13 +176,13 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
         entry = call_label;
         exit_label = next_label;
       }
-  | Normalized_ast.WithStep { binder; lo; hi; stmts } ->
+  | Normalized_ast.WithStep { binder; domain; stmts } ->
       let label = fresh_label ctx in
       let source =
         make_source ~proc_name:ctx.proc_name
           ~description:
-            ("with (" ^ binder.original ^ " in " ^ pretty_expr lo ^ ".."
-           ^ pretty_expr hi ^ ") { " ^ describe_simple_stmts stmts ^ " }")
+            ("with (" ^ binder.original ^ " in " ^ pretty_expr domain ^ ") { "
+           ^ describe_simple_stmts stmts ^ " }")
           ~loc:step.loc
       in
       let eff =
@@ -193,7 +193,7 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
       in
       let a =
         make_action
-          ~binders:[ (binder.name, lo, hi) ]
+          ~binders:[ (binder.name, domain) ]
           ?guard:eff.guard ~asserts:eff.asserts ~assignments:eff.assignments
           ~stack_op:eff.stack_op ~label ~pc_dest:eff.next ~source ()
       in
@@ -462,8 +462,7 @@ let linearize_module (m : Normalized_ast.module_def) : module_ir =
           name = p.name;
           proc = p.proc;
           fairness = p.fairness;
-          lo = p.lo;
-          hi = p.hi;
+          domain = p.domain;
           loc = p.loc;
           wrapper =
             wrapper_of_process ~process_name:p.name ~root_proc:p.proc ~loc:p.loc;

@@ -4,7 +4,19 @@
    applied). Their type signatures live in Typing and their TLA+ translations
    in Emit_tla, both as exhaustive matches on this type. *)
 
-type t = Globally | Finally | Head | Tail | Append | Concat | Len
+type t =
+  | Globally
+  | Finally
+  | Head
+  | Tail
+  | Append
+  | Concat
+  | Len
+  | Union
+  | Intersection
+  | Difference
+  | Cardinality
+  | Subseteq
 [@@deriving show, eq]
 
 let of_name = function
@@ -15,6 +27,11 @@ let of_name = function
   | "append" -> Some Append
   | "concat" -> Some Concat
   | "len" -> Some Len
+  | "union" -> Some Union
+  | "intersection" -> Some Intersection
+  | "difference" -> Some Difference
+  | "cardinality" -> Some Cardinality
+  | "subseteq" -> Some Subseteq
   | _ -> None
 
 let name = function
@@ -25,3 +42,8 @@ let name = function
   | Append -> "append"
   | Concat -> "concat"
   | Len -> "len"
+  | Union -> "union"
+  | Intersection -> "intersection"
+  | Difference -> "difference"
+  | Cardinality -> "cardinality"
+  | Subseteq -> "subseteq"

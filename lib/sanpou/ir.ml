@@ -45,9 +45,9 @@ type assignment =
 
 type action = {
   label : string;
-  binders : (string * Normalized_ast.expr * Normalized_ast.expr) list;
-      (* existentially quantified over an integer range: the action fires
-         for any binder value that satisfies its guard *)
+  binders : (string * Normalized_ast.expr) list;
+      (* existentially quantified over a set: the action fires for any binder
+         value in the set that satisfies its guard *)
   guard : Normalized_ast.expr option;
   asserts : (Normalized_ast.expr * string) list;
       (* condition and failure message; unlike a guard, a false assert is a
@@ -88,8 +88,7 @@ type process_ir = {
   name : string;
   proc : string;
   fairness : Generic_ast.fairness;
-  lo : Normalized_ast.expr;
-  hi : Normalized_ast.expr;
+  domain : Normalized_ast.expr;
   loc : Generic_ast.loc;
   wrapper : proc_ir;
       (* synthetic proc that pushes the root call's frame and discards its

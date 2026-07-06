@@ -118,10 +118,12 @@ mod example {
   def abs(x) = if (x < 0) { -x } else { x };   // if expression
   def pair = (1, true);            // tuple value
   def queue = [1, 2, 3];           // sequence value
-  def table = { i in 1..n -> 0 };  // map with domain 1..n
+  def ids = {1, 2, 3};             // set value
+  def evens = { i in 1..n : i % 2 == 0 };  // set comprehension (filter)
+  def table = { i in 1..n -> 0 };  // map with domain 1..n (a set of ints)
 
   var count = 0;                   // mutable variable declaration
-  var start in 1..n;               // non-deterministic initial value
+  var start in 1..n;               // non-deterministic initial value (from a set)
   var grid = { i in 1..n -> { j in 1..n -> 0 } };
 
   // temporal properties: globally/finally are allowed only here
@@ -152,23 +154,31 @@ mod example {
 ```
 
 - **Operators**: `+ - * / %` (integer arithmetic; `/` is integer division),
-  `< > <= >= == !=`, `&& || !`.
+  `< > <= >= == !=`, `&& || !`, and `in` (set membership: `x in S`).
 - **Values**: tuples `(a, b)` may mix types; sequences `[a, b, c]` are
-  homogeneous; maps `{ x in lo..hi -> e }` have an integer-range domain.
-- **Sequence builtins**: `head`, `tail`, `append`, `concat`, `len`. Builtins
-  are lexically shadowed by module definitions of the same name.
-- **Quantifiers**: `forall (x in lo..hi) { p }` and
-  `exists (x in lo..hi) { p }` are boolean expressions.
+  homogeneous; sets `{a, b, c}` (and `{}`) are homogeneous; maps
+  `{ x in S -> e }` have an integer-set domain.
+- **Sets**: `lo..hi` is the set of integers in that range, and a first-class
+  value like any other set. Set comprehension `{ x in S : p }` keeps the
+  elements of `S` satisfying `p`. Any binder domain — quantifiers, `with`,
+  `var`, `process`, and map/comprehension initializers — is an arbitrary set
+  expression, not just a range.
+- **Sequence builtins**: `head`, `tail`, `append`, `concat`, `len`.
+- **Set builtins**: `union`, `intersection`, `difference` (binary set
+  operations), `cardinality` (element count), `subseteq` (subset test).
+  Builtins are lexically shadowed by module definitions of the same name.
+- **Quantifiers**: `forall (x in S) { p }` and `exists (x in S) { p }` are
+  boolean expressions ranging over the set `S`.
 - **Statements**: assignment (including nested subscripts `a[i][j] = e`),
   procedure calls (with return values; recursion is supported), `await`,
   `assert`, `return`, `break`, `continue`; `if`/`else if`/`else`, `while`,
-  `either { } or { }`, `with (x in lo..hi) { }`.
+  `either { } or { }`, `with (x in S) { }`.
 - **Steps and atomicity**: statements joined by commas and ended with `;`
   form one atomic action; block statements evaluate their condition in an
   action of its own; a bare `;` is an explicit yield point.
-- **Processes**: `process name = proc in lo..hi;` instantiates a procedure
-  per id in the range (readable as `self`). `fair` adds weak fairness,
-  `fair+` strong fairness.
+- **Processes**: `process name = proc in S;` instantiates a procedure per id
+  in the set `S` (readable as `self`). `fair` adds weak fairness, `fair+`
+  strong fairness.
 - **Temporal properties**: `property name = ...;` is the only place
   `globally(p)` / `finally(p)` may appear, and only properties may
   reference other properties; list property names in the sidecar config's

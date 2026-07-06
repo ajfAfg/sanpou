@@ -20,6 +20,7 @@ let parse (source : string) : (Surface_ast.program, diagnostic) result =
           loc = loc_of_position (Lexing.lexeme_start_p lexbuf);
           message = "Syntax error";
         }
+  | exception Generic_ast.Parse_error (loc, message) -> Error { loc; message }
   | exception Lexer.Error message ->
       Error { loc = loc_of_position (Lexing.lexeme_start_p lexbuf); message }
 

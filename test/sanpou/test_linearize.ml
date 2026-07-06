@@ -44,7 +44,7 @@ let make_proc name body : Sanpou.Normalized_ast.proc_def =
 
 let make_process ?(fairness = Unfair) name proc lo hi :
     Sanpou.Normalized_ast.process_def =
-  { name; proc; fairness; lo; hi; loc = loc0 }
+  { name; proc; fairness; domain = node (Range (lo, hi)); loc = loc0 }
 
 let make_module ?(const_defs = []) ?(fun_defs = []) ?(var_decls = [])
     ?(processes = []) name procs : Sanpou.Normalized_ast.module_def =

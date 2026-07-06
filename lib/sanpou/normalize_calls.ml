@@ -64,9 +64,12 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
       let lhs_steps, lhs = normalize_expr st lhs in
       let index_steps, index = normalize_expr st index in
       (lhs_steps @ index_steps, at (Subscript (lhs, index)))
-  | MapInit { binder; lo; hi; value } ->
+  | Range (lo, hi) ->
       let lo_steps, lo = normalize_expr st lo in
       let hi_steps, hi = normalize_expr st hi in
+      (lo_steps @ hi_steps, at (Range (lo, hi)))
+  | MapInit { binder; domain; value } ->
+      let domain_steps, domain = normalize_expr st domain in
       let value_steps, value = normalize_expr st value in
       (match value_steps with
       | [] -> ()
@@ -75,16 +78,29 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
              once instead of per element *)
           error "procedure calls are not allowed inside a map initializer"
             first.loc);
-      (lo_steps @ hi_steps, at (MapInit { binder; lo; hi; value }))
+      (domain_steps, at (MapInit { binder; domain; value }))
   | Tuple elems ->
       let steps, elems = normalize_expr_list st elems in
       (steps, at (Tuple elems))
   | Sequence elems ->
       let steps, elems = normalize_expr_list st elems in
       (steps, at (Sequence elems))
-  | Quant { quant; binder; lo; hi; body } ->
-      let lo_steps, lo = normalize_expr st lo in
-      let hi_steps, hi = normalize_expr st hi in
+  | SetLit elems ->
+      let steps, elems = normalize_expr_list st elems in
+      (steps, at (SetLit elems))
+  | SetComp { binder; domain; pred } ->
+      let domain_steps, domain = normalize_expr st domain in
+      let pred_steps, pred = normalize_expr st pred in
+      (match pred_steps with
+      | [] -> ()
+      | first :: _ ->
+          (* the call would be hoisted out of the binder's scope and run
+             once instead of per element *)
+          error "procedure calls are not allowed inside a set comprehension"
+            first.loc);
+      (domain_steps, at (SetComp { binder; domain; pred }))
+  | Quant { quant; binder; domain; body } ->
+      let domain_steps, domain = normalize_expr st domain in
       let body_steps, body = normalize_expr st body in
       (match body_steps with
       | [] -> ()
@@ -93,7 +109,7 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
              once instead of per element *)
           error "procedure calls are not allowed inside a quantifier body"
             first.loc);
-      (lo_steps @ hi_steps, at (Quant { quant; binder; lo; hi; body }))
+      (domain_steps, at (Quant { quant; binder; domain; body }))
   | IfExpr (cond, then_e, else_e) ->
       let cond_steps, cond = normalize_expr st cond in
       (* Hoisting a call out of a branch would run it unconditionally,
@@ -189,9 +205,8 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
       in
       List.rev steps_rev
       @ [ at (Normalized_ast.SimpleStep (List.rev stmts_rev)) ]
-  | WithStep { binder; lo; hi; stmts } ->
-      let lo_steps, lo = normalize_expr st lo in
-      let hi_steps, hi = normalize_expr st hi in
+  | WithStep { binder; domain; stmts } ->
+      let domain_steps, domain = normalize_expr st domain in
       (* The whole body runs in one action under the binder, so a call —
          which spans several actions — cannot appear in it, neither as a
          statement nor inside an expression. *)
@@ -211,8 +226,8 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
                       first.loc))
           stmts
       in
-      lo_steps @ hi_steps
-      @ [ at (Normalized_ast.WithStep { binder; lo; hi; stmts }) ]
+      domain_steps
+      @ [ at (Normalized_ast.WithStep { binder; domain; stmts }) ]
   | BlockStep (While { cond; body }) ->
       let pre, cond = normalize_expr st cond in
       [
@@ -273,8 +288,7 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
               let init =
                 match init with
                 | InitValue value -> InitValue (call_free_expr st value)
-                | InitRange (lo, hi) ->
-                    InitRange (call_free_expr st lo, call_free_expr st hi)
+                | InitIn domain -> InitIn (call_free_expr st domain)
               in
               Some (name, init)
           | _ -> None);
@@ -289,14 +303,13 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
     processes =
       partition (fun (item : Resolved_ast.item) ->
           match item.desc with
-          | Process { name; proc; fairness; lo; hi } ->
+          | Process { name; proc; fairness; domain } ->
               Some
                 ({
                    name;
                    proc;
                    fairness;
-                   lo = call_free_expr st lo;
-                   hi = call_free_expr st hi;
+                   domain = call_free_expr st domain;
                    loc = item.loc;
                  }
                   : Normalized_ast.process_def)
