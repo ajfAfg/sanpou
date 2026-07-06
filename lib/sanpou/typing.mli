@@ -19,6 +19,7 @@ type type_error =
   | Not_a_procedure of Generic_ast.id
   | Not_a_record of ty
   | Unknown_field of Generic_ast.id * ty
+  | Self_outside_procedure
 
 exception Type_error of type_error * Generic_ast.loc
 

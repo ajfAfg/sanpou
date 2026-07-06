@@ -306,3 +306,25 @@ emitted CONSTANTs compare as distinct opaque values.
   $ sanpou compile mv_check.snp -o mv_check
   $ tlc mv_check mv_check
   No error has been found
+
+Processes over a non-integer ID set: the process ranges over a set of strings,
+so ProcSet, pc, and stack are all keyed by strings and self has string type.
+Both processes run to completion, so termination confirms the emitted spec
+model-checks with non-integer process identities.
+
+  $ cat > client_ids.snp <<'EOF'
+  > mod client_ids {
+  >   def clients = {"alice", "bob"};
+  >   var count = 0;
+  >   procedure client() {
+  >     await self == self,
+  >     count = count + 1;
+  >     return ();
+  >   }
+  >   fair process cs = client in clients;
+  > }
+  > EOF
+  $ cp either_guard.json client_ids.json
+  $ sanpou compile client_ids.snp -o client_ids
+  $ tlc client_ids client_ids
+  No error has been found

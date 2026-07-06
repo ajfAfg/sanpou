@@ -43,6 +43,7 @@ type type_error =
   | Not_a_procedure of id
   | Not_a_record of ty
   | Unknown_field of id * ty
+  | Self_outside_procedure
 
 exception Type_error of type_error * loc
 
@@ -266,7 +267,11 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
           | TyFun _ -> type_error (Callable_as_value name) e.loc
           | ty -> ty)
       | None -> type_error (Unbound_variable name) e.loc)
-  | Self -> TyInt
+  | Self -> (
+      (* [self] is the process id, bound only inside procedure bodies. *)
+      match List.assoc_opt "self" env with
+      | Some tysc -> instantiate fresh_tyvar tysc
+      | None -> type_error Self_outside_procedure e.loc)
   | UnOp (Neg, rhs) ->
       unify rhs.loc (infer_expr fresh_tyvar env rhs) TyInt;
       TyInt
@@ -486,6 +491,11 @@ let check_module (m : Surface_ast.module_def) : unit =
     incr tyvar_counter;
     TyVar (ref (Unbound v))
   in
+  (* One [self] type per module: the emitter quantifies every callable
+     procedure over a single ProcSet (the union of the process ID sets), so
+     all processes must share one ID element type, which is also the type of
+     [self] in every procedure body. *)
+  let self_ty = fresh_tyvar () in
   let (_ : tyenv * id list) =
     List.fold_left
       (fun (env, proc_names) (item : Surface_ast.item) ->
@@ -535,7 +545,7 @@ let check_module (m : Surface_ast.module_def) : unit =
             let return_ty = fresh_tyvar () in
             let fn_ty = TyFun (param_tys, return_ty) in
             let proc_env = ((proc_name, tysc_of_ty fn_ty) :: param_env) @ env in
-            let proc_env = ("self", tysc_of_ty TyInt) :: proc_env in
+            let proc_env = ("self", tysc_of_ty self_ty) :: proc_env in
             let mutable_vars =
               List.filter_map
                 (fun (id, tysc) ->
@@ -571,10 +581,11 @@ let check_module (m : Surface_ast.module_def) : unit =
                reach the emitter's procedure table and crash. *)
             if not (List.mem proc proc_names) then
               type_error (Not_a_procedure proc) item.loc;
-            (* Process ids are integers (readable as [self] : int). *)
+            (* The ID set's element type is [self]'s type, shared across the
+               module (all processes must agree). *)
             unify domain.loc
               (infer_expr fresh_tyvar env domain)
-              (TySet TyInt);
+              (TySet self_ty);
             (env, proc_names))
       ([], []) m.items
   in
@@ -640,6 +651,7 @@ let string_of_type_error = function
         (string_of_ty ty)
   | Unknown_field (field, ty) ->
       Printf.sprintf "record %s has no field %s" (string_of_ty ty) field
+  | Self_outside_procedure -> "self can only be used inside a procedure"
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
   | Return_type_mismatch -> "return type mismatch"

@@ -193,8 +193,9 @@ mod example {
   form one atomic action; block statements evaluate their condition in an
   action of its own; a bare `;` is an explicit yield point.
 - **Processes**: `process name = proc in S;` instantiates a procedure per id
-  in the set `S` (readable as `self`). `fair` adds weak fairness, `fair+`
-  strong fairness.
+  in the set `S` (readable as `self`). `S` may be any set — integers, strings,
+  or model values — and `self` takes its element type; all processes in a
+  module share one id type. `fair` adds weak fairness, `fair+` strong fairness.
 - **Temporal properties**: `property name = ...;` is the only place
   `globally(p)` / `finally(p)` may appear, and only properties may
   reference other properties; list property names in the sidecar config's
