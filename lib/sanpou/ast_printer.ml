@@ -26,26 +26,28 @@ let binop_str = function
   | Neq -> "!="
   | And -> "&&"
   | Or -> "||"
+  | In -> "in"
 
 let unop_str = function Neg -> "-" | Not -> "!"
 
 (* Higher binds tighter; mirrors the stratified grammar rules
-   (or < and < comparison < add < mult < subscript < unary < atom). *)
+   (or < and < comparison < range < add < mult < subscript < unary < atom). *)
 let binop_prec = function
   | Or -> 1
   | And -> 2
-  | Lt | Gt | LtEq | GtEq | Eq | Neq -> 3
-  | Plus | Minus -> 4
-  | Mult | Div | Mod -> 5
+  | Lt | Gt | LtEq | GtEq | Eq | Neq | In -> 3
+  | Plus | Minus -> 5
+  | Mult | Div | Mod -> 6
 
 let prec (e : ('n, 'c) expr) =
   match e.desc with
   | BinOp (op, _, _) -> binop_prec op
-  | Subscript _ -> 6
-  | UnOp _ -> 7
+  | Range _ -> 4
+  | Subscript _ -> 7
+  | UnOp _ -> 8
   | IntLit _ | BoolLit _ | Var _ | Self | App _ | Builtin _ | MapInit _
-  | Tuple _ | Sequence _ | IfExpr _ | Quant _ ->
-      8
+  | SetLit _ | SetComp _ | Tuple _ | Sequence _ | IfExpr _ | Quant _ ->
+      9
 
 let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
   let at level e' =
@@ -57,7 +59,7 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
   | BoolLit value -> if value then "true" else "false"
   | Var n -> name_of n
   | Self -> "self"
-  | UnOp (op, rhs) -> unop_str op ^ at 7 rhs
+  | UnOp (op, rhs) -> unop_str op ^ at 8 rhs
   | BinOp (op, lhs, rhs) ->
       let level = binop_prec op in
       (* left-associative: the right operand must bind strictly tighter *)
@@ -71,12 +73,11 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       ^ String.concat ", " (List.map (pretty_expr name_of callee_of) args)
       ^ ")"
   | Subscript (lhs, index) ->
-      at 6 lhs ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
-  | MapInit { binder; lo; hi; value } ->
+      at 7 lhs ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
+  | Range (lo, hi) -> at 5 lo ^ ".." ^ at 5 hi
+  | MapInit { binder; domain; value } ->
       "{ " ^ name_of binder ^ " in "
-      ^ pretty_expr name_of callee_of lo
-      ^ ".."
-      ^ pretty_expr name_of callee_of hi
+      ^ pretty_expr name_of callee_of domain
       ^ " -> "
       ^ pretty_expr name_of callee_of value
       ^ " }"
@@ -92,6 +93,16 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       "["
       ^ String.concat ", " (List.map (pretty_expr name_of callee_of) elems)
       ^ "]"
+  | SetLit elems ->
+      "{"
+      ^ String.concat ", " (List.map (pretty_expr name_of callee_of) elems)
+      ^ "}"
+  | SetComp { binder; domain; pred } ->
+      "{ " ^ name_of binder ^ " in "
+      ^ pretty_expr name_of callee_of domain
+      ^ " : "
+      ^ pretty_expr name_of callee_of pred
+      ^ " }"
   | IfExpr (cond, then_e, else_e) ->
       "if ("
       ^ pretty_expr name_of callee_of cond
@@ -100,12 +111,10 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       ^ " } else { "
       ^ pretty_expr name_of callee_of else_e
       ^ " }"
-  | Quant { quant; binder; lo; hi; body } ->
+  | Quant { quant; binder; domain; body } ->
       (match quant with Forall -> "forall (" | Exists -> "exists (")
       ^ name_of binder ^ " in "
-      ^ pretty_expr name_of callee_of lo
-      ^ ".."
-      ^ pretty_expr name_of callee_of hi
+      ^ pretty_expr name_of callee_of domain
       ^ ") { "
       ^ pretty_expr name_of callee_of body
       ^ " }"
@@ -149,11 +158,9 @@ let rec pretty_step name_of callee_of indent (step : ('n, 'c) step) =
       indent ^ "var " ^ name_of n ^ " = "
       ^ pretty_expr name_of callee_of value
       ^ ";\n"
-  | WithStep { binder; lo; hi; stmts } ->
+  | WithStep { binder; domain; stmts } ->
       indent ^ "with (" ^ name_of binder ^ " in "
-      ^ pretty_expr name_of callee_of lo
-      ^ ".."
-      ^ pretty_expr name_of callee_of hi
+      ^ pretty_expr name_of callee_of domain
       ^ ") { "
       ^ String.concat ", "
           (List.map (pretty_simple_stmt name_of callee_of) stmts)
@@ -220,11 +227,9 @@ let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
           indent ^ "var " ^ name ^ " = "
           ^ pretty_expr name_of callee_of value
           ^ ";\n"
-      | InitRange (lo, hi) ->
+      | InitIn domain ->
           indent ^ "var " ^ name ^ " in "
-          ^ pretty_expr name_of callee_of lo
-          ^ ".."
-          ^ pretty_expr name_of callee_of hi
+          ^ pretty_expr name_of callee_of domain
           ^ ";\n")
   | ProcDef { name; params; body } ->
       indent ^ "procedure " ^ name ^ "("
@@ -232,16 +237,14 @@ let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
       ^ ") {\n"
       ^ pretty_body name_of callee_of (indent ^ "  ") body
       ^ indent ^ "}\n"
-  | Process { name; proc; fairness; lo; hi } ->
+  | Process { name; proc; fairness; domain } ->
       indent
       ^ (match fairness with
         | Unfair -> "process "
         | WeakFair -> "fair process "
         | StrongFair -> "fair+ process ")
       ^ name ^ " = " ^ proc ^ " in "
-      ^ pretty_expr name_of callee_of lo
-      ^ ".."
-      ^ pretty_expr name_of callee_of hi
+      ^ pretty_expr name_of callee_of domain
       ^ ";\n"
 
 let pretty_module_def name_of callee_of (m : ('n, 'c) module_def) =

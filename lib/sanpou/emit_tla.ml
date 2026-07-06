@@ -26,6 +26,7 @@ let binop_to_tla = function
   | Generic_ast.Neq -> "/="
   | Generic_ast.And -> "/\\"
   | Generic_ast.Or -> "\\/"
+  | Generic_ast.In -> "\\in"
 
 let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
   match e.desc with
@@ -62,32 +63,58 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
       | Builtin.Concat, [ lhs; rhs ] ->
           TConcat (expr_to_tla local_vars lhs, expr_to_tla local_vars rhs)
       | Builtin.Len, [ e ] -> TApp ("Len", [ expr_to_tla local_vars e ])
+      | Builtin.Union, [ lhs; rhs ] ->
+          TParens
+            (TBinOp
+               ("\\cup", expr_to_tla local_vars lhs, expr_to_tla local_vars rhs))
+      | Builtin.Intersection, [ lhs; rhs ] ->
+          TParens
+            (TBinOp
+               ("\\cap", expr_to_tla local_vars lhs, expr_to_tla local_vars rhs))
+      | Builtin.Difference, [ lhs; rhs ] ->
+          TParens
+            (TBinOp
+               ("\\", expr_to_tla local_vars lhs, expr_to_tla local_vars rhs))
+      | Builtin.Subseteq, [ lhs; rhs ] ->
+          TParens
+            (TBinOp
+               ( "\\subseteq",
+                 expr_to_tla local_vars lhs,
+                 expr_to_tla local_vars rhs ))
+      | Builtin.Cardinality, [ e ] ->
+          TApp ("Cardinality", [ expr_to_tla local_vars e ])
       | _ -> assert false (* arity enforced by Typing *))
   | Generic_ast.App (Normalized_ast.Fun name, args) ->
       TApp (name, List.map (expr_to_tla local_vars) args)
   | Generic_ast.Subscript (lhs, index) ->
       TSubscript (expr_to_tla local_vars lhs, expr_to_tla local_vars index)
-  | Generic_ast.MapInit { binder; lo; hi; value } ->
+  | Generic_ast.Range (lo, hi) ->
+      TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi)
+  | Generic_ast.MapInit { binder; domain; value } ->
       TFuncMap
         ( binder.name,
-          TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi),
+          expr_to_tla local_vars domain,
           expr_to_tla local_vars value )
   | Generic_ast.Tuple elems -> TSeqLit (List.map (expr_to_tla local_vars) elems)
   | Generic_ast.Sequence elems ->
       TSeqLit (List.map (expr_to_tla local_vars) elems)
+  | Generic_ast.SetLit elems -> TSet (List.map (expr_to_tla local_vars) elems)
+  | Generic_ast.SetComp { binder; domain; pred } ->
+      TSetFilter
+        ( binder.name,
+          expr_to_tla local_vars domain,
+          expr_to_tla local_vars pred )
   | Generic_ast.IfExpr (cond, then_e, else_e) ->
       TParens
         (TIf
            ( expr_to_tla local_vars cond,
              expr_to_tla local_vars then_e,
              expr_to_tla local_vars else_e ))
-  | Generic_ast.Quant { quant; binder; lo; hi; body } ->
+  | Generic_ast.Quant { quant; binder; domain; body } ->
       (* Parenthesized because TLA+'s \A and \E extend to the right: an
          unparenthesized quantifier as a binop operand would swallow the
          rest of the enclosing expression. *)
-      let range =
-        TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi)
-      in
+      let range = expr_to_tla local_vars domain in
       let body = expr_to_tla local_vars body in
       TParens
         (match quant with
@@ -96,6 +123,79 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
 
 (* Module-level expressions have no local vars *)
 let expr_to_tla_global = expr_to_tla []
+
+(* ===== FiniteSets usage =====
+   Set literals, comprehension, and the set operators (\cup, \cap, \,
+   \subseteq, \in) are all in TLA+'s core; only [cardinality] pulls in the
+   FiniteSets module, so it is extended only when actually used. *)
+
+let rec expr_uses_cardinality (e : Normalized_ast.expr) : bool =
+  match e.desc with
+  | Generic_ast.Builtin (Builtin.Cardinality, _) -> true
+  | Generic_ast.IntLit _ | Generic_ast.BoolLit _ | Generic_ast.Var _
+  | Generic_ast.Self ->
+      false
+  | Generic_ast.UnOp (_, e) -> expr_uses_cardinality e
+  | Generic_ast.BinOp (_, a, b)
+  | Generic_ast.Range (a, b)
+  | Generic_ast.Subscript (a, b) ->
+      expr_uses_cardinality a || expr_uses_cardinality b
+  | Generic_ast.App (_, args)
+  | Generic_ast.Builtin (_, args)
+  | Generic_ast.Tuple args
+  | Generic_ast.Sequence args
+  | Generic_ast.SetLit args ->
+      List.exists expr_uses_cardinality args
+  | Generic_ast.MapInit { domain; value; _ } ->
+      expr_uses_cardinality domain || expr_uses_cardinality value
+  | Generic_ast.SetComp { domain; pred; _ } ->
+      expr_uses_cardinality domain || expr_uses_cardinality pred
+  | Generic_ast.IfExpr (a, b, c) ->
+      expr_uses_cardinality a || expr_uses_cardinality b
+      || expr_uses_cardinality c
+  | Generic_ast.Quant { domain; body; _ } ->
+      expr_uses_cardinality domain || expr_uses_cardinality body
+
+let action_uses_cardinality (a : action) : bool =
+  let assignment_uses = function
+    | AssignVar (_, e) -> expr_uses_cardinality e
+    | AssignIndex (_, indices, e) ->
+        List.exists expr_uses_cardinality indices || expr_uses_cardinality e
+  in
+  let stack_op_uses = function
+    | StackPush (_, _, args) -> List.exists expr_uses_cardinality args
+    | StackReturn e -> expr_uses_cardinality e
+    | StackNone | StackDiscard | StackPopAssign _ -> false
+  in
+  let pc_dest_uses = function
+    | PcBranch (cond, _, _) -> expr_uses_cardinality cond
+    | PcNext _ | PcCall _ | PcReturn -> false
+  in
+  Option.fold ~none:false ~some:expr_uses_cardinality a.guard
+  || List.exists (fun (c, _) -> expr_uses_cardinality c) a.asserts
+  || List.exists assignment_uses a.assignments
+  || List.exists (fun (_, d) -> expr_uses_cardinality d) a.binders
+  || pc_dest_uses a.pc_dest
+  || stack_op_uses a.stack_op
+
+let node_uses_cardinality = function
+  | Action a -> action_uses_cardinality a
+  | Choice c -> List.exists action_uses_cardinality c.arms
+
+let module_uses_cardinality (ir : module_ir) all_runtime_procs : bool =
+  let var_init_uses = function
+    | Generic_ast.InitValue e | Generic_ast.InitIn e -> expr_uses_cardinality e
+  in
+  List.exists (fun (_, e) -> expr_uses_cardinality e) ir.const_defs
+  || List.exists (fun (_, e) -> expr_uses_cardinality e) ir.prop_defs
+  || List.exists (fun (_, _, e) -> expr_uses_cardinality e) ir.fun_defs
+  || List.exists (fun (_, init) -> var_init_uses init) ir.var_decls
+  || List.exists
+       (fun (p : process_ir) -> expr_uses_cardinality p.domain)
+       ir.processes
+  || List.exists
+       (fun (p : proc_ir) -> List.exists node_uses_cardinality p.actions)
+       all_runtime_procs
 
 (* ===== UNCHANGED computation ===== *)
 
@@ -285,8 +385,7 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
   | binders ->
       [
         List.fold_right
-          (fun (name, lo, hi) body ->
-            TExists (name, TRange (to_tla lo, to_tla hi), body))
+          (fun (name, domain) body -> TExists (name, to_tla domain, body))
           binders
           (TConj (Block, base));
       ]
@@ -346,10 +445,15 @@ let proc_to_decls proc_entry_labels frame_fields local_vars (ir : module_ir)
    Each section function returns the tla_decls it contributes (including its
    trailing separators); generate_module concatenates them in order. *)
 
-let header_decls ~uses_default_init_value (ir : module_ir) : tla_decl list =
+let header_decls ~uses_default_init_value ~uses_finite_sets (ir : module_ir) :
+    tla_decl list =
   let global_vars = List.map fst ir.var_decls in
   let all_tla_vars = ("pc" :: global_vars) @ [ "stack" ] in
-  [ DExtends [ "TLC"; "Sequences"; "Integers" ]; DSeparator ]
+  let extends =
+    [ "TLC"; "Sequences"; "Integers" ]
+    @ if uses_finite_sets then [ "FiniteSets" ] else []
+  in
+  [ DExtends extends; DSeparator ]
   @ (if uses_default_init_value then
        [ DConstants [ default_init_value ]; DSeparator ]
      else [])
@@ -382,8 +486,7 @@ let const_and_fun_decls (ir : module_ir) : tla_decl list =
 let proc_set_decls (ir : module_ir) : tla_decl list =
   let parts =
     List.map
-      (fun (p : process_ir) ->
-        TParens (TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi)))
+      (fun (p : process_ir) -> TParens (expr_to_tla_global p.domain))
       ir.processes
   in
   [ DOpDef ("ProcSet", [], TCup parts); DSeparator ]
@@ -397,9 +500,7 @@ let init_decls (ir : module_ir) : tla_decl list =
         let cases =
           List.map
             (fun (p : process_ir) ->
-              ( TIn
-                  ( TId "self",
-                    TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi) ),
+              ( TIn (TId "self", expr_to_tla_global p.domain),
                 TStr p.wrapper.entry_label ))
             ir.processes
         in
@@ -411,10 +512,8 @@ let init_decls (ir : module_ir) : tla_decl list =
         match init with
         | Generic_ast.InitValue expr ->
             TBinOp ("=", TId name, expr_to_tla_global expr)
-        | Generic_ast.InitRange (lo, hi) ->
-            TIn
-              ( TId name,
-                TRange (expr_to_tla_global lo, expr_to_tla_global hi) ))
+        | Generic_ast.InitIn domain ->
+            TIn (TId name, expr_to_tla_global domain))
       ir.var_decls
     @ [
         TBinOp ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit []));
@@ -467,7 +566,7 @@ let next_decls config (ir : module_ir) : tla_decl list =
         TParens
           (TExists
              ( "self",
-               TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi),
+               expr_to_tla_global p.domain,
                TApp (p.wrapper.proc_name, [ TId "self" ]) )))
       ir.processes
   in
@@ -498,9 +597,7 @@ let spec_decls (ir : module_ir) : tla_decl list =
               | Generic_ast.StrongFair -> "SF_vars"
               | _ -> "WF_vars"
             in
-            let process_range =
-              TRange (expr_to_tla_global p.lo, expr_to_tla_global p.hi)
-            in
+            let process_range = expr_to_tla_global p.domain in
             let fairness_for proc_name =
               TParens
                 (TForall
@@ -573,10 +670,11 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
           (List.concat_map node_actions p.actions))
       all_runtime_procs
   in
+  let uses_finite_sets = module_uses_cardinality ir all_runtime_procs in
   let body =
     List.concat
       [
-        header_decls ~uses_default_init_value ir;
+        header_decls ~uses_default_init_value ~uses_finite_sets ir;
         const_and_fun_decls ir;
         proc_set_decls ir;
         init_decls ir;

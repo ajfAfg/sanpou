@@ -49,6 +49,10 @@ let rec render_expr = function
           (List.map (fun (k, v) -> k ^ " |-> " ^ render_expr v) fields)
       ^ "]"
   | TRange (lo, hi) -> render_expr lo ^ ".." ^ render_expr hi
+  | TSet [] -> "{}"
+  | TSet es -> "{" ^ String.concat ", " (List.map render_expr es) ^ "}"
+  | TSetFilter (x, set, pred) ->
+      "{" ^ x ^ " \\in " ^ render_expr set ^ " : " ^ render_expr pred ^ "}"
   | TCup parts -> String.concat " \\cup " (List.map render_expr parts)
   | TNot e -> "~(" ^ render_expr e ^ ")"
   | TConj (Inline, es) -> String.concat " /\\ " (List.map render_expr es)

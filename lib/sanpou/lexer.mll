@@ -62,6 +62,8 @@ rule main = parse
     { Parser.RBRACE }
 | ";"
     { Parser.SEMI }
+| ":"
+    { Parser.COLON }
 | ","
     { Parser.COMMA }
 | "+"

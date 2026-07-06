@@ -11,6 +11,7 @@ type ty =
   | TyUnit
   | TyTuple of ty list
   | TySeq of ty
+  | TySet of ty
   | TyMap of ty * ty
   | TyVar of tyvar ref
   | TyFun of ty list * ty
@@ -60,6 +61,7 @@ let rec freevar_ty ty =
   | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
   | TyTuple tys -> List.concat_map freevar_ty tys
   | TySeq ty -> freevar_ty ty
+  | TySet ty -> freevar_ty ty
   | TyMap (key_ty, value_ty) -> freevar_ty key_ty @ freevar_ty value_ty
   | TyFun (params, ret) -> List.concat_map freevar_ty params @ freevar_ty ret
 
@@ -95,6 +97,7 @@ let rec unify loc ty1 ty2 =
         type_error (Type_clash (ty1, ty2)) loc;
       List.iter2 (unify loc) ts1 ts2
   | TySeq t1, TySeq t2 -> unify loc t1 t2
+  | TySet t1, TySet t2 -> unify loc t1 t2
   | TyMap (k1, v1), TyMap (k2, v2) ->
       unify loc k1 k2;
       unify loc v1 v2
@@ -119,6 +122,7 @@ let instantiate fresh_tyvar (TyScheme (bound, ty)) =
     | (TyInt | TyBool | TyUnit) as t -> t
     | TyTuple tys -> TyTuple (List.map copy tys)
     | TySeq ty -> TySeq (copy ty)
+    | TySet ty -> TySet (copy ty)
     | TyMap (key_ty, value_ty) -> TyMap (copy key_ty, copy value_ty)
     | TyFun (params, ret) -> TyFun (List.map copy params, copy ret)
   in
@@ -152,6 +156,15 @@ let builtin_signature fresh_tyvar (b : Builtin.t) =
   | Len ->
       let elem_ty = fresh_tyvar () in
       ([ TySeq elem_ty ], TyInt)
+  | Union | Intersection | Difference ->
+      let elem_ty = fresh_tyvar () in
+      ([ TySet elem_ty; TySet elem_ty ], TySet elem_ty)
+  | Cardinality ->
+      let elem_ty = fresh_tyvar () in
+      ([ TySet elem_ty ], TyInt)
+  | Subseteq ->
+      let elem_ty = fresh_tyvar () in
+      ([ TySet elem_ty; TySet elem_ty ], TyBool)
 
 (* ===== Infer expression type ===== *)
 
@@ -174,6 +187,10 @@ let ty_prim fresh_tyvar ~lhs_loc ~rhs_loc op ty1 ty2 =
       let tv = fresh_tyvar () in
       unify lhs_loc ty1 tv;
       unify rhs_loc ty2 tv;
+      TyBool
+  | In ->
+      (* [elem in set]: the right operand is a set of the left's type. *)
+      unify rhs_loc ty2 (TySet ty1);
       TyBool
 
 (* Subscripting works on sequences and on int-keyed maps: pick by what is
@@ -271,24 +288,41 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       let index_ty = infer_expr fresh_tyvar env index in
       infer_indexed_access fresh_tyvar ~collection_loc:lhs.loc
         ~index_loc:index.loc lhs_ty index_ty
-  | MapInit { binder; lo; hi; value } ->
+  | Range (lo, hi) ->
       unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
       unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
+      TySet TyInt
+  | MapInit { binder; domain; value } ->
+      (* Maps are int-keyed, so the domain must be a set of integers. *)
+      unify domain.loc (infer_expr fresh_tyvar env domain) (TySet TyInt);
       let binder_env = (binder, tysc_of_ty TyInt) :: env in
       TyMap (TyInt, infer_expr fresh_tyvar binder_env value)
   | Tuple elems ->
       if elems = [] then TyUnit
       else TyTuple (List.map (infer_expr fresh_tyvar env) elems)
   | Sequence elems -> infer_sequence_literal fresh_tyvar env elems
+  | SetLit elems ->
+      let elem_ty = fresh_tyvar () in
+      List.iter
+        (fun (elem : Surface_ast.expr) ->
+          unify elem.loc elem_ty (infer_expr fresh_tyvar env elem))
+        elems;
+      TySet elem_ty
+  | SetComp { binder; domain; pred } ->
+      let elem_ty = fresh_tyvar () in
+      unify domain.loc (infer_expr fresh_tyvar env domain) (TySet elem_ty);
+      let binder_env = (binder, tysc_of_ty elem_ty) :: env in
+      unify pred.loc (infer_expr fresh_tyvar binder_env pred) TyBool;
+      TySet elem_ty
   | IfExpr (cond, then_e, else_e) ->
       unify cond.loc (infer_expr fresh_tyvar env cond) TyBool;
       let then_ty = infer_expr fresh_tyvar env then_e in
       unify else_e.loc then_ty (infer_expr fresh_tyvar env else_e);
       then_ty
-  | Quant { binder; lo; hi; body; _ } ->
-      unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
-      unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
-      let binder_env = (binder, tysc_of_ty TyInt) :: env in
+  | Quant { binder; domain; body; _ } ->
+      let elem_ty = fresh_tyvar () in
+      unify domain.loc (infer_expr fresh_tyvar env domain) (TySet elem_ty);
+      let binder_env = (binder, tysc_of_ty elem_ty) :: env in
       unify body.loc (infer_expr fresh_tyvar binder_env body) TyBool;
       TyBool
 
@@ -378,13 +412,15 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
   | BlockStep (Either arms) ->
       List.iter (check_body ctx) arms;
       ctx
-  | WithStep { binder; lo; hi; stmts } ->
-      unify lo.loc (infer_expr ctx.fresh_tyvar ctx.env lo) TyInt;
-      unify hi.loc (infer_expr ctx.fresh_tyvar ctx.env hi) TyInt;
+  | WithStep { binder; domain; stmts } ->
+      let elem_ty = ctx.fresh_tyvar () in
+      unify domain.loc
+        (infer_expr ctx.fresh_tyvar ctx.env domain)
+        (TySet elem_ty);
       (* The binder is readable but not assignable: it is absent from
          mutable_vars, so assignments to it fail as to any non-variable. *)
       let binder_ctx =
-        { ctx with env = (binder, tysc_of_ty TyInt) :: ctx.env }
+        { ctx with env = (binder, tysc_of_ty elem_ty) :: ctx.env }
       in
       List.iter (check_simple_stmt binder_ctx) stmts;
       ctx
@@ -431,10 +467,12 @@ let check_module (m : Surface_ast.module_def) : unit =
             let ty =
               match init with
               | InitValue value -> infer_expr fresh_tyvar env value
-              | InitRange (lo, hi) ->
-                  unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
-                  unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
-                  TyInt
+              | InitIn domain ->
+                  let elem_ty = fresh_tyvar () in
+                  unify domain.loc
+                    (infer_expr fresh_tyvar env domain)
+                    (TySet elem_ty);
+                  elem_ty
             in
             ((name, tysc_of_ty ty) :: env, proc_names)
         | ProcDef { name = proc_name; params; body } ->
@@ -478,13 +516,15 @@ let check_module (m : Surface_ast.module_def) : unit =
             in
             check_body ctx body;
             ((proc_name, generalize env fn_ty) :: env, proc_names)
-        | Process { proc; lo; hi; _ } ->
+        | Process { proc; domain; _ } ->
             (* The root must be a procedure: a def function here would
                reach the emitter's procedure table and crash. *)
             if not (List.mem proc proc_names) then
               type_error (Not_a_procedure proc) item.loc;
-            unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
-            unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
+            (* Process ids are integers (readable as [self] : int). *)
+            unify domain.loc
+              (infer_expr fresh_tyvar env domain)
+              (TySet TyInt);
             (env, proc_names))
       ([], []) m.items
   in
@@ -507,6 +547,7 @@ let rec string_of_ty ty =
   | TyVar { contents = Link _ } -> assert false (* excluded by repr *)
   | TyTuple tys -> "(" ^ String.concat ", " (List.map string_of_ty tys) ^ ")"
   | TySeq ty -> "[" ^ string_of_ty ty ^ "]"
+  | TySet ty -> "{" ^ string_of_ty ty ^ "}"
   | TyMap (key_ty, value_ty) ->
       "{" ^ string_of_ty key_ty ^ " -> " ^ string_of_ty value_ty ^ "}"
   | TyFun (params, ret) ->

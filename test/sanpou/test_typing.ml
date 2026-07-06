@@ -277,6 +277,46 @@ let () =
                  def ws = concat(xs, append([], 3)); }");
           test_case "tuple remains heterogeneous" `Quick (fun () ->
               check_ok "mod m { def x = (1, true); }");
+          test_case "range is a set of ints" `Quick (fun () ->
+              check_ok "mod m { def s = 1..3; def y = 1 in s; }");
+          test_case "set literal homogeneous" `Quick (fun () ->
+              check_ok "mod m { def s = {1, 2, 3}; }");
+          test_case "empty set is polymorphic" `Quick (fun () ->
+              check_ok "mod m { def s = {}; def b = true in {}; }");
+          test_case "membership" `Quick (fun () ->
+              check_ok "mod m { def b = 1 in {1, 2}; }");
+          test_case "membership over bool set" `Quick (fun () ->
+              check_ok "mod m { def b = true in {false, true}; }");
+          test_case "set comprehension" `Quick (fun () ->
+              check_ok "mod m { def s = { x in 1..3 : x > 1 }; def y = 2 in s; }");
+          test_case "set comprehension over set literal" `Quick (fun () ->
+              check_ok "mod m { def s = { x in {1, 2, 3} : x % 2 == 0 }; }");
+          test_case "set operations" `Quick (fun () ->
+              check_ok
+                "mod m { def a = {1, 2}; def b = {2, 3};\n\
+                \  def u = union(a, b); def i = intersection(a, b);\n\
+                \  def d = difference(a, b); }");
+          test_case "cardinality is int" `Quick (fun () ->
+              check_ok "mod m { def n = cardinality({1, 2, 3}) + 1; }");
+          test_case "subseteq is bool" `Quick (fun () ->
+              check_ok "mod m { def b = subseteq({1}, {1, 2}) && true; }");
+          test_case "forall over set literal" `Quick (fun () ->
+              check_ok "mod m { def p = forall (x in {1, 2, 3}) { x > 0 }; }");
+          test_case "var domain set" `Quick (fun () ->
+              check_ok "mod m { var x in {1, 2, 3}; def y = x + 1; }");
+          test_case "process over set" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  procedure foo() { return (); }\n\
+                \  process ps = foo in {1, 2, 3};\n\
+                \  }");
+          test_case "with over set" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  procedure foo() { with (v in {1, 2}) { x = v; } return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "while wait" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -426,6 +466,28 @@ let () =
               check_fails "mod m { def f(x) = x + 1; def y = f(1, 2); }");
           test_case "heterogeneous sequence" `Quick (fun () ->
               check_fails "mod m { def x = [1, true]; }");
+          test_case "heterogeneous set literal" `Quick (fun () ->
+              check_fails "mod m { def x = {1, true}; }");
+          test_case "membership element/set mismatch" `Quick (fun () ->
+              check_fails "mod m { def b = 1 in {true}; }");
+          test_case "membership on non-set" `Quick (fun () ->
+              check_fails "mod m { def b = 1 in [1, 2]; }");
+          test_case "union on non-sets" `Quick (fun () ->
+              check_fails "mod m { def x = union([1], [2]); }");
+          test_case "union mismatched element types" `Quick (fun () ->
+              check_fails "mod m { def x = union({1}, {true}); }");
+          test_case "cardinality on non-set" `Quick (fun () ->
+              check_fails "mod m { def x = cardinality([1, 2]); }");
+          test_case "map domain non-int set" `Quick (fun () ->
+              check_fails "mod m { def x = { i in {true} -> i }; }");
+          test_case "process over non-int set" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  procedure foo() { return (); }\n\
+                \  process ps = foo in {true};\n\
+                \  }");
+          test_case "comprehension predicate non-bool" `Quick (fun () ->
+              check_fails "mod m { def s = { x in 1..3 : x }; }");
           test_case "head on tuple" `Quick (fun () ->
               check_fails "mod m { def x = head((1, 2)); }");
           test_case "len on int" `Quick (fun () ->

@@ -108,6 +108,66 @@ let () =
               has "quotient == (7 \\div 2)";
               has "remainder == (7 % 2)";
               has "negated == ~(TRUE)");
+          Alcotest.test_case "set literals, membership and comprehension" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod sets {\n\
+                   def a = {1, 2, 3};\n\
+                   def empty = {};\n\
+                   def evens = { x in a : x % 2 == 0 };\n\
+                   def mem = 1 in a;\n\
+                   def rng = 1..3;\n\
+                   procedure main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "a == {1, 2, 3}";
+              has "empty == {}";
+              has "evens == {x \\in a : ((x % 2) = 0)}";
+              has "mem == (1 \\in a)";
+              has "rng == 1..3";
+              (* no cardinality here, so FiniteSets is not extended *)
+              has_not_in "FiniteSets" tla);
+          Alcotest.test_case "set operations compile to tla equivalents" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod ops {\n\
+                   def a = {1, 2};\n\
+                   def b = {2, 3};\n\
+                   def u = union(a, b);\n\
+                   def i = intersection(a, b);\n\
+                   def d = difference(a, b);\n\
+                   def n = cardinality(a);\n\
+                   def sub = subseteq(a, b);\n\
+                   procedure main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "u == (a \\cup b)";
+              has "i == (a \\cap b)";
+              has "d == (a \\ b)";
+              has "n == Cardinality(a)";
+              has "sub == (a \\subseteq b)";
+              (* cardinality pulls in FiniteSets *)
+              has "EXTENDS TLC, Sequences, Integers, FiniteSets");
+          Alcotest.test_case "process over a set literal" `Quick (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   procedure main() { return (); }\n\
+                   process ps = main in {1, 2, 3};\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "ProcSet == ({1, 2, 3})";
+              has "\\E self \\in {1, 2, 3}");
           Alcotest.test_case
             "range-initialized var compiles to membership in Init" `Quick
             (fun () ->

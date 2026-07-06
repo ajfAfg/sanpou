@@ -10,6 +10,11 @@ let equal_loc _ _ = true
 type 'a node = { desc : 'a; loc : loc } [@@deriving show, eq]
 type id = string [@@deriving show, eq]
 
+(* Raised from parser semantic actions that need a located diagnostic the
+   grammar cannot express (e.g. a map/comprehension binder that is not a
+   plain [x in <set>]); [Compile.parse] turns it into a diagnostic. *)
+exception Parse_error of loc * string
+
 type binop =
   | Plus
   | Minus
@@ -24,6 +29,7 @@ type binop =
   | Neq
   | And
   | Or
+  | In (* set membership: [elem in set] *)
 [@@deriving show, eq]
 
 type unop = Neg | Not [@@deriving show, eq]
@@ -51,20 +57,26 @@ and ('n, 'c) expr_desc =
   | App of 'c * ('n, 'c) expr list
   | Builtin of Builtin.t * ('n, 'c) expr list
   | Subscript of ('n, 'c) expr * ('n, 'c) expr
-  | MapInit of {
+  | Range of ('n, 'c) expr * ('n, 'c) expr
+      (* [lo..hi] as a first-class set of integers; the domain any binder
+         ranges over is an arbitrary set expression, of which a range is the
+         common case *)
+  | MapInit of { binder : 'n; domain : ('n, 'c) expr; value : ('n, 'c) expr }
+  | SetLit of ('n, 'c) expr list
+  | SetComp of {
       binder : 'n;
-      lo : ('n, 'c) expr;
-      hi : ('n, 'c) expr;
-      value : ('n, 'c) expr;
+      domain : ('n, 'c) expr;
+      pred : ('n, 'c) expr;
     }
+      (* a filter comprehension [{x in S : p}]: the elements of [domain]
+         satisfying [pred] *)
   | Tuple of ('n, 'c) expr list
   | Sequence of ('n, 'c) expr list
   | IfExpr of ('n, 'c) expr * ('n, 'c) expr * ('n, 'c) expr
   | Quant of {
       quant : quantifier;
       binder : 'n;
-      lo : ('n, 'c) expr;
-      hi : ('n, 'c) expr;
+      domain : ('n, 'c) expr;
       body : ('n, 'c) expr;
     }
 [@@deriving show, eq]
@@ -96,8 +108,7 @@ and ('n, 'c) step_desc =
   | VarStep of 'n * ('n, 'c) expr
   | WithStep of {
       binder : 'n;
-      lo : ('n, 'c) expr;
-      hi : ('n, 'c) expr;
+      domain : ('n, 'c) expr;
       stmts : ('n, 'c) simple_stmt list;
     }
       (* one atomic step under a non-deterministically chosen binder;
@@ -119,7 +130,8 @@ and ('n, 'c) body = ('n, 'c) step list [@@deriving show, eq]
    drawn from a range — the model checker then explores every choice. *)
 type ('n, 'c) var_init =
   | InitValue of ('n, 'c) expr
-  | InitRange of ('n, 'c) expr * ('n, 'c) expr
+  | InitIn of ('n, 'c) expr
+      (* a non-deterministic initial value drawn from a set *)
 [@@deriving show, eq]
 
 type ('n, 'c) item = ('n, 'c) item_desc node
@@ -135,8 +147,7 @@ and ('n, 'c) item_desc =
       name : id;
       proc : id;
       fairness : fairness;
-      lo : ('n, 'c) expr;
-      hi : ('n, 'c) expr;
+      domain : ('n, 'c) expr;
     }
 [@@deriving show, eq]
 
@@ -164,25 +175,32 @@ let rec map_expr (f : 'n -> 'm) (g : 'c -> 'd) (e : ('n, 'c) expr) :
     | App (callee, args) -> App (g callee, List.map (map_expr f g) args)
     | Builtin (b, args) -> Builtin (b, List.map (map_expr f g) args)
     | Subscript (lhs, index) -> Subscript (map_expr f g lhs, map_expr f g index)
-    | MapInit { binder; lo; hi; value } ->
+    | Range (lo, hi) -> Range (map_expr f g lo, map_expr f g hi)
+    | MapInit { binder; domain; value } ->
         MapInit
           {
             binder = f binder;
-            lo = map_expr f g lo;
-            hi = map_expr f g hi;
+            domain = map_expr f g domain;
             value = map_expr f g value;
+          }
+    | SetLit elems -> SetLit (List.map (map_expr f g) elems)
+    | SetComp { binder; domain; pred } ->
+        SetComp
+          {
+            binder = f binder;
+            domain = map_expr f g domain;
+            pred = map_expr f g pred;
           }
     | Tuple elems -> Tuple (List.map (map_expr f g) elems)
     | Sequence elems -> Sequence (List.map (map_expr f g) elems)
     | IfExpr (cond, then_e, else_e) ->
         IfExpr (map_expr f g cond, map_expr f g then_e, map_expr f g else_e)
-    | Quant { quant; binder; lo; hi; body } ->
+    | Quant { quant; binder; domain; body } ->
         Quant
           {
             quant;
             binder = f binder;
-            lo = map_expr f g lo;
-            hi = map_expr f g hi;
+            domain = map_expr f g domain;
             body = map_expr f g body;
           }
   in
@@ -191,4 +209,4 @@ let rec map_expr (f : 'n -> 'm) (g : 'c -> 'd) (e : ('n, 'c) expr) :
 let map_var_init (f : 'n -> 'm) (g : 'c -> 'd) :
     ('n, 'c) var_init -> ('m, 'd) var_init = function
   | InitValue e -> InitValue (map_expr f g e)
-  | InitRange (lo, hi) -> InitRange (map_expr f g lo, map_expr f g hi)
+  | InitIn e -> InitIn (map_expr f g e)

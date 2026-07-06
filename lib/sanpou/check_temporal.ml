@@ -46,10 +46,12 @@ let rec temporal_occurrence (props : id list) (e : Resolved_ast.expr) :
   | BinOp (_, lhs, rhs) -> first [ lhs; rhs ]
   | App (_, args) -> first args
   | Subscript (lhs, index) -> first [ lhs; index ]
-  | MapInit { lo; hi; value; _ } -> first [ lo; hi; value ]
-  | Tuple elems | Sequence elems -> first elems
+  | Range (lo, hi) -> first [ lo; hi ]
+  | MapInit { domain; value; _ } -> first [ domain; value ]
+  | Tuple elems | Sequence elems | SetLit elems -> first elems
+  | SetComp { domain; pred; _ } -> first [ domain; pred ]
   | IfExpr (cond, then_e, else_e) -> first [ cond; then_e; else_e ]
-  | Quant { lo; hi; body; _ } -> first [ lo; hi; body ]
+  | Quant { domain; body; _ } -> first [ domain; body ]
 
 let check_expr props (e : Resolved_ast.expr) : unit =
   match temporal_occurrence props e with
@@ -77,9 +79,8 @@ and check_step props (step : Resolved_ast.step) : unit =
   | SimpleStep stmts -> List.iter (check_stmt props) stmts
   | EmptyStep -> ()
   | VarStep (_, value) -> check value
-  | WithStep { lo; hi; stmts; _ } ->
-      check lo;
-      check hi;
+  | WithStep { domain; stmts; _ } ->
+      check domain;
       List.iter (check_stmt props) stmts
   | BlockStep (While { cond; body }) ->
       check cond;
@@ -105,16 +106,13 @@ let check_module (m : Resolved_ast.module_def) : unit =
         | VarDecl { init; _ } ->
             (match init with
             | InitValue value -> check_expr props value
-            | InitRange (lo, hi) ->
-                check_expr props lo;
-                check_expr props hi);
+            | InitIn domain -> check_expr props domain);
             props
         | ProcDef { body; _ } ->
             check_body props body;
             props
-        | Process { lo; hi; _ } ->
-            check_expr props lo;
-            check_expr props hi;
+        | Process { domain; _ } ->
+            check_expr props domain;
             props)
       [] m.items
   in

@@ -155,6 +155,41 @@ let () =
               pretty_roundtrip "mod m { def x = [1, 2]; }");
           test_case "map init" `Quick (fun () ->
               pretty_roundtrip "mod m { var xs = { x in 1..2 -> false }; }");
+          test_case "map init over set literal" `Quick (fun () ->
+              pretty_roundtrip "mod m { var xs = { x in {1, 2} -> false }; }");
+          test_case "range as set" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = 1..3; }");
+          test_case "range of compound bounds" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = k + 1..n - 1; }");
+          test_case "set literal empty" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = {}; }");
+          test_case "set literal single" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = {1}; }");
+          test_case "set literal pair" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = {1, 2}; }");
+          test_case "membership" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = 1 in {1, 2}; }");
+          test_case "membership over range" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = i in 1..n; }");
+          test_case "membership as operand" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = 1 in s || b; }");
+          test_case "set comprehension" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = { y in 1..3 : y > 1 }; }");
+          test_case "set comprehension over set literal" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = { y in {1, 2, 3} : y > 1 }; }");
+          test_case "set builtins" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { def x = union(intersection(a, b), difference(a, b)); }");
+          test_case "cardinality and subseteq" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { def x = cardinality(a) > 0 && subseteq(a, b); }");
+          test_case "var domain set literal" `Quick (fun () ->
+              pretty_roundtrip "mod m { var x in {1, 2, 3}; }");
+          test_case "process over set literal" `Quick (fun () ->
+              pretty_roundtrip "mod m { process ps = foo in {1, 2}; }");
+          test_case "with over set" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { procedure foo() { with (v in {1, 2}) { x = v; } } }");
           test_case "subscript" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = xs[1 + 2]; }");
           test_case "process" `Quick (fun () ->
@@ -214,9 +249,24 @@ let () =
           test_case "mixed and/or" `Quick (fun () ->
               pretty_prints "mod m { def x = (a || b) && c; }"
                 "mod m {\n  def x = (a || b) && c;\n}\n");
+          test_case "range binds looser than arithmetic" `Quick (fun () ->
+              pretty_prints "mod m { def x = 1..n - 1; }"
+                "mod m {\n  def x = 1..n - 1;\n}\n");
+          test_case "membership binds looser than range" `Quick (fun () ->
+              pretty_prints "mod m { def x = i in 1..n; }"
+                "mod m {\n  def x = i in 1..n;\n}\n");
         ] );
       ( "pretty_print",
         [
+          test_case "set literal" `Quick (fun () ->
+              pretty_prints "mod m { def x = {1, 2}; }"
+                "mod m {\n  def x = {1, 2};\n}\n");
+          test_case "empty set" `Quick (fun () ->
+              pretty_prints "mod m { def x = {}; }"
+                "mod m {\n  def x = {};\n}\n");
+          test_case "set comprehension" `Quick (fun () ->
+              pretty_prints "mod m { def x = { y in s : y > 1 }; }"
+                "mod m {\n  def x = { y in s : y > 1 };\n}\n");
           test_case "fair process" `Quick (fun () ->
               pretty_prints "mod m { fair process ps = foo in 1..n; }"
                 "mod m {\n  fair process ps = foo in 1..n;\n}\n");

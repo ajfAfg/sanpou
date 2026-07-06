@@ -208,3 +208,27 @@ An assert that holds is silent; one that fails halts TLC with an error
   $ sanpou compile assert_fail.snp -o assert_fail
   $ tlc assert_fail assert_fail
   The first argument of Assert evaluated to FALSE
+
+Sets end-to-end: two processes drawn from a set literal each unblock only if
+the set operations (union, comprehension, cardinality, difference, subseteq)
+and membership all evaluate as expected, then run to completion. Termination
+therefore proves the emitted set constructs check under TLC's FiniteSets.
+
+  $ cat > sets_check.snp <<'EOF'
+  > mod sets_check {
+  >   def s = union({1, 2}, {2, 3});
+  >   def evens = { y in s : y % 2 == 0 };
+  >   var x = 0;
+  >   procedure f() {
+  >     await cardinality(s) == 3 && cardinality(evens) == 1
+  >           && 2 in s && subseteq(difference(s, {1, 3}), evens),
+  >     x = 1;
+  >     return ();
+  >   }
+  >   fair process p = f in {7, 8};
+  > }
+  > EOF
+  $ cp either_guard.json sets_check.json
+  $ sanpou compile sets_check.snp -o sets_check
+  $ tlc sets_check sets_check
+  No error has been found

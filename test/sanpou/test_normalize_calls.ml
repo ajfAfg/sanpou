@@ -30,11 +30,15 @@ let while_block cond body : Sanpou.Resolved_ast.step =
 let if_block cond body : Sanpou.Resolved_ast.step =
   node (BlockStep (If { cond; body; else_body = None }))
 
-let map_init lo hi value = node (MapInit { binder = ident "i"; lo; hi; value })
+let range lo hi = node (Range (lo, hi))
+
+let map_init lo hi value =
+  node (MapInit { binder = ident "i"; domain = range lo hi; value })
+
 let if_expr c t f = node (IfExpr (c, t, f))
 
 let forall_ lo hi body =
-  node (Quant { quant = Forall; binder = ident "i"; lo; hi; body })
+  node (Quant { quant = Forall; binder = ident "i"; domain = range lo hi; body })
 
 let make_proc name body : Sanpou.Resolved_ast.item =
   node (ProcDef { name; params = []; body })
@@ -47,7 +51,8 @@ let make_var name value : Sanpou.Resolved_ast.item =
 
 let make_process name proc : Sanpou.Resolved_ast.item =
   node
-    (Process { name; proc; fairness = Unfair; lo = intlit 1; hi = intlit 1 })
+    (Process
+       { name; proc; fairness = Unfair; domain = range (intlit 1) (intlit 1) })
 
 let make_module name items : Sanpou.Resolved_ast.module_def =
   { mod_name = name; items; mod_loc = loc0 }
@@ -88,8 +93,12 @@ let n_if cond body : Sanpou.Normalized_ast.step =
 
 let n_if_expr c t f : Sanpou.Normalized_ast.expr = node (IfExpr (c, t, f))
 
+let n_range lo hi : Sanpou.Normalized_ast.expr = node (Range (lo, hi))
+
 let n_forall lo hi body : Sanpou.Normalized_ast.expr =
-  node (Quant { quant = Forall; binder = ident "i"; lo; hi; body })
+  node
+    (Quant
+       { quant = Forall; binder = ident "i"; domain = n_range lo hi; body })
 
 (* ----- harness ----- *)
 
@@ -303,8 +312,7 @@ let () =
                   (WithStep
                      {
                        binder = ident "v";
-                       lo = intlit 1;
-                       hi = intlit 3;
+                       domain = range (intlit 1) (intlit 3);
                        stmts = [ assign "x" (proc_app "foo" []) ];
                      })
               in
@@ -319,8 +327,7 @@ let () =
                   (WithStep
                      {
                        binder = ident "v";
-                       lo = proc_app "foo" [];
-                       hi = intlit 3;
+                       domain = range (proc_app "foo" []) (intlit 3);
                        stmts = [ assign "x" (var "v") ];
                      })
               in
@@ -331,8 +338,7 @@ let () =
                     (Sanpou.Normalized_ast.WithStep
                        {
                          binder = ident "v";
-                         lo = n_var "callRet__1";
-                         hi = n_intlit 3;
+                         domain = n_range (n_var "callRet__1") (n_intlit 3);
                          stmts = [ n_assign "x" (n_var "v") ];
                        });
                 ]
