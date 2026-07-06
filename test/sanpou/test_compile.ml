@@ -126,6 +126,37 @@ let () =
               has "tags == {\"idle\", \"busy\"}";
               has "s = \"idle\"";
               has "s' = \"busy\"");
+          Alcotest.test_case "records compile to tla records" `Quick (fun () ->
+              let ast =
+                parse
+                  "mod recs {\n\
+                  \  def msg = {kind: \"req\", src: 1};\n\
+                  \  def k = msg.kind;\n\
+                  \  var r = {tag: \"idle\", n: 0};\n\
+                  \  procedure main() { r.tag = \"busy\", r.n = r.n + 1; return (); }\n\
+                  \  process ps = main in 1..1;\n\
+                  \  }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              (* fields are emitted label-sorted *)
+              has "msg == [kind |-> \"req\", src |-> 1]";
+              has "k == msg.kind";
+              has "r = [n |-> 0, tag |-> \"idle\"]";
+              (* both field writes to r merge into a single EXCEPT conjunct *)
+              has "r' = [r EXCEPT !.tag = \"busy\", !.n = (r.n + 1)]");
+          Alcotest.test_case "field update on a mapped record uses EXCEPT path"
+            `Quick (fun () ->
+              let ast =
+                parse
+                  "mod g {\n\
+                  \  var grid = { i in 1..2 -> {v: 0} };\n\
+                  \  procedure main() { grid[self].v = 5; return (); }\n\
+                  \  process ps = main in 1..2;\n\
+                  \  }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "grid' = [grid EXCEPT ![self].v = 5]" tla);
           Alcotest.test_case "set literals, membership and comprehension" `Quick
             (fun () ->
               let ast =

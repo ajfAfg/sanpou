@@ -12,6 +12,7 @@ type callee = Fun of Generic_ast.id [@@deriving show, eq]
 let callee_name (Fun name) = name
 
 type expr = (Resolved_ast.ident, callee) Generic_ast.expr
+type accessor = (Resolved_ast.ident, callee) Generic_ast.accessor
 type assign_target = (Resolved_ast.ident, callee) Generic_ast.assign_target
 type simple_stmt = (Resolved_ast.ident, callee) Generic_ast.simple_stmt
 type var_init = (Resolved_ast.ident, callee) Generic_ast.var_init

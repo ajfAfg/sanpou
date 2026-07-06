@@ -58,6 +58,11 @@ and ('n, 'c) expr_desc =
   | App of 'c * ('n, 'c) expr list
   | Builtin of Builtin.t * ('n, 'c) expr list
   | Subscript of ('n, 'c) expr * ('n, 'c) expr
+  | Field of ('n, 'c) expr * id (* record field access [r.f] *)
+  | Record of (id * ('n, 'c) expr) list
+      (* a record literal [{f1: e1, ..., fn: en}]; fields are kept in a
+         canonical (label-sorted) order so structurally equal records compare
+         equal regardless of source order *)
   | Range of ('n, 'c) expr * ('n, 'c) expr
       (* [lo..hi] as a first-class set of integers; the domain any binder
          ranges over is an arbitrary set expression, of which a range is the
@@ -82,10 +87,19 @@ and ('n, 'c) expr_desc =
     }
 [@@deriving show, eq]
 
+(* One step of an assignment path: a subscript [.[i]] or a record field [.f].
+   Reads compose the corresponding expressions ([Subscript]/[Field]); a write
+   path is a list of these so index and field steps can interleave
+   ([a[i].f = e]). *)
+type ('n, 'c) accessor =
+  | AccIndex of ('n, 'c) expr
+  | AccField of id
+[@@deriving show, eq]
+
 type ('n, 'c) assign_target =
   | VarTarget of 'n
-  | SubscriptTarget of 'n * ('n, 'c) expr list
-      (* one entry per [.] level, outermost first; never empty *)
+  | PathTarget of 'n * ('n, 'c) accessor list
+      (* one entry per subscript/field step, outermost first; never empty *)
 [@@deriving show, eq]
 
 type ('n, 'c) simple_stmt = ('n, 'c) simple_stmt_desc node
@@ -177,6 +191,9 @@ let rec map_expr (f : 'n -> 'm) (g : 'c -> 'd) (e : ('n, 'c) expr) :
     | App (callee, args) -> App (g callee, List.map (map_expr f g) args)
     | Builtin (b, args) -> Builtin (b, List.map (map_expr f g) args)
     | Subscript (lhs, index) -> Subscript (map_expr f g lhs, map_expr f g index)
+    | Field (record, label) -> Field (map_expr f g record, label)
+    | Record fields ->
+        Record (List.map (fun (label, e) -> (label, map_expr f g e)) fields)
     | Range (lo, hi) -> Range (map_expr f g lo, map_expr f g hi)
     | MapInit { binder; domain; value } ->
         MapInit

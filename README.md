@@ -119,6 +119,7 @@ mod example {
   def pair = (1, true);            // tuple value
   def queue = [1, 2, 3];           // sequence value
   def label = "idle";              // string value
+  def msg = {kind: "req", src: 1}; // record value; msg.kind reads a field
   def ids = {1, 2, 3};             // set value
   def evens = { i in 1..n : i % 2 == 0 };  // set comprehension (filter)
   def table = { i in 1..n -> 0 };  // map with domain 1..n (a set of ints)
@@ -160,6 +161,13 @@ mod example {
   homogeneous; sets `{a, b, c}` (and `{}`) are homogeneous; maps
   `{ x in S -> e }` have an integer-set domain. Strings `"idle"` support
   only equality (`==` / `!=`); there is no concatenation or indexing.
+  Records `{f1: e1, f2: e2}` have fixed named fields (field types may differ);
+  read a field with `r.f`. Records are structural: two record types match only
+  when their field sets are identical (no row polymorphism).
+- **Subscript and field paths**: read with `a[i]` and `r.f`, and they compose
+  (`grid[i].tag`). An assignment target is a variable followed by any mix of
+  `[i]` and `.f` steps (`grid[i].tag = e`), compiling to a TLA+ `EXCEPT`
+  update; several writes to one variable in a step merge into one `EXCEPT`.
 - **Sets**: `lo..hi` is the set of integers in that range, and a first-class
   value like any other set. Set comprehension `{ x in S : p }` keeps the
   elements of `S` satisfying `p`. Any binder domain — quantifiers, `with`,

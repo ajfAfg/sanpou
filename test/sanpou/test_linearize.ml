@@ -120,7 +120,7 @@ let () =
               let name =
                 match List.hd entry.assignments with
                 | AssignVar (name, _) -> name
-                | AssignIndex (name, _, _) -> name
+                | AssignPath (name, _, _) -> name
               in
               check string "assign x" "x" name);
           test_case "empty step" `Quick (fun () ->
@@ -463,7 +463,7 @@ let () =
               let name, value =
                 match List.hd entry.assignments with
                 | AssignVar (name, value) -> (name, value)
-                | AssignIndex _ -> failwith "expected AssignVar"
+                | AssignPath _ -> failwith "expected AssignVar"
               in
               check string "name" "x" name;
               check bool "value" true

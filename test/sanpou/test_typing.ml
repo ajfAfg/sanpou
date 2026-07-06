@@ -285,6 +285,29 @@ let () =
               check_ok {|mod m { def x = "idle" != "busy"; }|});
           test_case "set of strings" `Quick (fun () ->
               check_ok {|mod m { def x = {"idle", "busy"}; def y = "idle" in x; }|});
+          test_case "record literal" `Quick (fun () ->
+              check_ok {|mod m { def r = {kind: "req", src: 1}; }|});
+          test_case "field access" `Quick (fun () ->
+              check_ok {|mod m { def r = {kind: "req", src: 1}; def k = r.kind; }|});
+          test_case "field access type" `Quick (fun () ->
+              check_ok {|mod m { def r = {n: 0}; def m2 = r.n + 1; }|});
+          test_case "records unify regardless of field order" `Quick (fun () ->
+              check_ok
+                {|mod m { def x = if (true) { {a: 1, b: 2} } else { {b: 3, a: 4} }; }|});
+          test_case "field update assignment" `Quick (fun () ->
+              check_ok
+                {|mod m {
+                    var r = {kind: "idle", n: 0};
+                    procedure f() { r.kind = "busy", r.n = r.n + 1; return (); }
+                    process ps = f in 1..1;
+                  }|});
+          test_case "record field in map, mixed path update" `Quick (fun () ->
+              check_ok
+                {|mod m {
+                    var grid = { i in 1..2 -> {v: 0} };
+                    procedure f() { grid[self].v = 5; return (); }
+                    process ps = f in 1..2;
+                  }|});
           test_case "range is a set of ints" `Quick (fun () ->
               check_ok "mod m { def s = 1..3; def y = 1 in s; }");
           test_case "set literal homogeneous" `Quick (fun () ->
@@ -476,6 +499,21 @@ let () =
               check_fails "mod m { def x = [1, true]; }");
           test_case "heterogeneous set literal" `Quick (fun () ->
               check_fails "mod m { def x = {1, true}; }");
+          test_case "field access on non-record" `Quick (fun () ->
+              check_fails "mod m { def x = 1; def y = x.f; }");
+          test_case "unknown field" `Quick (fun () ->
+              check_fails {|mod m { def r = {a: 1}; def y = r.b; }|});
+          test_case "record field type mismatch" `Quick (fun () ->
+              check_fails
+                {|mod m {
+                    var r = {n: 0};
+                    procedure f() { r.n = true; return (); }
+                    process ps = f in 1..1;
+                  }|});
+          test_case "records with different field sets do not unify" `Quick
+            (fun () ->
+              check_fails
+                {|mod m { def x = if (true) { {a: 1} } else { {a: 1, b: 2} }; }|});
           test_case "string arithmetic" `Quick (fun () ->
               check_fails {|mod m { def x = "a" + 1; }|});
           test_case "string ordering" `Quick (fun () ->

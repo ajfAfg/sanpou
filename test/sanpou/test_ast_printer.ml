@@ -159,6 +159,22 @@ let () =
               pretty_roundtrip {|mod m { def x = s == "busy"; }|});
           test_case "set of strings" `Quick (fun () ->
               pretty_roundtrip {|mod m { def x = {"idle", "busy"}; }|});
+          test_case "record literal" `Quick (fun () ->
+              pretty_roundtrip {|mod m { def x = {kind: "req", src: 1}; }|});
+          test_case "record single field" `Quick (fun () ->
+              pretty_roundtrip {|mod m { def x = {n: 0}; }|});
+          test_case "field access" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = m.kind; }");
+          test_case "nested field access" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = a.b.c; }");
+          test_case "field access on subscript" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = grid[i].tag; }");
+          test_case "field update assignment" `Quick (fun () ->
+              pretty_roundtrip
+                {|mod m { procedure f() { m.kind = "busy"; } }|});
+          test_case "mixed index and field assignment" `Quick (fun () ->
+              pretty_roundtrip
+                "mod m { procedure f() { a[i].f[j] = 5; } }");
           test_case "map init" `Quick (fun () ->
               pretty_roundtrip "mod m { var xs = { x in 1..2 -> false }; }");
           test_case "map init over set literal" `Quick (fun () ->
@@ -273,6 +289,12 @@ let () =
           test_case "string literal" `Quick (fun () ->
               pretty_prints {|mod m { def x = "idle"; }|}
                 "mod m {\n  def x = \"idle\";\n}\n");
+          test_case "record literal (fields sorted)" `Quick (fun () ->
+              pretty_prints {|mod m { def x = {src: 1, kind: "req"}; }|}
+                "mod m {\n  def x = {kind: \"req\", src: 1};\n}\n");
+          test_case "field access" `Quick (fun () ->
+              pretty_prints "mod m { def x = m.kind; }"
+                "mod m {\n  def x = m.kind;\n}\n");
           test_case "set comprehension" `Quick (fun () ->
               pretty_prints "mod m { def x = { y in s : y > 1 }; }"
                 "mod m {\n  def x = { y in s : y > 1 };\n}\n");

@@ -89,6 +89,10 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
       TApp (name, List.map (expr_to_tla local_vars) args)
   | Generic_ast.Subscript (lhs, index) ->
       TSubscript (expr_to_tla local_vars lhs, expr_to_tla local_vars index)
+  | Generic_ast.Field (record, label) ->
+      TDot (expr_to_tla local_vars record, label)
+  | Generic_ast.Record fields ->
+      TRecord (List.map (fun (l, e) -> (l, expr_to_tla local_vars e)) fields)
   | Generic_ast.Range (lo, hi) ->
       TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi)
   | Generic_ast.MapInit { binder; domain; value } ->
@@ -141,6 +145,9 @@ let rec expr_uses_cardinality (e : Normalized_ast.expr) : bool =
   | Generic_ast.Range (a, b)
   | Generic_ast.Subscript (a, b) ->
       expr_uses_cardinality a || expr_uses_cardinality b
+  | Generic_ast.Field (record, _) -> expr_uses_cardinality record
+  | Generic_ast.Record fields ->
+      List.exists (fun (_, e) -> expr_uses_cardinality e) fields
   | Generic_ast.App (_, args)
   | Generic_ast.Builtin (_, args)
   | Generic_ast.Tuple args
@@ -158,10 +165,14 @@ let rec expr_uses_cardinality (e : Normalized_ast.expr) : bool =
       expr_uses_cardinality domain || expr_uses_cardinality body
 
 let action_uses_cardinality (a : action) : bool =
+  let accessor_uses = function
+    | Generic_ast.AccIndex i -> expr_uses_cardinality i
+    | Generic_ast.AccField _ -> false
+  in
   let assignment_uses = function
     | AssignVar (_, e) -> expr_uses_cardinality e
-    | AssignIndex (_, indices, e) ->
-        List.exists expr_uses_cardinality indices || expr_uses_cardinality e
+    | AssignPath (_, path, e) ->
+        List.exists accessor_uses path || expr_uses_cardinality e
   in
   let stack_op_uses = function
     | StackPush (_, _, args) -> List.exists expr_uses_cardinality args
@@ -209,7 +220,7 @@ let compute_unchanged (ir : module_ir) (action : action) : string list =
       | _ -> [])
     @ List.filter_map
         (function
-          | AssignVar (name, _) | AssignIndex (name, _, _) ->
+          | AssignVar (name, _) | AssignPath (name, _, _) ->
               if is_local name then None else Some name)
         action.assignments
   in
@@ -220,7 +231,7 @@ let compute_unchanged (ir : module_ir) (action : action) : string list =
     action.stack_op <> StackNone
     || List.exists
          (function
-           | AssignVar (name, _) | AssignIndex (name, _, _) -> is_local name)
+           | AssignVar (name, _) | AssignPath (name, _, _) -> is_local name)
          action.assignments
   in
   if stack_touched then unchanged else "stack" :: unchanged
@@ -257,6 +268,15 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
       (fun (cond, message) -> TApp ("Assert", [ to_tla cond; TStr message ]))
       action.asserts
   in
+  (* An access path becomes an EXCEPT selector path: subscripts index, fields
+     select. *)
+  let selectors_of path =
+    List.map
+      (function
+        | Generic_ast.AccIndex index -> SubSel (to_tla index)
+        | Generic_ast.AccField field -> FieldSel field)
+      path
+  in
   (* Split assignments: globals become their own conjuncts, locals become
      EXCEPT updates of the top frame folded into stack'. *)
   let local_updates =
@@ -264,33 +284,54 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
       (function
         | AssignVar (var, expr) when List.mem var local_vars ->
             Some ([ SubSel (TInt 1); FieldSel var ], to_tla expr)
-        | AssignIndex (var, indices, expr) when List.mem var local_vars ->
+        | AssignPath (var, path, expr) when List.mem var local_vars ->
             Some
-              ( [ SubSel (TInt 1); FieldSel var ]
-                @ List.map (fun index -> SubSel (to_tla index)) indices,
-                to_tla expr )
+              ([ SubSel (TInt 1); FieldSel var ] @ selectors_of path, to_tla expr)
         | _ -> None)
       action.assignments
   in
   let global_assign_conjuncts =
-    List.filter_map
-      (function
-        | AssignVar (var, expr) when not (List.mem var local_vars) ->
-            Some (TBinOp ("=", TPrimed (TId var), to_tla expr))
-        | AssignIndex (var, indices, expr) when not (List.mem var local_vars)
-          ->
-            Some
-              (TBinOp
-                 ( "=",
-                   TPrimed (TId var),
-                   TExcept
-                     ( TId var,
-                       [
-                         ( List.map (fun index -> SubSel (to_tla index)) indices,
-                           to_tla expr );
-                       ] ) ))
-        | _ -> None)
-      action.assignments
+    (* Merge every path update to the same global into one EXCEPT: several
+       field/subscript writes in a single step (e.g. [r.a = x, r.b = y]) must
+       produce one [r' = [r EXCEPT !.a = x, !.b = y]] conjunct, not two
+       conflicting [r' = ...] ones. Variables keep first-occurrence order. *)
+    let is_global var = not (List.mem var local_vars) in
+    let add acc var entry =
+      let rec go = function
+        | [] -> [ (var, [ entry ]) ]
+        | (v, es) :: rest when v = var -> (v, es @ [ entry ]) :: rest
+        | pair :: rest -> pair :: go rest
+      in
+      go acc
+    in
+    let grouped =
+      List.fold_left
+        (fun acc assignment ->
+          match assignment with
+          | AssignVar (var, expr) when is_global var ->
+              add acc var (`Whole (to_tla expr))
+          | AssignPath (var, path, expr) when is_global var ->
+              add acc var (`Update (selectors_of path, to_tla expr))
+          | _ -> acc)
+        [] action.assignments
+    in
+    List.map
+      (fun (var, entries) ->
+        let assigned =
+          (* A whole-variable assignment takes the variable; otherwise the
+             per-field/subscript updates combine into a single EXCEPT. *)
+          match List.find_opt (function `Whole _ -> true | _ -> false) entries with
+          | Some (`Whole v) -> v
+          | _ ->
+              let updates =
+                List.filter_map
+                  (function `Update u -> Some u | `Whole _ -> None)
+                  entries
+              in
+              TExcept (TId var, updates)
+        in
+        TBinOp ("=", TPrimed (TId var), assigned))
+      grouped
   in
   let base =
     if local_updates = [] then stack_self

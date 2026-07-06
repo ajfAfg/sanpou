@@ -17,6 +17,33 @@ let binder_of (e : Surface_ast.expr) ~what : id * Surface_ast.expr =
       raise
         (Parse_error
            (e.loc, "a " ^ what ^ " requires a binder of the form `x in <set>`"))
+
+(* A record field label must be a plain name. *)
+let label_of (e : Surface_ast.expr) : id =
+  match e.desc with
+  | Var name -> name
+  | _ -> raise (Parse_error (e.loc, "a record field label must be a plain name"))
+
+(* A brace body of `key : value` items is a set comprehension when it is a
+   single `x in <set> : p` (membership key), and a record literal otherwise
+   (every key a field label). Record fields are stored label-sorted so
+   structurally equal records compare equal regardless of source order. *)
+let colon_items_desc (items : (Surface_ast.expr * Surface_ast.expr) list) =
+  match items with
+  | [ ({ desc = BinOp (In, _, _); _ } as key, pred) ] ->
+      let binder, domain = binder_of key ~what:"set comprehension" in
+      SetComp { binder; domain; pred }
+  | _ ->
+      let fields =
+        List.map (fun (key, value) -> (label_of key, value)) items
+      in
+      let labels = List.map fst fields in
+      (match List.find_opt (fun l -> List.length (List.filter (( = ) l) labels) > 1) labels with
+       | Some dup ->
+           let loc = (fst (List.hd items)).loc in
+           raise (Parse_error (loc, "duplicate record field: " ^ dup))
+       | None -> ());
+      Record (List.sort (fun (a, _) (b, _) -> compare a b) fields)
 %}
 
 %token <int> INTV
@@ -27,7 +54,7 @@ let binder_of (e : Surface_ast.expr) ~what : id * Surface_ast.expr =
 %token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT ASSERT FORALL EXISTS EITHER OR WITH
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
-%token SEMI COMMA COLON DOTDOT ARROW
+%token SEMI COMMA COLON DOT DOTDOT ARROW
 %token EOF
 
 (* Precedence is encoded structurally in the stratified expr rules
@@ -49,10 +76,13 @@ let binder_of (e : Surface_ast.expr) ~what : id * Surface_ast.expr =
 %type <Surface_ast.simple_stmt> simple_stmt
 %type <Surface_ast.simple_stmt list> separated_nonempty_list(COMMA, simple_stmt)
 %type <Surface_ast.assign_target> assign_target
+%type <Surface_ast.accessor> accessor
+%type <Surface_ast.accessor list> nonempty_list(accessor)
 %type <Surface_ast.block_stmt> block_stmt if_stmt
 %type <Surface_ast.expr> expr or_expr and_expr comparison_expr range_expr add_expr
-%type <Surface_ast.expr> mult_expr postfix_expr primary_expr subscript_index
-%type <Surface_ast.expr list> nonempty_list(subscript_index)
+%type <Surface_ast.expr> mult_expr postfix_expr primary_expr
+%type <Surface_ast.expr * Surface_ast.expr> colon_item
+%type <(Surface_ast.expr * Surface_ast.expr) list> separated_nonempty_list(COMMA, colon_item)
 %type <Surface_ast.expr list> separated_nonempty_list(COMMA, expr)
 %type <Surface_ast.expr list> loption(separated_nonempty_list(COMMA, expr))
 %type <Generic_ast.id list> separated_nonempty_list(COMMA, ID)
@@ -126,11 +156,12 @@ simple_stmt:
 assign_target:
   | name=ID
       { VarTarget name }
-  | name=ID indices=nonempty_list(subscript_index)
-      { SubscriptTarget (name, indices) }
+  | name=ID path=nonempty_list(accessor)
+      { PathTarget (name, path) }
 
-subscript_index:
-  | LBRACKET index=expr RBRACKET { index }
+accessor:
+  | LBRACKET index=expr RBRACKET { AccIndex index }
+  | DOT field=ID { AccField field }
 
 block_stmt:
   | WHILE LPAREN cond=expr RPAREN LBRACE body=body RBRACE
@@ -195,6 +226,8 @@ postfix_expr:
   | e=primary_expr { e }
   | lhs=postfix_expr LBRACKET index=expr RBRACKET
       { mk $startpos (Subscript (lhs, index)) }
+  | lhs=postfix_expr DOT field=ID
+      { mk $startpos (Field (lhs, field)) }
 
 primary_expr:
   | MINUS rhs=primary_expr { mk $startpos (UnOp (Neg, rhs)) }
@@ -234,9 +267,10 @@ primary_expr:
   | LBRACE e=expr ARROW value=expr RBRACE
       { let binder, domain = binder_of e ~what:"map initializer" in
         mk $startpos (MapInit { binder; domain; value }) }
-  | LBRACE e=expr COLON pred=expr RBRACE
-      { let binder, domain = binder_of e ~what:"set comprehension" in
-        mk $startpos (SetComp { binder; domain; pred }) }
+  (* `key : value` items are a set comprehension (single membership key) or a
+     record literal (field labels); classified in [colon_items_desc]. *)
+  | LBRACE items=separated_nonempty_list(COMMA, colon_item) RBRACE
+      { mk $startpos (colon_items_desc items) }
   | LPAREN RPAREN
       { mk $startpos (Tuple []) }
   | LPAREN e=expr COMMA RPAREN
@@ -253,3 +287,6 @@ primary_expr:
       { mk $startpos (Sequence [ e ]) }
   | LPAREN e=expr RPAREN
       { e }
+
+colon_item:
+  | key=expr COLON value=expr { (key, value) }

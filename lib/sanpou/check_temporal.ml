@@ -46,6 +46,8 @@ let rec temporal_occurrence (props : id list) (e : Resolved_ast.expr) :
   | BinOp (_, lhs, rhs) -> first [ lhs; rhs ]
   | App (_, args) -> first args
   | Subscript (lhs, index) -> first [ lhs; index ]
+  | Field (record, _) -> find record
+  | Record fields -> first (List.map snd fields)
   | Range (lo, hi) -> first [ lo; hi ]
   | MapInit { domain; value; _ } -> first [ domain; value ]
   | Tuple elems | Sequence elems | SetLit elems -> first elems
@@ -64,7 +66,10 @@ let check_stmt props (stmt : Resolved_ast.simple_stmt) : unit =
   | Assign (target, value) ->
       (match target with
       | VarTarget _ -> ()
-      | SubscriptTarget (_, indices) -> List.iter check indices);
+      | PathTarget (_, path) ->
+          List.iter
+            (function AccIndex e -> check e | AccField _ -> ())
+            path);
       check value
   | Call (_, args) -> List.iter check args
   | Return value | Await value | Assert value -> check value

@@ -17,6 +17,8 @@ type type_error =
   | Recursive_type
   | Callable_as_value of Generic_ast.id
   | Not_a_procedure of Generic_ast.id
+  | Not_a_record of ty
+  | Unknown_field of Generic_ast.id * ty
 
 exception Type_error of type_error * Generic_ast.loc
 

@@ -56,7 +56,7 @@ let extract_var_name (e : Sanpou.Resolved_ast.expr) =
 
 let extract_assign_name (stmt : Sanpou.Resolved_ast.simple_stmt) =
   match stmt.desc with
-  | Assign (VarTarget i, _) | Assign (SubscriptTarget (i, _), _) -> i.name
+  | Assign (VarTarget i, _) | Assign (PathTarget (i, _), _) -> i.name
   | _ -> failwith "expected Assign"
 
 let extract_assign_value (stmt : Sanpou.Resolved_ast.simple_stmt) =

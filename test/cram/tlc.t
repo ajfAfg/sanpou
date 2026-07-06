@@ -258,3 +258,26 @@ correctly under TLC.
   $ sanpou compile str_check.snp -o str_check
   $ tlc str_check str_check
   No error has been found
+
+Records end-to-end: a record-valued variable is read in the loop guard and
+two of its fields are updated in one step (a single EXCEPT). The process runs
+to completion, so termination confirms the emitted record literal, field
+access, and multi-field EXCEPT all check under TLC.
+
+  $ cat > rec_check.snp <<'EOF'
+  > mod rec_check {
+  >   var s = {phase: "idle", n: 0};
+  >   procedure f() {
+  >     while (s.phase == "idle") {
+  >       s.phase = "busy",
+  >       s.n = s.n + 1;
+  >     }
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json rec_check.json
+  $ sanpou compile rec_check.snp -o rec_check
+  $ tlc rec_check rec_check
+  No error has been found

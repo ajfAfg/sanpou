@@ -133,11 +133,34 @@ A map initializer or set comprehension whose binder is not a plain
 
   $ cat > bad_comp.snp <<'EOF'
   > mod m {
-  >   def d = { 1 : true };
+  >   def d = { a + b in s : true };
   > }
   > EOF
   $ sanpou compile bad_comp.snp -o out
   bad_comp.snp:2:13: a set comprehension requires a binder of the form `x in <set>`
+  [1]
+
+A `key : value` brace form with a non-membership key is a record literal, so a
+key that is not a plain field label is diagnosed as such:
+
+  $ cat > bad_field.snp <<'EOF'
+  > mod m {
+  >   def d = { 1 : true };
+  > }
+  > EOF
+  $ sanpou compile bad_field.snp -o out
+  bad_field.snp:2:13: a record field label must be a plain name
+  [1]
+
+A record with a repeated field is rejected:
+
+  $ cat > dup_field.snp <<'EOF'
+  > mod m {
+  >   def d = { a: 1, a: 2 };
+  > }
+  > EOF
+  $ sanpou compile dup_field.snp -o out
+  dup_field.snp:2:13: duplicate record field: a
   [1]
 
 Lexical error:

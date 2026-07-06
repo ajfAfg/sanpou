@@ -26,6 +26,7 @@ type callee = Fun of Generic_ast.id | Proc of Generic_ast.id
 let callee_name = function Fun name | Proc name -> name
 
 type expr = (ident, callee) Generic_ast.expr
+type accessor = (ident, callee) Generic_ast.accessor
 type assign_target = (ident, callee) Generic_ast.assign_target
 type simple_stmt = (ident, callee) Generic_ast.simple_stmt
 type step = (ident, callee) Generic_ast.step
