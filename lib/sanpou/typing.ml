@@ -49,6 +49,7 @@ type type_error =
   | Non_constant_process_domain of id
   | Control_transfer_not_last of string
   | Process_root_takes_params of id * int
+  | Duplicate_module of id
 
 exception Type_error of type_error * loc
 
@@ -781,7 +782,18 @@ let check_module (m : Surface_ast.module_def) : unit =
 
 (* ===== Check a program ===== *)
 
-let check (prog : Surface_ast.program) : unit = List.iter check_module prog
+let check (prog : Surface_ast.program) : unit =
+  (* Each module becomes its own <name>.tla output file, so a duplicate
+     would silently overwrite the previous module's spec. *)
+  let (_ : id list) =
+    List.fold_left
+      (fun seen (m : Surface_ast.module_def) ->
+        if List.mem m.mod_name seen then
+          type_error (Duplicate_module m.mod_name) m.mod_loc;
+        m.mod_name :: seen)
+      [] prog
+  in
+  List.iter check_module prog
 
 (* ===== Pretty printing for error messages ===== *)
 
@@ -866,6 +878,7 @@ let string_of_type_error = function
          (the process wrapper calls it without arguments)"
         id n
         (if n = 1 then "" else "s")
+  | Duplicate_module id -> Printf.sprintf "module %s is already defined" id
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
   | Return_type_mismatch -> "return type mismatch"
