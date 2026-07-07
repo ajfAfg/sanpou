@@ -209,6 +209,28 @@ An assert that holds is silent; one that fails halts TLC with an error
   $ tlc assert_fail assert_fail
   The first argument of Assert evaluated to FALSE
 
+Binders shadowing a module-level name: TLA+ allows no shadowing, so the fun
+parameter and comprehension binder named like the global x are renamed on
+emission; the spec parses and the guard computes through them.
+
+  $ cat > shadow.snp <<'EOF'
+  > mod shadow {
+  >   def double(x) = x * 2;
+  >   def s = { x in 1..3 : x > 0 };
+  >   var x = 0;
+  >   procedure f() {
+  >     await double(3) == 6 && forall (x in s) { x >= 1 },
+  >     x = 1;
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json shadow.json
+  $ sanpou compile shadow.snp -o shadow
+  $ tlc shadow shadow
+  No error has been found
+
 Sets end-to-end: two processes drawn from a set literal each unblock only if
 the set operations (union, comprehension, cardinality, difference, subseteq)
 and membership all evaluate as expected, then run to completion. Termination

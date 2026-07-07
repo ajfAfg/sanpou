@@ -6,7 +6,15 @@ open Generic_ast
    procedure body) gets a unique TLA-safe name; each variable position in
    the result carries a [Resolved_ast.ident] pairing that name with the
    source name for display, so no rename table needs to travel with the
-   tree. Module-level expressions are not renamed and convert verbatim.
+   tree.
+
+   Module-level binders (fun-def parameters, quantifier/comprehension/map
+   binders in module-level expressions) keep their source name — they are
+   user-visible in the emitted spec — unless keeping it would emit invalid
+   TLA+: TLA+ allows no shadowing at all, so a bound identifier or operator
+   parameter that reuses any module-level name (all of which end up as
+   top-level TLA+ symbols, VARIABLES included, regardless of source order)
+   or an enclosing binder's name is renamed with the same [__N] scheme.
 
    Applied callees are resolved at the same time, lexically: the module's
    definitions seen so far shadow the builtins, which form the outermost
@@ -22,18 +30,28 @@ type state = {
       (* module-level definitions seen so far; non-callables map to [Fun]
          (applying one is a type error caught before this pass) *)
   rename_binders : bool;
-      (* binders in module-level expressions keep their source name *)
+      (* procedure bodies rename every binder; module-level expressions
+         rename only on collision *)
+  module_names : id list;
+      (* every module-level name of the enclosing module, position
+         independent: they all become top-level TLA+ symbols *)
 }
 
-let fresh st name : Resolved_ast.ident =
-  if not st.rename_binders then Resolved_ast.ident name
-  else begin
+(* [env] holds the bindings in scope at the binder site: its domain is
+   exactly the enclosing binder (and, in procedures, local) names. *)
+let fresh st env name : Resolved_ast.ident =
+  let rec rename () =
     incr st.var_name_counter;
-    {
-      name = name ^ "__" ^ string_of_int !(st.var_name_counter);
-      original = name;
-    }
-  end
+    let candidate = name ^ "__" ^ string_of_int !(st.var_name_counter) in
+    if List.mem candidate st.module_names then rename ()
+    else { Resolved_ast.name = candidate; original = name }
+  in
+  if
+    st.rename_binders
+    || List.mem name st.module_names
+    || List.mem_assoc name env
+  then rename ()
+  else Resolved_ast.ident name
 
 (* [env] maps a source name to its renamed ident; names bound outside the
    procedure (globals, constants, functions) pass through unrenamed. *)
@@ -71,7 +89,7 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
         Record (List.map (fun (l, e) -> (l, alpha_expr env st e)) fields)
     | Range (lo, hi) -> Range (alpha_expr env st lo, alpha_expr env st hi)
     | MapInit { binder; domain; value } ->
-        let binder' = fresh st binder in
+        let binder' = fresh st env binder in
         let env' = (binder, binder') :: env in
         MapInit
           {
@@ -83,7 +101,7 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
     | Sequence elems -> Sequence (List.map (alpha_expr env st) elems)
     | SetLit elems -> SetLit (List.map (alpha_expr env st) elems)
     | SetComp { binder; domain; pred } ->
-        let binder' = fresh st binder in
+        let binder' = fresh st env binder in
         let env' = (binder, binder') :: env in
         SetComp
           {
@@ -97,7 +115,7 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
             alpha_expr env st then_e,
             alpha_expr env st else_e )
     | Quant { quant; binder; domain; body } ->
-        let binder' = fresh st binder in
+        let binder' = fresh st env binder in
         let env' = (binder, binder') :: env in
         Quant
           {
@@ -144,7 +162,7 @@ let rec alpha_step st env (step : Surface_ast.step) : Resolved_ast.step =
     | EmptyStep -> EmptyStep
     | BlockStep stmt -> BlockStep (alpha_block_stmt st env stmt)
     | WithStep { binder; domain; stmts } ->
-        let binder' = fresh st binder in
+        let binder' = fresh st env binder in
         let env' = (binder, binder') :: env in
         WithStep
           {
@@ -174,7 +192,7 @@ and alpha_body st env (steps : Surface_ast.body) : Resolved_ast.body =
   match steps with
   | [] -> []
   | { desc = VarStep (name, value); loc } :: rest ->
-      let renamed = fresh st name in
+      let renamed = fresh st env name in
       let alpha_value = alpha_expr env st value in
       let new_env = (name, renamed) :: env in
       { desc = VarStep (renamed, alpha_value); loc }
@@ -185,10 +203,27 @@ and alpha_body st env (steps : Surface_ast.body) : Resolved_ast.body =
 
 let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
   let counter = ref 0 in
-  (* Module-level expressions are never renamed; their names display as
-     themselves. *)
+  (* All module-level names, collected up front: TLA+ scopes them over the
+     whole module (VARIABLES and defs alike), so a binder collides with a
+     name declared *after* it in the source just the same. *)
+  let module_names =
+    List.concat_map
+      (fun (item : Surface_ast.item) ->
+        match item.desc with
+        | AtomDecl { names } -> names
+        | ConstDef { name; _ }
+        | PropDef { name; _ }
+        | FunDef { name; _ }
+        | VarDecl { name; _ }
+        | ProcDef { name; _ }
+        | Process { name; _ } ->
+            [ name ])
+      m.items
+  in
+  (* Module-level binders keep their source name unless it collides (see
+     [fresh]); their names display as themselves. *)
   let module_st defs =
-    { var_name_counter = counter; defs; rename_binders = false }
+    { var_name_counter = counter; defs; rename_binders = false; module_names }
   in
   let items_rev, _ =
     List.fold_left
@@ -210,9 +245,24 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
                 (name, Resolved_ast.Fun name) :: defs )
           | FunDef { name; params; body_expr } ->
               (* The body sees the preceding definitions, not the function
-                 itself: defs are not recursive, matching the type
-                 checker. *)
-              ( FunDef { name; params; body_expr = plain body_expr },
+                 itself: defs are not recursive, matching the type checker.
+                 Params become TLA+ operator parameters, so like any
+                 module-level binder they are renamed on collision. *)
+              let env_rev, params_rev =
+                List.fold_left
+                  (fun (env_acc, params_acc) param ->
+                    let renamed = fresh (module_st defs) env_acc param in
+                    ( (param, renamed) :: env_acc,
+                      renamed.Resolved_ast.name :: params_acc ))
+                  ([], []) params
+              in
+              ( FunDef
+                  {
+                    name;
+                    params = List.rev params_rev;
+                    body_expr =
+                      alpha_expr (List.rev env_rev) (module_st defs) body_expr;
+                  },
                 (name, Resolved_ast.Fun name) :: defs )
           | VarDecl { name; init } ->
               let init =
@@ -229,12 +279,17 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
                  the type checker's environment. *)
               let defs = (name, Resolved_ast.Proc name) :: defs in
               let pst =
-                { var_name_counter = counter; defs; rename_binders = true }
+                {
+                  var_name_counter = counter;
+                  defs;
+                  rename_binders = true;
+                  module_names;
+                }
               in
               let env_rev, params_rev =
                 List.fold_left
                   (fun (env_acc, params_acc) param ->
-                    let renamed = fresh pst param in
+                    let renamed = fresh pst env_acc param in
                     ((param, renamed) :: env_acc, renamed :: params_acc))
                   ([], []) params
               in

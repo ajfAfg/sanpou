@@ -58,6 +58,30 @@ let () =
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "SF_vars(foo(self))" tla;
               has_not_in "WF_vars" tla);
+          Alcotest.test_case "module-level binders renamed only on collision"
+            `Quick (fun () ->
+              (* TLA+ allows no shadowing: a fun param or bound identifier
+                 reusing any module-level name (position-independent — the
+                 var comes last here) or an enclosing binder's name is
+                 renamed; everything else keeps its source name *)
+              let ast =
+                parse
+                  "mod m {\n\
+                   def double(x) = x * 2;\n\
+                   def s = { x in 1..3 : x > 0 };\n\
+                   def q = forall (i in s) { exists (i in 1..3) { i >= 1 } };\n\
+                   def keep = { j in 1..2 -> j };\n\
+                   var x = 0;\n\
+                   procedure f() { x = 1; return (); }\n\
+                   process ps = f in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "double(x__1) == (x__1 * 2)";
+              has "s == {x__2 \\in 1..3 : (x__2 > 0)}";
+              has "(\\A i \\in s: (\\E i__3 \\in 1..3: (i__3 >= 1)))";
+              has "keep == [j \\in 1..2 |-> j]");
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
               let ast =
