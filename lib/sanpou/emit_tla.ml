@@ -669,22 +669,28 @@ let runtime_proc_decls proc_entry_labels frame_fields (ir : module_ir)
       @ [ DSeparator ])
     all_runtime_procs
 
-let termination_decls : tla_decl list =
-  let all_done =
-    TForall
-      ( "self",
-        TId "ProcSet",
-        TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr Ir.done_label) )
-  in
+(* [Terminating] plays two roles: as a stuttering disjunct of Next it keeps
+   TLC's deadlock check from reporting normal completion (all processes at
+   Done) as a deadlock — PlusCal emits it unconditionally for the same
+   reason — and it is the base of the [Termination] liveness property,
+   which is only defined when the termination check asks for it. *)
+let all_done =
+  TForall
+    ( "self",
+      TId "ProcSet",
+      TBinOp ("=", TSubscript (TId "pc", TId "self"), TStr Ir.done_label) )
+
+let terminating_decls : tla_decl list =
   [
     DOpDef
       ( "Terminating",
         [],
         TConj (Block, [ all_done; TUnchangedExpr (TId "vars") ]) );
     DSeparator;
-    DOpDef ("Termination", [], TFinally all_done);
-    DSeparator;
   ]
+
+let termination_property_decls : tla_decl list =
+  [ DOpDef ("Termination", [], TFinally all_done); DSeparator ]
 
 let next_decls config (ir : module_ir) : tla_decl list =
   let procedure_disjuncts =
@@ -709,18 +715,16 @@ let next_decls config (ir : module_ir) : tla_decl list =
                TApp (p.wrapper.proc_name, [ TId "self" ]) )))
       ir.processes
   in
-  let termination_disjuncts =
-    if config.checks.termination then [ TId "Terminating" ] else []
-  in
-  (if config.checks.termination then termination_decls else [])
+  terminating_decls
+  @ (if config.checks.termination then termination_property_decls else [])
   @ [
       DOpDef
         ( "Next",
           [],
           TDisj
             ( Block,
-              procedure_disjuncts @ process_disjuncts @ termination_disjuncts )
-        );
+              procedure_disjuncts @ process_disjuncts @ [ TId "Terminating" ]
+            ) );
       DSeparator;
     ]
 
