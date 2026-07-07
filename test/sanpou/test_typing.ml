@@ -621,6 +621,15 @@ let () =
                     }
                     process p = f in 1..1;
                   }|});
+          test_case "process root with parameters" `Quick (fun () ->
+              (* the wrapper pushes no arguments, so params would start as
+                 the null sentinel and crash TLC at runtime *)
+              check_fails
+                {|mod m {
+                    var x = 0;
+                    procedure f(n) { x = n + 1; return (); }
+                    process p = f in 1..1;
+                  }|});
           test_case "compare bool" `Quick (fun () ->
               check_fails "mod m { def x = true < 1; }");
           test_case "unbound var" `Quick (fun () ->

@@ -48,6 +48,7 @@ type type_error =
   | Conflicting_assignments of id
   | Non_constant_process_domain of id
   | Control_transfer_not_last of string
+  | Process_root_takes_params of id * int
 
 exception Type_error of type_error * loc
 
@@ -742,6 +743,18 @@ let check_module (m : Surface_ast.module_def) : unit =
                reach the emitter's procedure table and crash. *)
             if not (List.mem proc proc_names) then
               type_error (Not_a_procedure proc) item.loc;
+            (* ... and a nullary one: the wrapper pushes an empty argument
+               list, so parameters would silently start as the null frame
+               sentinel and blow up inside TLC. *)
+            (match List.assoc_opt proc env with
+            | Some (TyScheme (_, ty)) -> (
+                match repr ty with
+                | TyFun (_ :: _ as params, _) ->
+                    type_error
+                      (Process_root_takes_params (proc, List.length params))
+                      item.loc
+                | _ -> ())
+            | None -> ());
             (* The ID set's element type is [self]'s type, shared across the
                module (all processes must agree). *)
             unify domain.loc
@@ -837,6 +850,12 @@ let string_of_type_error = function
         "%s must be the last statement of its step: the following statements \
          merge into the same atomic action and the transfer would discard them"
         kind
+  | Process_root_takes_params (id, n) ->
+      Printf.sprintf
+        "%s takes %d parameter%s; a process root procedure must take none \
+         (the process wrapper calls it without arguments)"
+        id n
+        (if n = 1 then "" else "s")
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
   | Return_type_mismatch -> "return type mismatch"
