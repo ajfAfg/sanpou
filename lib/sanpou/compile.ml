@@ -24,6 +24,30 @@ let parse (source : string) : (Surface_ast.program, diagnostic) result =
   | exception Lexer.Error message ->
       Error { loc = loc_of_position (Lexing.lexeme_start_p lexbuf); message }
 
+(* A module with no processes has no behavior: ProcSet, Next, and Spec would
+   be degenerate (previously even syntactically invalid — an empty
+   [ProcSet ==]), and TLC would have nothing to check. Diagnosed here rather
+   than in Typing so pure-definition modules remain checkable in isolation. *)
+let check_has_processes (prog : Surface_ast.program) : diagnostic option =
+  List.find_map
+    (fun (m : Surface_ast.module_def) ->
+      if
+        List.exists
+          (fun (item : Surface_ast.item) ->
+            match item.desc with Generic_ast.Process _ -> true | _ -> false)
+          m.items
+      then None
+      else
+        Some
+          {
+            loc = m.mod_loc;
+            message =
+              Printf.sprintf
+                "module %s defines no processes; there is no behavior to check"
+                m.mod_name;
+          })
+    prog
+
 let compile ?config (source : string) : (output list, diagnostic) result =
   match parse source with
   | Error d -> Error d
@@ -32,6 +56,9 @@ let compile ?config (source : string) : (output list, diagnostic) result =
       | exception Typing.Type_error (err, loc) ->
           Error { loc; message = Typing.string_of_type_error err }
       | () -> (
+          match check_has_processes prog with
+          | Some d -> Error d
+          | None -> (
           let resolved = Alpha_convert.transform prog in
           match
             Check_temporal.check resolved;
@@ -50,4 +77,4 @@ let compile ?config (source : string) : (output list, diagnostic) result =
                        tla_module = Emit_tla.generate_module ?config ir;
                        source_map = Source_map.extract ir;
                      })
-                   irs)))
+                   irs))))

@@ -204,6 +204,18 @@ Names the emitter generates (or pulls in via EXTENDS) are reserved:
   $ sanpou compile reserved.snp -o out
   reserved.snp:2:3: pc is reserved: it collides with a name in the emitted TLA+ module
   [1]
+A module with no processes has no behavior to check (and its ProcSet, Next,
+and Spec would be degenerate), so it is diagnosed:
+
+  $ cat > no_process.snp <<'EOF'
+  > mod m {
+  >   def x = 1;
+  >   procedure f() { return (); }
+  > }
+  > EOF
+  $ sanpou compile no_process.snp -o out
+  no_process.snp:1:1: module m defines no processes; there is no behavior to check
+  [1]
 
 A process ID set must be constant — the emitted spec fixes ProcSet and the
 domain of pc/stack at Init, so a domain reading mutable state would break
