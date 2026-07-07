@@ -181,6 +181,23 @@ let () =
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "((x >= 0) /\\ (y >= 0))" tla);
+          Alcotest.test_case "nullary def applications render bare" `Quick
+            (fun () ->
+              (* TLA+ has no f() syntax; a zero-arity operator is referenced
+                 by name *)
+              let ast =
+                parse
+                  "mod n {\n\
+                   def f() = 1;\n\
+                   var ok = 0;\n\
+                   procedure main() { ok = f() + 1; return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "f == 1" tla;
+              has_in "ok' = (f + 1)" tla;
+              has_not_in "f()" tla);
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
               let ast =
