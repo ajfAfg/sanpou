@@ -234,6 +234,24 @@ TLC at runtime the moment the state changes:
   $ sanpou compile nc_domain.snp -o out
   nc_domain.snp:7:23: a process ID set must be constant, but n is mutable state (or depends on it)
   [1]
+A step is one atomic action with a single control-transfer slot, so a call,
+return, break, or continue must be the step's final statement — an earlier
+one would be silently overwritten:
+
+  $ cat > two_calls.snp <<'EOF'
+  > mod m {
+  >   procedure a() { return (); }
+  >   procedure b() { return (); }
+  >   procedure f() {
+  >     a(), b();
+  >     return ();
+  >   }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ sanpou compile two_calls.snp -o out
+  two_calls.snp:5:5: a procedure call must be the last statement of its step: the following statements merge into the same atomic action and the transfer would discard them
+  [1]
 
 Lexical error:
 
