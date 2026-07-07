@@ -3,7 +3,6 @@ exception Error of string
 
 let reservedWords = [
   ("def", Parser.DEF);
-  ("atom", Parser.ATOM);
   ("var", Parser.VAR);
   ("procedure", Parser.PROCEDURE_KW);
   ("property", Parser.PROPERTY);
@@ -47,6 +46,9 @@ rule main = parse
     { Parser.STRINGV s }
 | '"' [^ '"' '\n']* ('\n' | eof)
     { raise (Error "Unterminated string literal (strings cannot span lines)") }
+(* An atom literal: an opaque model value, its own syntactic namespace. *)
+| '`' (['a'-'z' 'A'-'Z'] ['a'-'z' 'A'-'Z' '0'-'9' '_']* as s)
+    { Parser.ATOMV s }
 | "=="
     { Parser.EQEQ }
 | "!="

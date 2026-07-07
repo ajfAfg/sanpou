@@ -163,40 +163,28 @@ A record with a repeated field is rejected:
   dup_field.snp:2:13: duplicate record field: a
   [1]
 
-Module-level names shadow sequentially (alpha-conversion renames the
-shadowed declarations apart), except atoms: an atom's name is the model
-value's identity in traces and the TLC config, so it cannot be shadowed
-or reused in either direction:
+Atoms are literals in their own syntactic namespace, so they cannot clash
+with declarations; an atom whose text is an emitter-reserved name cannot be
+renamed away (the text is the model value's identity), so it is rejected:
 
-  $ cat > atom_clash.snp <<'EOF'
+  $ cat > atom_reserved.snp <<'EOF'
   > mod m {
-  >   atom A;
-  >   def A = 1;
+  >   def x = `defaultInitValue;
   > }
   > EOF
-  $ sanpou compile atom_clash.snp -o out
-  atom_clash.snp:3:3: A collides with an atom of the same name: an atom's name is its identity (in traces and the TLC config), so it cannot be shadowed or reused
-  [1]
-
-  $ cat > atom_clash2.snp <<'EOF'
-  > mod m {
-  >   def A = 1;
-  >   atom A;
-  > }
-  > EOF
-  $ sanpou compile atom_clash2.snp -o out
-  atom_clash2.snp:3:3: A collides with an atom of the same name: an atom's name is its identity (in traces and the TLC config), so it cannot be shadowed or reused
+  $ sanpou compile atom_reserved.snp -o out
+  atom_reserved.snp:2:11: defaultInitValue is reserved: it collides with a name in the emitted TLA+ module
   [1]
 
 Names the emitter generates (or pulls in via EXTENDS) are reserved:
 
   $ cat > reserved.snp <<'EOF'
   > mod m {
-  >   atom defaultInitValue;
+  >   var pc = 0;
   > }
   > EOF
   $ sanpou compile reserved.snp -o out
-  reserved.snp:2:3: defaultInitValue is reserved: it collides with a name in the emitted TLA+ module
+  reserved.snp:2:3: pc is reserved: it collides with a name in the emitted TLA+ module
   [1]
 
 Lexical error:

@@ -351,6 +351,29 @@ access, and multi-field EXCEPT all check under TLC.
   $ tlc rec_check rec_check
   No error has been found
 
+Atoms and declarations share no namespace: a def named like a used atom is
+renamed apart while the atom keeps its name, and both survive TLC.
+
+  $ cat > atom_ns.snp <<'EOF'
+  > mod atom_ns {
+  >   def red = 999;
+  >   var seen = 0;
+  >   var tag = `nobody;
+  >   procedure main() {
+  >     seen = red,
+  >     tag = `red;
+  >     await seen == 999 && tag == `red,
+  >     tag = `nobody;
+  >     return ();
+  >   }
+  >   fair process p = main in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json atom_ns.json
+  $ sanpou compile atom_ns.snp -o atom_ns
+  $ tlc atom_ns atom_ns
+  No error has been found
+
 Model values end-to-end: a state variable holds opaque atoms, transitions on
 atom-equality guards and set membership, and runs to completion. TLC assigns
 each atom a model value (from the generated .cfg), so termination confirms the
@@ -358,13 +381,12 @@ emitted CONSTANTs compare as distinct opaque values.
 
   $ cat > mv_check.snp <<'EOF'
   > mod mv_check {
-  >   atom Idle, Busy;
-  >   def states = {Idle, Busy};
-  >   var state = Idle;
+  >   def states = {`idle, `busy};
+  >   var state = `idle;
   >   procedure f() {
-  >     while (state == Idle) {
+  >     while (state == `idle) {
   >       await state in states,
-  >       state = Busy;
+  >       state = `busy;
   >     }
   >     return ();
   >   }

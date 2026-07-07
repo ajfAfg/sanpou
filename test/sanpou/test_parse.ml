@@ -29,7 +29,6 @@ let return_ e = node (Return e)
 let await_ e = node (Await e)
 let simple_step stmts = node (SimpleStep stmts)
 let empty_step = node EmptyStep
-let atom_decl names = node (AtomDecl { names })
 let const_def x e = node (ConstDef { name = x; value = e })
 let fun_def f ps e = node (FunDef { name = f; params = ps; body_expr = e })
 let proc_def f ps body = node (ProcDef { name = f; params = ps; body })
@@ -153,16 +152,18 @@ let () =
           test_case "empty string" `Quick (fun () ->
               check_items {|def x = "";|} [ const_def "x" (strlit "") ]);
         ] );
-      ( "atom_declaration",
+      ( "atom_literals",
         [
-          test_case "single atom" `Quick (fun () ->
-              check_items "atom NoValue;" [ atom_decl [ "NoValue" ] ]);
-          test_case "multiple atoms" `Quick (fun () ->
-              check_items "atom Red, Green, Blue;"
-                [ atom_decl [ "Red"; "Green"; "Blue" ] ]);
-          test_case "atom is referenced as a plain name" `Quick (fun () ->
-              check_items "atom A; def x = A;"
-                [ atom_decl [ "A" ]; const_def "x" (var "A") ]);
+          test_case "atom literal" `Quick (fun () ->
+              check_items "def x = `noValue;"
+                [ const_def "x" (node (AtomLit "noValue")) ]);
+          test_case "atoms in a set" `Quick (fun () ->
+              check_items "def s = {`red, `green};"
+                [
+                  const_def "s"
+                    (node
+                       (SetLit [ node (AtomLit "red"); node (AtomLit "green") ]));
+                ]);
         ] );
       ( "record_vs_comprehension",
         [

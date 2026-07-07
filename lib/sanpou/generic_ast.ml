@@ -51,6 +51,10 @@ and ('n, 'c) expr_desc =
   | IntLit of int
   | BoolLit of bool
   | StrLit of string
+  | AtomLit of id
+      (* an opaque model value, written [`name]: no declaration, its own
+         syntactic namespace, only equality — two atoms are equal iff their
+         names are; the name is the model value's identity in traces *)
   | Var of 'n
   | Self
   | UnOp of unop * ('n, 'c) expr
@@ -152,9 +156,6 @@ type ('n, 'c) var_init =
 type ('n, 'c) item = ('n, 'c) item_desc node
 
 and ('n, 'c) item_desc =
-  | AtomDecl of { names : id list }
-      (* opaque model values: each name is a distinct constant that compares
-         unequal to every other value; declared with [atom a, b, c;] *)
   | ConstDef of { name : id; value : ('n, 'c) expr }
   | PropDef of { name : id; value : ('n, 'c) expr }
     (* a temporal property: the only place temporal operators may appear *)
@@ -187,6 +188,7 @@ let rec map_expr (f : 'n -> 'm) (g : 'c -> 'd) (e : ('n, 'c) expr) :
     | IntLit v -> IntLit v
     | BoolLit b -> BoolLit b
     | StrLit s -> StrLit s
+    | AtomLit a -> AtomLit a
     | Var n -> Var (f n)
     | Self -> Self
     | UnOp (op, rhs) -> UnOp (op, map_expr f g rhs)

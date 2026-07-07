@@ -78,6 +78,7 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
     | IntLit v -> IntLit v
     | BoolLit b -> BoolLit b
     | StrLit s -> StrLit s
+    | AtomLit a -> AtomLit a
     | Self -> Self
     | Var name -> Var (resolve env name)
     | UnOp (op, rhs) -> UnOp (op, alpha_expr env st rhs)
@@ -217,11 +218,10 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
      whole module (VARIABLES and defs alike), so a binder collides with a
      name declared *after* it in the source just the same. Duplicates are
      kept — their multiplicity drives the shadow renaming below. *)
-  let module_names =
+  let declared_names =
     List.concat_map
       (fun (item : Surface_ast.item) ->
         match item.desc with
-        | AtomDecl { names } -> names
         | ConstDef { name; _ }
         | PropDef { name; _ }
         | FunDef { name; _ }
@@ -231,6 +231,87 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
             [ name ])
       m.items
   in
+  (* Every atom literal used in the module claims its text as a TLA+ name
+     (the model value's identity), so atom texts join the collision set:
+     a declaration or binder of the same name renames apart, never the
+     atom. Deduplicated, so [total_count] still counts declarations plus
+     at most one atom claim. *)
+  let atom_texts =
+    let texts = ref [] in
+    let rec walk (e : Surface_ast.expr) =
+      match e.desc with
+      | AtomLit a -> if not (List.mem a !texts) then texts := a :: !texts
+      | IntLit _ | BoolLit _ | StrLit _ | Var _ | Self -> ()
+      | UnOp (_, e1) -> walk e1
+      | BinOp (_, a, b) | Range (a, b) | Subscript (a, b) ->
+          walk a;
+          walk b
+      | Field (r, _) -> walk r
+      | Record fields -> List.iter (fun (_, e) -> walk e) fields
+      | App (_, args) | Builtin (_, args) | Tuple args | Sequence args
+      | SetLit args ->
+          List.iter walk args
+      | MapInit { domain; value; _ } ->
+          walk domain;
+          walk value
+      | SetComp { domain; pred; _ } ->
+          walk domain;
+          walk pred
+      | IfExpr (a, b, c) ->
+          walk a;
+          walk b;
+          walk c
+      | Quant { domain; body; _ } ->
+          walk domain;
+          walk body
+    in
+    let walk_stmt (stmt : Surface_ast.simple_stmt) =
+      match stmt.desc with
+      | Assign (target, value) ->
+          (match target with
+          | VarTarget _ -> ()
+          | PathTarget (_, path) ->
+              List.iter
+                (function AccIndex e -> walk e | AccField _ -> ())
+                path);
+          walk value
+      | Call (_, args) -> List.iter walk args
+      | Return e | Await e | Assert e -> walk e
+      | Break | Continue -> ()
+    in
+    let rec walk_body (steps : Surface_ast.body) =
+      List.iter
+        (fun (step : Surface_ast.step) ->
+          match step.desc with
+          | SimpleStep stmts -> List.iter walk_stmt stmts
+          | EmptyStep -> ()
+          | VarStep (_, value) -> walk value
+          | WithStep { domain; stmts; _ } ->
+              walk domain;
+              List.iter walk_stmt stmts
+          | BlockStep (While { cond; body }) ->
+              walk cond;
+              walk_body body
+          | BlockStep (If { cond; body; else_body }) ->
+              walk cond;
+              walk_body body;
+              Option.iter walk_body else_body
+          | BlockStep (Either arms) -> List.iter walk_body arms)
+        steps
+    in
+    List.iter
+      (fun (item : Surface_ast.item) ->
+        match item.desc with
+        | ConstDef { value; _ } | PropDef { value; _ } -> walk value
+        | FunDef { body_expr; _ } -> walk body_expr
+        | VarDecl { init = InitValue e; _ } | VarDecl { init = InitIn e; _ } ->
+            walk e
+        | ProcDef { body; _ } -> walk_body body
+        | Process { domain; _ } -> walk domain)
+      m.items;
+    !texts
+  in
+  let module_names = declared_names @ atom_texts in
   let total_count name =
     List.length (List.filter (( = ) name) module_names)
   in
@@ -266,13 +347,6 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
         let plain = alpha_expr menv mst in
         let desc, defs, menv, seen =
           match item.desc with
-          | AtomDecl { names } ->
-              ( AtomDecl { names },
-                List.fold_left
-                  (fun defs name -> (name, Resolved_ast.Fun name) :: defs)
-                  defs names,
-                menv,
-                seen )
           | ConstDef { name; value } ->
               (* the value sees the preceding bindings, not the new one *)
               let value = plain value in

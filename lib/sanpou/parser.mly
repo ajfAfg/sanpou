@@ -48,9 +48,10 @@ let colon_items_desc (items : (Surface_ast.expr * Surface_ast.expr) list) =
 
 %token <int> INTV
 %token <string> STRINGV
+%token <string> ATOMV
 %token <string> ID
 %token TRUE FALSE
-%token DEF ATOM VAR PROCEDURE_KW PROPERTY MOD FAIR PROCESS IN SELF
+%token DEF VAR PROCEDURE_KW PROPERTY MOD FAIR PROCESS IN SELF
 %token WHILE IF ELSE RETURN BREAK CONTINUE AWAIT ASSERT FORALL EXISTS EITHER OR WITH
 %token PLUS MINUS MULT DIV PERCENT NOT LT GT LTEQ GTEQ EQ EQEQ NEQ ANDAND OROR
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
@@ -98,8 +99,6 @@ module_def:
       { { mod_name; items; mod_loc = loc_of_pos $startpos } }
 
 item:
-  | ATOM names=separated_nonempty_list(COMMA, ID) SEMI
-      { mk $startpos (AtomDecl { names }) }
   | DEF name=ID EQ value=expr SEMI
       { mk $startpos (ConstDef { name; value }) }
   | DEF name=ID LPAREN params=separated_list(COMMA, ID) RPAREN EQ body_expr=expr SEMI
@@ -248,6 +247,7 @@ primary_expr:
       { mk $startpos (Quant { quant = Exists; binder; domain; body }) }
   | value=INTV { mk $startpos (IntLit value) }
   | value=STRINGV { mk $startpos (StrLit value) }
+  | a=ATOMV { mk $startpos (AtomLit a) }
   | TRUE { mk $startpos (BoolLit true) }
   | FALSE { mk $startpos (BoolLit false) }
   | SELF { mk $startpos Self }

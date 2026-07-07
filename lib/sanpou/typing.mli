@@ -20,7 +20,6 @@ type type_error =
   | Not_a_record of ty
   | Unknown_field of Generic_ast.id * ty
   | Self_outside_procedure
-  | Atom_name_clash of Generic_ast.id
   | Reserved_module_name of Generic_ast.id
 
 exception Type_error of type_error * Generic_ast.loc
