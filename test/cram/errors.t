@@ -311,6 +311,17 @@ Unterminated string literal:
   $ sanpou compile unterm.snp -o out
   unterm.snp:2:11: Unterminated string literal (strings cannot span lines)
   [1]
+An integer literal that does not fit the native int is a located lexical
+error (it used to crash the compiler with an uncaught exception):
+
+  $ cat > bigint.snp <<'EOF'
+  > mod m {
+  >   def c = 99999999999999999999999999;
+  > }
+  > EOF
+  $ sanpou compile bigint.snp -o out
+  bigint.snp:2:11: Integer literal out of range
+  [1]
 
 Invalid sidecar config:
 
