@@ -608,7 +608,23 @@ let proc_set_decls (ir : module_ir) : tla_decl list =
       (fun (p : process_ir) -> TParens (expr_to_tla_global p.domain))
       ir.processes
   in
+  (* Init's pc is a CASE over the process domains, so an ID belonging to two
+     processes would silently get the first one's entry label and the other
+     instance would never run. Domains are constant (enforced by Typing), so
+     pairwise-disjointness ASSUMEs make TLC fail fast at startup instead. *)
+  let disjoint_assumes =
+    let rec pairs = function
+      | [] -> []
+      | d :: rest -> List.map (fun d' -> (d, d')) rest @ pairs rest
+    in
+    List.map
+      (fun (d1, d2) ->
+        DAssume
+          (TBinOp ("=", TParens (TBinOp ("\\cap", d1, d2)), TSet [])))
+      (pairs parts)
+  in
   [ DOpDef ("ProcSet", [], TCup parts); DSeparator ]
+  @ match disjoint_assumes with [] -> [] | ds -> ds @ [ DSeparator ]
 
 let init_decls (ir : module_ir) : tla_decl list =
   let pc_init =

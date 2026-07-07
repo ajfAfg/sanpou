@@ -209,6 +209,9 @@ mod example {
   in the set `S` (readable as `self`). `S` may be any set — integers, strings,
   or model values — and `self` takes its element type; all processes in a
   module share one id type. `fair` adds weak fairness, `fair+` strong fairness.
+  The id sets of different processes must be pairwise disjoint; the compiler
+  emits `ASSUME` disjointness checks, so TLC fails fast at startup if they
+  overlap.
 - **Temporal properties**: `property name = ...;` is the only place
   `globally(p)` / `finally(p)` may appear, and only properties may
   reference other properties; list property names in the sidecar config's

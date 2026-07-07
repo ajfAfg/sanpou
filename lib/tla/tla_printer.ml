@@ -130,6 +130,7 @@ let render_decl = function
           lhs ^ " ==\n" ^ indent_lines 4 (render_expr body)
       | _ -> lhs ^ " == " ^ render_expr body)
   | DVariables vars -> "VARIABLES " ^ String.concat ", " vars
+  | DAssume e -> "ASSUME " ^ render_expr e
   | DSeparator -> ""
 
 let render (m : tla_module) : string =

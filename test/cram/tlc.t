@@ -9,7 +9,7 @@ verdict is neither a clean pass nor a deadlock, so failures stay debuggable.
   >   "$SANPOU_JAVA" -cp "$SANPOU_TLA2TOOLS_JAR" -XX:+UseParallelGC tlc2.TLC \
   >     -config "$1/$2.cfg" -metadir "$1/states" -workers 1 "$1/$2.tla" \
   >     > "$1/$2.raw" 2>&1
-  >   verdict=$(grep -Eo 'No error has been found|Deadlock reached|The first argument of Assert evaluated to FALSE' "$1/$2.raw" | head -n 1)
+  >   verdict=$(grep -Eo 'No error has been found|Deadlock reached|The first argument of Assert evaluated to FALSE|Assumption line .* is false' "$1/$2.raw" | head -n 1)
   >   if [ -n "$verdict" ]; then echo "$verdict"; else cat "$1/$2.raw"; fi
   > }
 
@@ -256,6 +256,23 @@ reference resolved to the binding in scope at its position.
   $ sanpou compile shadow_seq.snp -o shadow_seq
   $ tlc shadow_seq shadow_seq
   No error has been found
+Overlapping process ID sets are rejected at TLC startup: Init's pc CASE
+would silently give a shared id to the first process only, so the emitted
+pairwise-disjointness ASSUME fails fast instead.
+
+  $ cat > overlap.snp <<'EOF'
+  > mod overlap {
+  >   var b = 0;
+  >   procedure noop() { return (); }
+  >   procedure g() { b = b + 1; return (); }
+  >   fair process pf = noop in 1..2;
+  >   fair process pg = g in 2..3;
+  > }
+  > EOF
+  $ cp fact.json overlap.json
+  $ sanpou compile overlap.snp -o overlap
+  $ tlc overlap overlap
+  Assumption line 10, col 8 to line 10, col 32 of module overlap is false
 
 Sets end-to-end: two processes drawn from a set literal each unblock only if
 the set operations (union, comprehension, cardinality, difference, subseteq)

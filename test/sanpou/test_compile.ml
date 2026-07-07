@@ -133,6 +133,36 @@ let () =
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "{pc__1 \\in 1..3 : (pc__1 > 0)}" tla;
               has_in "(\\A Len__2 \\in s: (Len__2 >= 1))" tla);
+          Alcotest.test_case "process domains get pairwise disjoint assumes"
+            `Quick (fun () ->
+              (* an id in two domains would silently run only the first
+                 process; the ASSUMEs make TLC fail fast instead *)
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x = 0;\n\
+                   procedure f() { x = 1 - x; }\n\
+                   process a = f in 1..2;\n\
+                   process b = f in 3..4;\n\
+                   process c = f in {9};\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "ASSUME ((1..2) \\cap (3..4)) = {}" tla;
+              has_in "ASSUME ((1..2) \\cap ({9})) = {}" tla;
+              has_in "ASSUME ((3..4) \\cap ({9})) = {}" tla);
+          Alcotest.test_case "single process emits no disjointness assume"
+            `Quick (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x = 0;\n\
+                   procedure f() { x = 1 - x; }\n\
+                   process a = f in 1..2;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_not_in "ASSUME" tla);
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
               let ast =
