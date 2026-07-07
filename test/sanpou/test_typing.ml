@@ -151,6 +151,18 @@ let () =
                 \  procedure foo() { x = 1; x = 2; return (); }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "control transfer last in its step" `Quick (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  procedure g() { return (); }\n\
+                \  procedure foo() {\n\
+                \    while (x < 1) { x = 1, continue; }\n\
+                \    x = 2, g();\n\
+                \    x = 3, return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "assert statement" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -577,6 +589,38 @@ let () =
                 \  }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "two calls in one step" `Quick (fun () ->
+              check_fails
+                {|mod m {
+                    procedure a() { return (); }
+                    procedure b() { return (); }
+                    procedure f() { a(), b(); return (); }
+                    process p = f in 1..1;
+                  }|});
+          test_case "call then return in one step" `Quick (fun () ->
+              check_fails
+                {|mod m {
+                    procedure a() { return (); }
+                    procedure f() { a(), return (); }
+                    process p = f in 1..1;
+                  }|});
+          test_case "statements after return in one step" `Quick (fun () ->
+              check_fails
+                {|mod m {
+                    var x = 0;
+                    procedure f() { return (), x = 1; }
+                    process p = f in 1..1;
+                  }|});
+          test_case "statements after break in one step" `Quick (fun () ->
+              check_fails
+                {|mod m {
+                    var x = 0;
+                    procedure f() {
+                      while (true) { break, x = 1; }
+                      return ();
+                    }
+                    process p = f in 1..1;
+                  }|});
           test_case "compare bool" `Quick (fun () ->
               check_fails "mod m { def x = true < 1; }");
           test_case "unbound var" `Quick (fun () ->

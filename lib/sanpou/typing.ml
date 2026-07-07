@@ -47,6 +47,7 @@ type type_error =
   | Reserved_module_name of id
   | Conflicting_assignments of id
   | Non_constant_process_domain of id
+  | Control_transfer_not_last of string
 
 exception Type_error of type_error * loc
 
@@ -483,6 +484,29 @@ let check_no_conflicting_writes (stmts : Surface_ast.simple_stmt list) : unit =
       (List.filter_map write stmts)
   in
   ()
+(* One statement list (SimpleStep / WithStep) merges into one atomic action
+   whose call/return/break/continue slot is single-valued: a second control
+   transfer would silently overwrite the first (an entire procedure call can
+   vanish), and statements after a transfer would still execute inside the
+   same action. Require the transfer to be the step's final statement. *)
+let check_control_transfer_last (stmts : Surface_ast.simple_stmt list) : unit =
+  let kind (stmt : Surface_ast.simple_stmt) =
+    match stmt.desc with
+    | Call _ -> Some "a procedure call"
+    | Return _ -> Some "a return"
+    | Break -> Some "a break"
+    | Continue -> Some "a continue"
+    | Assign _ | Await _ | Assert _ -> None
+  in
+  let rec go = function
+    | [] | [ _ ] -> ()
+    | stmt :: rest ->
+        (match kind stmt with
+        | Some k -> type_error (Control_transfer_not_last k) stmt.loc
+        | None -> ());
+        go rest
+  in
+  go stmts
 
 let rec check_body (ctx : proc_ctx) (steps : Surface_ast.body) : unit =
   match steps with
@@ -496,6 +520,7 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
   | EmptyStep -> ctx
   | SimpleStep stmts ->
       check_no_conflicting_writes stmts;
+      check_control_transfer_last stmts;
       List.iter (check_simple_stmt ctx) stmts;
       ctx
   | BlockStep (While { cond; body }) ->
@@ -523,6 +548,7 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
         { ctx with env = (binder, tysc_of_ty elem_ty) :: ctx.env }
       in
       check_no_conflicting_writes stmts;
+      check_control_transfer_last stmts;
       List.iter (check_simple_stmt binder_ctx) stmts;
       ctx
   | VarStep (name, value) ->
@@ -806,6 +832,11 @@ let string_of_type_error = function
         "a process ID set must be constant, but %s is mutable state (or \
          depends on it)"
         id
+  | Control_transfer_not_last kind ->
+      Printf.sprintf
+        "%s must be the last statement of its step: the following statements \
+         merge into the same atomic action and the transfer would discard them"
+        kind
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
   | Return_type_mismatch -> "return type mismatch"
