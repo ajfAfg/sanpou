@@ -82,14 +82,22 @@ type process_def = {
 }
 [@@deriving show, eq]
 
+(* A module-level definition. Constant and function defs share one
+   source-ordered list: name resolution is sequential top-down, so the
+   emitted TLA+ module must define them in source order to satisfy
+   define-before-use. *)
+type def =
+  | DefConst of Generic_ast.id * expr
+  | DefFun of Generic_ast.id * Generic_ast.id list * expr
+[@@deriving show, eq]
+
 (* Items arrive partitioned by kind, so consumers never scan a flat item
    list. Module-level expressions are call-free by construction. *)
 type module_def = {
   name : Generic_ast.id;
   atoms : Generic_ast.id list;
-  const_defs : (Generic_ast.id * expr) list;
+  defs : def list;
   prop_defs : (Generic_ast.id * expr) list;
-  fun_defs : (Generic_ast.id * Generic_ast.id list * expr) list;
   var_decls : (Generic_ast.id * var_init) list;
   procs : proc_def list;
   processes : process_def list;

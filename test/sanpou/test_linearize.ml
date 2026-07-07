@@ -46,14 +46,13 @@ let make_process ?(fairness = Unfair) name proc lo hi :
     Sanpou.Normalized_ast.process_def =
   { name; proc; fairness; domain = node (Range (lo, hi)); loc = loc0 }
 
-let make_module ?(const_defs = []) ?(fun_defs = []) ?(var_decls = [])
-    ?(processes = []) name procs : Sanpou.Normalized_ast.module_def =
+let make_module ?(defs = []) ?(var_decls = []) ?(processes = []) name procs :
+    Sanpou.Normalized_ast.module_def =
   {
     name;
     atoms = [];
-    const_defs;
+    defs;
     prop_defs = [];
-    fun_defs;
     var_decls = List.map (fun (n, v) -> (n, InitValue v)) var_decls;
     procs;
     processes;
@@ -475,16 +474,17 @@ let () =
           test_case "module items pass through" `Quick (fun () ->
               let m =
                 make_module "mymod"
-                  ~const_defs:[ ("c", intlit 5) ]
-                  ~fun_defs:[ ("f", [ "x" ], var "x") ]
+                  ~defs:
+                    [
+                      DefConst ("c", intlit 5); DefFun ("f", [ "x" ], var "x");
+                    ]
                   ~var_decls:[ ("x", intlit 0) ]
                   ~processes:[ default_process ]
                   [ make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ] ]
               in
               let ir = linearize_one m in
               check string "name" "mymod" ir.name;
-              check int "one const" 1 (List.length ir.const_defs);
-              check int "one fun" 1 (List.length ir.fun_defs);
+              check int "two defs" 2 (List.length ir.defs);
               check int "one var" 1 (List.length ir.var_decls);
               check int "one process" 1 (List.length ir.processes);
               let p = List.hd ir.processes in

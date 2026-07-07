@@ -99,9 +99,10 @@ type process_ir = {
 type module_ir = {
   name : string;
   atoms : string list;
-  const_defs : (string * Normalized_ast.expr) list;
+  defs : Normalized_ast.def list;
+      (* constant and function defs in source order: the emitted TLA+ module
+         must define before use *)
   prop_defs : (string * Normalized_ast.expr) list;
-  fun_defs : (string * string list * Normalized_ast.expr) list;
   var_decls : (string * Normalized_ast.var_init) list;
   local_var_decls : string list;
   var_infos : var_info list;

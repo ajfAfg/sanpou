@@ -27,6 +27,13 @@ let has_not_in s tla =
        true
      with Not_found -> false)
 
+let has_before s1 s2 tla =
+  let pos s =
+    try Str.search_forward (Str.regexp_string s) tla 0
+    with Not_found -> Alcotest.failf "%s not found" s
+  in
+  Alcotest.(check bool) (s1 ^ " before " ^ s2) true (pos s1 < pos s2)
+
 let () =
   let open Alcotest in
   run "Codegen"
@@ -176,6 +183,24 @@ let () =
               has "quotient == (7 \\div 2)";
               has "remainder == (7 % 2)";
               has "negated == ~(TRUE)");
+          Alcotest.test_case "defs are emitted in source order" `Quick
+            (fun () ->
+              (* sequential resolution lets a constant use an earlier
+                 function (and vice versa); grouping consts before funs
+                 broke define-before-use at SANY *)
+              let ast =
+                parse
+                  "mod defs {\n\
+                   def double(k) = k * 2;\n\
+                   def n = double(3);\n\
+                   def sum(a, b) = a + n + b;\n\
+                   procedure main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_before "double(k) ==" "n ==" tla;
+              has_before "n ==" "sum(a, b) ==" tla);
           Alcotest.test_case "string literals compile to tla strings" `Quick
             (fun () ->
               let ast =
