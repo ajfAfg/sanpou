@@ -54,11 +54,14 @@ let display_var_name (smap : Source_map.t) (tla_name : string) : string =
 
 (* ===== TLC value parsing ===== *)
 
-(* Split [inner] on top-level commas, respecting << >>, [ ], ( ), { } nesting
-   and quoted strings. Returns None on malformed input. *)
-let split_top_level (inner : string) : string list option =
+(* Split [inner] on a top-level [delim], respecting << >>, [ ], ( ), { }
+   nesting and quoted strings. Returns None on malformed input. *)
+let split_top_level_delim (delim : string) (inner : string) :
+    string list option =
   let n = String.length inner in
+  let dn = String.length delim in
   let buf = Buffer.create 16 in
+  let at_delim i = i + dn <= n && String.sub inner i dn = delim in
   (* [acc] holds the completed elements in reverse *)
   let rec go acc ~depth ~in_string i =
     if i >= n then
@@ -81,21 +84,23 @@ let split_top_level (inner : string) : string list option =
       else if c = '>' && i + 1 < n && inner.[i + 1] = '>' then (
         Buffer.add_string buf ">>";
         if depth = 0 then None else go acc ~depth:(depth - 1) ~in_string (i + 2))
+      else if depth = 0 && at_delim i then (
+        let elem = String.trim (Buffer.contents buf) in
+        Buffer.clear buf;
+        go (elem :: acc) ~depth ~in_string (i + dn))
       else if c = '[' || c = '(' || c = '{' then (
         Buffer.add_char buf c;
         go acc ~depth:(depth + 1) ~in_string (i + 1))
       else if c = ']' || c = ')' || c = '}' then (
         Buffer.add_char buf c;
         if depth = 0 then None else go acc ~depth:(depth - 1) ~in_string (i + 1))
-      else if c = ',' && depth = 0 then (
-        let elem = String.trim (Buffer.contents buf) in
-        Buffer.clear buf;
-        go (elem :: acc) ~depth ~in_string (i + 1))
       else (
         Buffer.add_char buf c;
         go acc ~depth ~in_string (i + 1))
   in
   go [] ~depth:0 ~in_string:false 0
+
+let split_top_level = split_top_level_delim ","
 
 (* Split the top-level elements of a TLC tuple value "<<a, b, c>>".
    Returns None when the string is not in tuple form (e.g. a function over a
@@ -106,6 +111,34 @@ let split_tuple_elements (s : string) : string list option =
   if len < 4 || String.sub s 0 2 <> "<<" || String.sub s (len - 2) 2 <> ">>"
   then None
   else split_top_level (String.sub s 2 (len - 4))
+
+(* Parse a TLC function value into (key, value) pairs, covering both print
+   forms: a function over 1..n prints as a tuple <<v1, v2>> (keys "1".."n"),
+   anything else — model values, strings, non-contiguous ints — prints as
+   (k1 :> v1 @@ k2 :> v2), which pc/stack take for such process ID sets. *)
+let split_function_entries (s : string) : (string * string) list option =
+  let s = String.trim s in
+  match split_tuple_elements s with
+  | Some elems ->
+      Some (List.mapi (fun i v -> (string_of_int (i + 1), v)) elems)
+  | None -> (
+      let len = String.length s in
+      let inner =
+        if len >= 2 && s.[0] = '(' && s.[len - 1] = ')' then
+          String.sub s 1 (len - 2)
+        else s
+      in
+      match split_top_level_delim "@@" inner with
+      | None -> None
+      | Some parts ->
+          let parse_entry part =
+            match split_top_level_delim ":>" part with
+            | Some [ key; value ] -> Some (String.trim key, String.trim value)
+            | _ -> None
+          in
+          let entries = List.map parse_entry parts in
+          if entries = [] || List.exists Option.is_none entries then None
+          else Some (List.map Option.get entries))
 
 (* Parse a TLC record value "[k1 |-> v1, k2 |-> v2, ...]" into field pairs.
    TLC reorders fields relative to the source, so callers must look fields up
@@ -131,33 +164,34 @@ let split_record_fields (s : string) : (string * string) list option =
 (* ===== Rendering ===== *)
 
 (* TLC's action headers do not say which process moved, so recover it from
-   the state: every action updates pc[self] for exactly one process. *)
+   the state: every action updates pc[self] for exactly one process. The
+   returned id is the process's domain element as TLC prints it ("1",
+   "Alice", "\"a\""). *)
 let infer_process_id (prev_state : state_var list) (state : state_var list) :
-    int option =
-  let pc_elems st =
+    string option =
+  let pc_entries st =
     Option.bind
       (List.find_opt (fun v -> v.var_name = "pc") st)
-      (fun v -> split_tuple_elements v.value)
+      (fun v -> split_function_entries v.value)
   in
-  match (pc_elems prev_state, pc_elems state) with
-  | Some prev, Some curr when List.length prev = List.length curr ->
-      let rec first_diff i prev curr =
-        match (prev, curr) with
-        | p :: ps, c :: cs ->
-            if p <> c then Some (i + 1) else first_diff (i + 1) ps cs
-        | _ -> None
-      in
-      first_diff 0 prev curr
+  match (pc_entries prev_state, pc_entries state) with
+  | Some prev, Some curr ->
+      List.find_map
+        (fun (key, value) ->
+          match List.assoc_opt key prev with
+          | Some prev_value when prev_value = value -> None
+          | _ -> Some key)
+        curr
   | _ -> None
 
-let render_header (header : step_header) (process_id : int option)
+let render_header (header : step_header) (process_id : string option)
     (smap : Source_map.t) : string =
   match header with
   | InitialPredicate -> "Initial state"
   | Action { label; _ } -> (
       let process_part =
         match process_id with
-        | Some pid -> Printf.sprintf " (process %d)" pid
+        | Some pid -> Printf.sprintf " (process %s)" pid
         | None -> ""
       in
       match find_source_info smap label with
@@ -183,12 +217,13 @@ let display_field_value v =
   if v = "defaultInitValue" || v = "\"__null__\"" then "null" else v
 
 (* The given process's stack frames, top first. None when the stack value
-   cannot be parsed (e.g. non-1..n ProcSet). *)
-let frames_of (stack_value : string) (process_id : int) : string list option =
-  match split_tuple_elements stack_value with
+   cannot be parsed. *)
+let frames_of (stack_value : string) (process_id : string) : string list option
+    =
+  match split_function_entries stack_value with
   | None -> None
   | Some per_process -> (
-      match List.nth_opt per_process (process_id - 1) with
+      match List.assoc_opt process_id per_process with
       | None -> None
       | Some process_stack -> split_tuple_elements process_stack)
 
@@ -201,7 +236,7 @@ let find_stack_var (state : state_var list) =
    unavailable -> the top frame is a different frame, so show its contents as
    context on one line rather than as spurious "changes". *)
 let render_local_lines (smap : Source_map.t) ~prev_state
-    (state : state_var list) (process_id : int) : string list =
+    (state : state_var list) (process_id : string) : string list =
   let frames_in st =
     Option.bind (find_stack_var st) (fun v -> frames_of v.value process_id)
   in
@@ -258,7 +293,7 @@ let render_step ~prev_state (step : trace_step) (smap : Source_map.t) : string =
   let process_id =
     match step.header with
     | InitialPredicate -> None
-    | Action { process_id = Some pid; _ } -> Some pid
+    | Action { process_id = Some pid; _ } -> Some (string_of_int pid)
     | Action { process_id = None; _ } -> infer_process_id prev_state step.state
   in
   let header_str = render_header step.header process_id smap in
@@ -291,32 +326,31 @@ let render_deadlock_summary (trace : trace) (smap : Source_map.t) : string =
       let pc_var = List.find_opt (fun v -> v.var_name = "pc") last_step.state in
       match pc_var with
       | None -> "Deadlock: unable to determine process states"
-      | Some pc ->
-          (* pc value looks like <<"L25", "__w_workers_entry__">>;
-             parse out individual labels *)
-          let pc_str = pc.value in
-          let re = Str.regexp {|"[A-Za-z_][A-Za-z0-9_]*"|} in
-          let rec collect_labels acc pos =
-            match Str.search_forward re pc_str pos with
-            | _ ->
-                let m = Str.matched_string pc_str in
-                let label = String.sub m 1 (String.length m - 2) in
-                collect_labels (label :: acc) (Str.match_end ())
-            | exception Not_found -> List.rev acc
-          in
-          let labels = collect_labels [] 0 in
-          let process_line i label =
-            let pid = i + 1 in
-            if label = "Done" then Printf.sprintf "  process %d: finished\n" pid
-            else
-              match find_source_info smap label with
-              | Some entry ->
-                  Printf.sprintf "  process %d (%s): %s  [line %d]\n" pid
-                    entry.proc_name entry.description entry.line
-              | None -> Printf.sprintf "  process %d: at %s\n" pid label
-          in
-          "DEADLOCK — all processes blocked:\n"
-          ^ String.concat "" (List.mapi process_line labels))
+      | Some pc -> (
+          (* pc maps each process id to its label: <<"L25", "L3">> for a
+             1..n domain, (Alice :> "L25" @@ Bob :> "L3") otherwise. *)
+          match split_function_entries pc.value with
+          | None -> "Deadlock: unable to determine process states"
+          | Some entries ->
+              let unquote s =
+                let n = String.length s in
+                if n >= 2 && s.[0] = '"' && s.[n - 1] = '"' then
+                  String.sub s 1 (n - 2)
+                else s
+              in
+              let process_line (pid, label_value) =
+                let label = unquote label_value in
+                if label = "Done" then
+                  Printf.sprintf "  process %s: finished\n" pid
+                else
+                  match find_source_info smap label with
+                  | Some entry ->
+                      Printf.sprintf "  process %s (%s): %s  [line %d]\n" pid
+                        entry.proc_name entry.description entry.line
+                  | None -> Printf.sprintf "  process %s: at %s\n" pid label
+              in
+              "DEADLOCK — all processes blocked:\n"
+              ^ String.concat "" (List.map process_line entries)))
 
 let render (trace : trace) (smap : Source_map.t) : string =
   let rec render_steps prev_state = function
