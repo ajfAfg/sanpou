@@ -39,7 +39,9 @@ rule main = parse
 | "//" [^ '\n']* eof
     { Parser.EOF }
 | ['0'-'9']+
-    { Parser.INTV (int_of_string (Lexing.lexeme lexbuf)) }
+    { match int_of_string_opt (Lexing.lexeme lexbuf) with
+      | Some v -> Parser.INTV v
+      | None -> raise (Error "Integer literal out of range") }
 (* Minimal string literals: any run of characters other than a double quote
    or newline, with no escape sequences. *)
 | '"' ([^ '"' '\n']* as s) '"'
