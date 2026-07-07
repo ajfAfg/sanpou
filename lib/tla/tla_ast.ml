@@ -46,6 +46,7 @@ type tla_decl =
   | DConstants of string list
   | DOpDef of string * string list * tla_expr
   | DVariables of string list
+  | DAssume of tla_expr
   | DSeparator
 
 type tla_module = { name : string; body : tla_decl list }
