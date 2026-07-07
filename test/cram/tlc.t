@@ -281,6 +281,28 @@ therefore proves the emitted set constructs check under TLC's FiniteSets.
   $ tlc sets_check sets_check
   No error has been found
 
+Definitions are emitted in source order: a constant defined via an earlier
+function must land after that function in the TLA+ module (grouping consts
+before funs used to break define-before-use at SANY).
+
+  $ cat > def_order.snp <<'EOF'
+  > mod def_order {
+  >   def double(k) = k * 2;
+  >   def n = double(3);
+  >   var ok = 0;
+  >   procedure f() {
+  >     await n == 6,
+  >     ok = 1;
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json def_order.json
+  $ sanpou compile def_order.snp -o def_order
+  $ tlc def_order def_order
+  No error has been found
+
 Strings end-to-end: a state variable toggles between two string tags, driven
 by string-equality guards. The process never blocks (one guard always holds),
 so deadlock checking passes and confirms the emitted string literals compare

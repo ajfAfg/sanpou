@@ -265,9 +265,12 @@ let module_uses_cardinality (ir : module_ir) all_runtime_procs : bool =
   let var_init_uses = function
     | Generic_ast.InitValue e | Generic_ast.InitIn e -> expr_uses_cardinality e
   in
-  List.exists (fun (_, e) -> expr_uses_cardinality e) ir.const_defs
+  List.exists
+    (function
+      | Normalized_ast.DefConst (_, e) | Normalized_ast.DefFun (_, _, e) ->
+          expr_uses_cardinality e)
+    ir.defs
   || List.exists (fun (_, e) -> expr_uses_cardinality e) ir.prop_defs
-  || List.exists (fun (_, _, e) -> expr_uses_cardinality e) ir.fun_defs
   || List.exists (fun (_, init) -> var_init_uses init) ir.var_decls
   || List.exists
        (fun (p : process_ir) -> expr_uses_cardinality p.domain)
@@ -583,15 +586,17 @@ let const_and_fun_decls (ir : module_ir) : tla_decl list =
     | [] -> []
     | decls -> decls @ [ DSeparator ]
   in
+  (* Source order: sequential name resolution accepts a constant defined via
+     an earlier function (and vice versa), so the TLA+ module must keep the
+     interleaving to define before use. *)
   with_trailing_sep
     (List.map
-       (fun (name, expr) -> DOpDef (name, [], expr_to_tla_global expr))
-       ir.const_defs)
-  @ with_trailing_sep
-      (List.map
-         (fun (name, params, expr) ->
-           DOpDef (name, params, expr_to_tla_global expr))
-         ir.fun_defs)
+       (function
+         | Normalized_ast.DefConst (name, expr) ->
+             DOpDef (name, [], expr_to_tla_global expr)
+         | Normalized_ast.DefFun (name, params, expr) ->
+             DOpDef (name, params, expr_to_tla_global expr))
+       ir.defs)
   @ with_trailing_sep
       (List.map
          (fun (name, expr) -> DOpDef (name, [], expr_to_tla_global expr))

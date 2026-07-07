@@ -341,9 +341,12 @@ let rec body_atoms (steps : Normalized_ast.body) : Generic_ast.id list =
 
 let module_atoms (m : Normalized_ast.module_def) : Generic_ast.id list =
   List.sort_uniq compare
-    (List.concat_map (fun (_, e) -> expr_atoms e) m.const_defs
+    (List.concat_map
+       (function
+         | Normalized_ast.DefConst (_, e) | Normalized_ast.DefFun (_, _, e) ->
+             expr_atoms e)
+       m.defs
     @ List.concat_map (fun (_, e) -> expr_atoms e) m.prop_defs
-    @ List.concat_map (fun (_, _, e) -> expr_atoms e) m.fun_defs
     @ List.concat_map
         (fun (_, init) ->
           match init with
@@ -365,21 +368,23 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
   {
     name = m.mod_name;
     atoms = [] (* filled from the built module below *);
-    const_defs =
+    defs =
+      (* one list, in source order: sequential name resolution means a
+         constant may use an earlier function (and vice versa), so the
+         emitted module must keep the interleaving *)
       partition (fun (item : Resolved_ast.item) ->
           match item.desc with
-          | ConstDef { name; value } -> Some (name, call_free_expr st value)
+          | ConstDef { name; value } ->
+              Some (Normalized_ast.DefConst (name, call_free_expr st value))
+          | FunDef { name; params; body_expr } ->
+              Some
+                (Normalized_ast.DefFun
+                   (name, params, call_free_expr st body_expr))
           | _ -> None);
     prop_defs =
       partition (fun (item : Resolved_ast.item) ->
           match item.desc with
           | PropDef { name; value } -> Some (name, call_free_expr st value)
-          | _ -> None);
-    fun_defs =
-      partition (fun (item : Resolved_ast.item) ->
-          match item.desc with
-          | FunDef { name; params; body_expr } ->
-              Some (name, params, call_free_expr st body_expr)
           | _ -> None);
     var_decls =
       partition (fun (item : Resolved_ast.item) ->

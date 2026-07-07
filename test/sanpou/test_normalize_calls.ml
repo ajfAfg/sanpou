@@ -443,12 +443,14 @@ let () =
                 List.hd (Sanpou.Normalize_calls.normalize [ m ])
               in
               check string "name" "m" normalized.name;
-              check int "consts" 1 (List.length normalized.const_defs);
+              check int "defs" 1 (List.length normalized.defs);
               check int "vars" 1 (List.length normalized.var_decls);
               check int "procs" 1 (List.length normalized.procs);
               check int "processes" 1 (List.length normalized.processes);
               check expr_testable "const value" (n_intlit 5)
-                (snd (List.hd normalized.const_defs)));
+                (match List.hd normalized.defs with
+                | DefConst (_, value) -> value
+                | DefFun (_, _, value) -> value));
           test_case "temp counter restarts per module" `Quick (fun () ->
               let proc_with_call =
                 make_proc "foo" [ var_step "x" (proc_app "foo" []) ]
