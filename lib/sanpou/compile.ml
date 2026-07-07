@@ -68,13 +68,16 @@ let compile ?config (source : string) : (output list, diagnostic) result =
               Error { loc; message }
           | exception Normalize_calls.Error (message, loc) ->
               Error { loc; message }
-          | normalized ->
-              let irs = Linearize.linearize normalized in
-              Ok
-                (List.map
-                   (fun ir ->
-                     {
-                       tla_module = Emit_tla.generate_module ?config ir;
-                       source_map = Source_map.extract ir;
-                     })
-                   irs))))
+          | normalized -> (
+              match Linearize.linearize normalized with
+              | exception Linearize.Error (message, loc) ->
+                  Error { loc; message }
+              | irs ->
+                  Ok
+                    (List.map
+                       (fun ir ->
+                         {
+                           tla_module = Emit_tla.generate_module ?config ir;
+                           source_map = Source_map.extract ir;
+                         })
+                       irs)))))

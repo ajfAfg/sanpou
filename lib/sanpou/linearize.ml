@@ -1,5 +1,9 @@
 open Ir
 
+exception Error of string * Generic_ast.loc
+
+let error message loc = raise (Error (message, loc))
+
 (* ===== Linearization context ===== *)
 
 (* [fresh_label] is a closure created once per module in linearize_module;
@@ -458,7 +462,47 @@ let linearize_module (m : Normalized_ast.module_def) : module_ir =
             fresh_label;
           }
         in
-        let compiled = linearize_body ctx p.body Ir.done_label ~loc:p.loc in
+        (* A body must not fall off its end: the continuation label below
+           is a sentinel, and any reachable jump to it means some path ends
+           without a return. (It used to fall through to Done directly,
+           which parked the process mid-call with every frame still stacked
+           — silently skipping the caller's continuation and letting
+           Termination pass.) Reachability comes from the compiled jump
+           graph, so a procedure that never exits — [while (true)] with no
+           break — needs no return: its loop's exit edge is dead and a
+           literal-condition branch only references the arm it can take. *)
+        let fallthrough_label = "__" ^ p.name ^ "_fallthrough__" in
+        let compiled =
+          linearize_body ctx p.body fallthrough_label ~loc:p.loc
+        in
+        let jump_targets =
+          let of_dest = function
+            | PcNext l -> [ l ]
+            | PcBranch ({ desc = Generic_ast.BoolLit true; _ }, t, _) -> [ t ]
+            | PcBranch ({ desc = Generic_ast.BoolLit false; _ }, _, f) -> [ f ]
+            | PcBranch (_, t, f) -> [ t; f ]
+            | PcCall _ | PcReturn -> []
+          in
+          let of_action (a : action) =
+            of_dest a.pc_dest
+            @
+            match a.stack_op with StackPush (_, ret, _) -> [ ret ] | _ -> []
+          in
+          List.concat_map
+            (function
+              | Action a -> of_action a
+              | Choice c -> List.concat_map of_action c.arms)
+            compiled.actions
+        in
+        if
+          compiled.entry = fallthrough_label
+          || List.mem fallthrough_label jump_targets
+        then
+          error
+            ("procedure " ^ p.name
+           ^ " can fall off its end without a return: every finishing path \
+              must end in `return`")
+            p.loc;
         {
           proc_name = p.name;
           params = List.map (fun (i : Resolved_ast.ident) -> i.name) p.params;
