@@ -323,6 +323,25 @@ the last await, letting the step fire.)
   $ sanpou compile await_conj.snp -o await_conj
   $ tlc await_conj await_conj
   No error has been found
+A nullary def is applied as a bare operator reference (TLA+ has no f()
+application syntax; the call site used to emit one and fail SANY).
+
+  $ cat > nullary.snp <<'EOF'
+  > mod nullary {
+  >   def f() = 1;
+  >   var ok = 0;
+  >   procedure main() {
+  >     await f() == 1,
+  >     ok = f() + 1;
+  >     return ();
+  >   }
+  >   fair process p = main in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json nullary.json
+  $ sanpou compile nullary.snp -o nullary
+  $ tlc nullary nullary
+  No error has been found
 
 Sets end-to-end: two processes drawn from a set literal each unblock only if
 the set operations (union, comprehension, cardinality, difference, subseteq)

@@ -36,6 +36,9 @@ let rec render_expr = function
   | TStr s -> "\"" ^ escape_string s ^ "\""
   | TId s -> s
   | TBinOp (op, e1, e2) -> render_expr e1 ^ " " ^ op ^ " " ^ render_expr e2
+  | TApp (name, []) ->
+      (* a zero-arity operator is referenced bare: TLA+ has no f() syntax *)
+      name
   | TApp (name, args) ->
       name ^ "(" ^ String.concat ", " (List.map render_expr args) ^ ")"
   | TPrimed e -> render_expr e ^ "'"
