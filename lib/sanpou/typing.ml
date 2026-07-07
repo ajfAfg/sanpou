@@ -44,6 +44,7 @@ type type_error =
   | Not_a_record of ty
   | Unknown_field of id * ty
   | Self_outside_procedure
+  | Atom_name_clash of id
 
 exception Type_error of type_error * loc
 
@@ -496,24 +497,47 @@ let check_module (m : Surface_ast.module_def) : unit =
      all processes must share one ID element type, which is also the type of
      [self] in every procedure body. *)
   let self_ty = fresh_tyvar () in
-  let (_ : tyenv * id list) =
+  (* Module-level names shadow sequentially like every other binding; the
+     flat TLA+ namespace is reconciled by alpha-conversion, which renames
+     the shadowed declarations. Atoms are the exception: an atom's name is
+     the model value's identity in traces and the TLC config, so renaming
+     one would change observable output — atom names are module-wide unique
+     in both directions. [declared] tracks every module-level name, [atoms]
+     the atom subset. *)
+  let declare_atom (atoms, declared) loc name =
+    if List.mem name declared then type_error (Atom_name_clash name) loc;
+    (name :: atoms, name :: declared)
+  in
+  let declare (atoms, declared) loc name =
+    if List.mem name atoms then type_error (Atom_name_clash name) loc;
+    (atoms, name :: declared)
+  in
+  let (_ : tyenv * id list * (id list * id list)) =
     List.fold_left
-      (fun (env, proc_names) (item : Surface_ast.item) ->
+      (fun (env, proc_names, names) (item : Surface_ast.item) ->
         match item.desc with
-        | AtomDecl { names } ->
+        | AtomDecl { names = atom_names } ->
+            let names =
+              List.fold_left
+                (fun names name -> declare_atom names item.loc name)
+                names atom_names
+            in
             let env =
               List.fold_left
                 (fun env name -> (name, tysc_of_ty TyAtom) :: env)
-                env names
+                env atom_names
             in
-            (env, proc_names)
+            (env, proc_names, names)
         | ConstDef { name; value } ->
+            let names = declare names item.loc name in
             let ty = infer_expr fresh_tyvar env value in
-            ((name, generalize env ty) :: env, proc_names)
+            ((name, generalize env ty) :: env, proc_names, names)
         | PropDef { name; value } ->
+            let names = declare names item.loc name in
             unify value.loc (infer_expr fresh_tyvar env value) TyBool;
-            ((name, tysc_of_ty TyBool) :: env, proc_names)
+            ((name, tysc_of_ty TyBool) :: env, proc_names, names)
         | FunDef { name; params; body_expr } ->
+            let names = declare names item.loc name in
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
               List.map2
@@ -522,8 +546,9 @@ let check_module (m : Surface_ast.module_def) : unit =
             in
             let body_ty = infer_expr fresh_tyvar (param_env @ env) body_expr in
             let fn_ty = TyFun (param_tys, body_ty) in
-            ((name, generalize env fn_ty) :: env, proc_names)
+            ((name, generalize env fn_ty) :: env, proc_names, names)
         | VarDecl { name; init } ->
+            let names = declare names item.loc name in
             let ty =
               match init with
               | InitValue value -> infer_expr fresh_tyvar env value
@@ -534,8 +559,9 @@ let check_module (m : Surface_ast.module_def) : unit =
                     (TySet elem_ty);
                   elem_ty
             in
-            ((name, tysc_of_ty ty) :: env, proc_names)
+            ((name, tysc_of_ty ty) :: env, proc_names, names)
         | ProcDef { name = proc_name; params; body } ->
+            let names = declare names item.loc proc_name in
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
               List.map2
@@ -582,8 +608,9 @@ let check_module (m : Surface_ast.module_def) : unit =
                its own [self] type, breaking the one-self-type-per-module
                invariant. *)
             let gen_env = ("self", tysc_of_ty self_ty) :: env in
-            ((proc_name, generalize gen_env fn_ty) :: env, proc_names)
-        | Process { proc; domain; _ } ->
+            ((proc_name, generalize gen_env fn_ty) :: env, proc_names, names)
+        | Process { name; proc; domain; _ } ->
+            let names = declare names item.loc name in
             (* The root must be a procedure: a def function here would
                reach the emitter's procedure table and crash. *)
             if not (List.mem proc proc_names) then
@@ -593,8 +620,8 @@ let check_module (m : Surface_ast.module_def) : unit =
             unify domain.loc
               (infer_expr fresh_tyvar env domain)
               (TySet self_ty);
-            (env, proc_names))
-      ([], []) m.items
+            (env, proc_names, names))
+      ([], [], ([], [])) m.items
   in
   ()
 
@@ -659,6 +686,12 @@ let string_of_type_error = function
   | Unknown_field (field, ty) ->
       Printf.sprintf "record %s has no field %s" (string_of_ty ty) field
   | Self_outside_procedure -> "self can only be used inside a procedure"
+  | Atom_name_clash id ->
+      Printf.sprintf
+        "%s collides with an atom of the same name: an atom's name is its \
+         identity (in traces and the TLC config), so it cannot be shadowed \
+         or reused"
+        id
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
   | Return_type_mismatch -> "return type mismatch"

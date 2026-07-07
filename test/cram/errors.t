@@ -163,6 +163,31 @@ A record with a repeated field is rejected:
   dup_field.snp:2:13: duplicate record field: a
   [1]
 
+Module-level names shadow sequentially (alpha-conversion renames the
+shadowed declarations apart), except atoms: an atom's name is the model
+value's identity in traces and the TLC config, so it cannot be shadowed
+or reused in either direction:
+
+  $ cat > atom_clash.snp <<'EOF'
+  > mod m {
+  >   atom A;
+  >   def A = 1;
+  > }
+  > EOF
+  $ sanpou compile atom_clash.snp -o out
+  atom_clash.snp:3:3: A collides with an atom of the same name: an atom's name is its identity (in traces and the TLC config), so it cannot be shadowed or reused
+  [1]
+
+  $ cat > atom_clash2.snp <<'EOF'
+  > mod m {
+  >   def A = 1;
+  >   atom A;
+  > }
+  > EOF
+  $ sanpou compile atom_clash2.snp -o out
+  atom_clash2.snp:3:3: A collides with an atom of the same name: an atom's name is its identity (in traces and the TLC config), so it cannot be shadowed or reused
+  [1]
+
 Lexical error:
 
   $ cat > lexical.snp <<'EOF'

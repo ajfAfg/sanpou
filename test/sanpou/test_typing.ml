@@ -98,6 +98,32 @@ let () =
           test_case "property is bool" `Quick (fun () ->
               check_ok
                 "mod m { var x = 0; property p = finally(x == 1); }");
+          test_case "module-level names shadow sequentially" `Quick
+            (fun () ->
+              (* everything but atoms shadows: defs, vars, procedures, and
+                 process names; alpha-conversion renames the shadowed ones *)
+              check_ok
+                {|mod m {
+                    def a = 1;
+                    def a = a == 1;
+                    var x = 0;
+                    procedure f() { x = 1; return (); }
+                    var x = false;
+                    procedure f() { x = true, f(); return (); }
+                    process p = f in 1..1;
+                    process p = f in 2..2;
+                  }|});
+          test_case "locals and params may shadow module-level names" `Quick
+            (fun () ->
+              (* only module-level duplicates are rejected; names in bodies
+                 shadow as usual *)
+              check_ok
+                "mod m {\n\
+                \  def a = true;\n\
+                \  procedure f(a) { var b = a + 1; return (); }\n\
+                \  procedure g() { f(1); return (); }\n\
+                \  process ps = g in 1..1;\n\
+                \  }");
           test_case "assert statement" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -600,6 +626,16 @@ let () =
                     procedure g() { f(1); return (); }
                     fair process p = g in {"a"};
                   }|});
+          test_case "atom then def of the same name" `Quick (fun () ->
+              check_fails "mod m { atom a; def a = 1; }");
+          test_case "def then atom of the same name" `Quick (fun () ->
+              check_fails "mod m { def a = 1; atom a; }");
+          test_case "atom then var of the same name" `Quick (fun () ->
+              check_fails "mod m { atom a; var a = 1; }");
+          test_case "duplicate atom declarations" `Quick (fun () ->
+              check_fails "mod m { atom a; atom a; }");
+          test_case "duplicate atom within one declaration" `Quick (fun () ->
+              check_fails "mod m { atom a, a; }");
           test_case "comprehension predicate non-bool" `Quick (fun () ->
               check_fails "mod m { def s = { x in 1..3 : x }; }");
           test_case "head on tuple" `Quick (fun () ->
