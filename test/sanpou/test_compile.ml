@@ -79,8 +79,23 @@ let () =
               has "y == Head(xs)";
               has "ys == Tail(xs)";
               has "zs == Append(xs, 3)";
-              has "ws == xs \\o << 4, 5 >>";
+              has "ws == (xs \\o << 4, 5 >>)";
               has "n == Len(xs)");
+          Alcotest.test_case "subscripting a concat result parenthesizes"
+            `Quick (fun () ->
+              let ast =
+                parse
+                  "mod m {\n\
+                   def a = [1, 2];\n\
+                   def b = [3, 4];\n\
+                   def first = concat(a, b)[1];\n\
+                   procedure main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              (* a \o b[1] would be read by TLA+ as a \o (b[1]) *)
+              has_in "first == (a \\o b)[1]" tla);
           Alcotest.test_case "operators compile to tla equivalents" `Quick
             (fun () ->
               let ast =

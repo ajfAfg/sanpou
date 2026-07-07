@@ -62,7 +62,11 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
             ( "Append",
               [ expr_to_tla local_vars seq; expr_to_tla local_vars value ] )
       | Builtin.Concat, [ lhs; rhs ] ->
-          TConcat (expr_to_tla local_vars lhs, expr_to_tla local_vars rhs)
+          (* Parenthesized like every other infix: a bare \o binds looser
+             than a following subscript, so concat(a, b)[1] would otherwise
+             emit a \o b[1], which TLA+ reads as a \o (b[1]). *)
+          TParens
+            (TConcat (expr_to_tla local_vars lhs, expr_to_tla local_vars rhs))
       | Builtin.Len, [ e ] -> TApp ("Len", [ expr_to_tla local_vars e ])
       | Builtin.Union, [ lhs; rhs ] ->
           TParens
