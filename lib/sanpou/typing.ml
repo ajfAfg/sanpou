@@ -46,6 +46,7 @@ type type_error =
   | Self_outside_procedure
   | Reserved_module_name of id
   | Conflicting_assignments of id
+  | Non_constant_process_domain of id
 
 exception Type_error of type_error * loc
 
@@ -527,6 +528,45 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
         mutable_vars = (name, val_ty) :: ctx.mutable_vars;
       }
 
+(* ===== Process domain constancy =====
+
+   PlusCal requires a process set to be a constant expression: the emitted
+   spec fixes ProcSet and the domains of pc/stack at Init, so a domain that
+   reads mutable state breaks TLC at runtime the moment the state changes.
+   sanpou has no CONSTANT stage — literals, atoms, and defs form the constant
+   fragment — so a module-level name is non-constant iff it is a [var], or a
+   def whose body (transitively) mentions one. *)
+let rec first_nonconst_ref (nonconst : id list) (e : Surface_ast.expr) :
+    (id * loc) option =
+  let first_of es = List.find_map (first_nonconst_ref nonconst) es in
+  let under_binder binder e =
+    first_nonconst_ref (List.filter (fun n -> n <> binder) nonconst) e
+  in
+  match e.desc with
+  | IntLit _ | BoolLit _ | StrLit _ | AtomLit _ | Self -> None
+  | Var name -> if List.mem name nonconst then Some (name, e.loc) else None
+  | App (name, args) ->
+      if List.mem name nonconst then Some (name, e.loc) else first_of args
+  | UnOp (_, e1) -> first_nonconst_ref nonconst e1
+  | BinOp (_, a, b) | Range (a, b) | Subscript (a, b) -> first_of [ a; b ]
+  | Field (record, _) -> first_nonconst_ref nonconst record
+  | Record fields -> first_of (List.map snd fields)
+  | Builtin (_, args) | SetLit args | Tuple args | Sequence args ->
+      first_of args
+  | IfExpr (a, b, c) -> first_of [ a; b; c ]
+  | MapInit { binder; domain; value } -> (
+      match first_nonconst_ref nonconst domain with
+      | Some r -> Some r
+      | None -> under_binder binder value)
+  | SetComp { binder; domain; pred } -> (
+      match first_nonconst_ref nonconst domain with
+      | Some r -> Some r
+      | None -> under_binder binder pred)
+  | Quant { binder; domain; body; _ } -> (
+      match first_nonconst_ref nonconst domain with
+      | Some r -> Some r
+      | None -> under_binder binder body)
+
 (* ===== Check a module ===== *)
 
 let check_module (m : Surface_ast.module_def) : unit =
@@ -552,18 +592,31 @@ let check_module (m : Surface_ast.module_def) : unit =
     then type_error (Reserved_module_name name) loc;
     name :: names
   in
-  let (_ : tyenv * id list * id list) =
+  (* [nonconst] accumulates the module-level names whose values can change
+     over a behavior: vars, and defs that (transitively) read one. *)
+  let nonconst_def nonconst name body =
+    match first_nonconst_ref nonconst body with
+    | Some _ -> name :: nonconst
+    | None -> nonconst
+  in
+  let (_ : tyenv * id list * id list * id list) =
     List.fold_left
-      (fun (env, proc_names, names) (item : Surface_ast.item) ->
+      (fun (env, proc_names, names, nonconst) (item : Surface_ast.item) ->
         match item.desc with
         | ConstDef { name; value } ->
             let names = declare names item.loc name in
             let ty = infer_expr fresh_tyvar env value in
-            ((name, generalize env ty) :: env, proc_names, names)
+            ( (name, generalize env ty) :: env,
+              proc_names,
+              names,
+              nonconst_def nonconst name value )
         | PropDef { name; value } ->
             let names = declare names item.loc name in
             unify value.loc (infer_expr fresh_tyvar env value) TyBool;
-            ((name, tysc_of_ty TyBool) :: env, proc_names, names)
+            ( (name, tysc_of_ty TyBool) :: env,
+              proc_names,
+              names,
+              nonconst_def nonconst name value )
         | FunDef { name; params; body_expr } ->
             let names = declare names item.loc name in
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
@@ -574,7 +627,17 @@ let check_module (m : Surface_ast.module_def) : unit =
             in
             let body_ty = infer_expr fresh_tyvar (param_env @ env) body_expr in
             let fn_ty = TyFun (param_tys, body_ty) in
-            ((name, generalize env fn_ty) :: env, proc_names, names)
+            (* Params shadow module names inside the body, but the filtered
+               list is only for the body check: the accumulator keeps them. *)
+            let body_nonconst =
+              List.filter (fun n -> not (List.mem n params)) nonconst
+            in
+            let nonconst =
+              match first_nonconst_ref body_nonconst body_expr with
+              | Some _ -> name :: nonconst
+              | None -> nonconst
+            in
+            ((name, generalize env fn_ty) :: env, proc_names, names, nonconst)
         | VarDecl { name; init } ->
             let names = declare names item.loc name in
             let ty =
@@ -587,7 +650,7 @@ let check_module (m : Surface_ast.module_def) : unit =
                     (TySet elem_ty);
                   elem_ty
             in
-            ((name, tysc_of_ty ty) :: env, proc_names, names)
+            ((name, tysc_of_ty ty) :: env, proc_names, names, name :: nonconst)
         | ProcDef { name = proc_name; params; body } ->
             let names = declare names item.loc proc_name in
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
@@ -636,7 +699,10 @@ let check_module (m : Surface_ast.module_def) : unit =
                its own [self] type, breaking the one-self-type-per-module
                invariant. *)
             let gen_env = ("self", tysc_of_ty self_ty) :: env in
-            ((proc_name, generalize gen_env fn_ty) :: env, proc_names, names)
+            ( (proc_name, generalize gen_env fn_ty) :: env,
+              proc_names,
+              names,
+              nonconst )
         | Process { name; proc; domain; _ } ->
             let names = declare names item.loc name in
             (* The root must be a procedure: a def function here would
@@ -648,8 +714,12 @@ let check_module (m : Surface_ast.module_def) : unit =
             unify domain.loc
               (infer_expr fresh_tyvar env domain)
               (TySet self_ty);
-            (env, proc_names, names))
-      ([], [], []) m.items
+            (match first_nonconst_ref nonconst domain with
+            | Some (name, loc) ->
+                type_error (Non_constant_process_domain name) loc
+            | None -> ());
+            (env, proc_names, names, nonconst))
+      ([], [], [], []) m.items
   in
   ()
 
@@ -723,6 +793,11 @@ let string_of_type_error = function
         "conflicting assignments to %s in one step: a whole-variable \
          assignment cannot be combined with another assignment to the same \
          variable"
+        id
+  | Non_constant_process_domain id ->
+      Printf.sprintf
+        "a process ID set must be constant, but %s is mutable state (or \
+         depends on it)"
         id
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"
