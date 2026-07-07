@@ -205,6 +205,24 @@ Names the emitter generates (or pulls in via EXTENDS) are reserved:
   reserved.snp:2:3: pc is reserved: it collides with a name in the emitted TLA+ module
   [1]
 
+A process ID set must be constant — the emitted spec fixes ProcSet and the
+domain of pc/stack at Init, so a domain reading mutable state would break
+TLC at runtime the moment the state changes:
+
+  $ cat > nc_domain.snp <<'EOF'
+  > mod m {
+  >   var n = 2;
+  >   procedure f() {
+  >     n = n + 1;
+  >     return ();
+  >   }
+  >   process p = f in 1..n;
+  > }
+  > EOF
+  $ sanpou compile nc_domain.snp -o out
+  nc_domain.snp:7:23: a process ID set must be constant, but n is mutable state (or depends on it)
+  [1]
+
 Lexical error:
 
   $ cat > lexical.snp <<'EOF'

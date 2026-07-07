@@ -98,6 +98,17 @@ let () =
           test_case "property is bool" `Quick (fun () ->
               check_ok
                 "mod m { var x = 0; property p = finally(x == 1); }");
+          test_case "constant process domains" `Quick (fun () ->
+              (* defs of constants, comprehension binders shadowing a var,
+                 and fun params shadowing a var are all constant *)
+              check_ok
+                "mod m {\n\
+                \  var x = 1;\n\
+                \  def k = 3;\n\
+                \  def widen(x) = x + k;\n\
+                \  procedure f() { return (); }\n\
+                \  process p = f in { x in 1..widen(2) : x > 0 };\n\
+                \  }");
           test_case "module-level names shadow sequentially" `Quick
             (fun () ->
               (* defs, vars, procedures, and process names all shadow
@@ -665,6 +676,22 @@ let () =
                     procedure f() { return (); }
                     process a = f in 1..2;
                     process b = f in {"x"};
+                  }|});
+          test_case "process domain reads a var" `Quick (fun () ->
+              check_fails
+                {|mod m {
+                    var n = 2;
+                    procedure f() { n = n + 1; return (); }
+                    process p = f in 1..n;
+                  }|});
+          test_case "process domain reads a var through a def" `Quick
+            (fun () ->
+              check_fails
+                {|mod m {
+                    var n = 2;
+                    def d = n + 1;
+                    procedure f() { return (); }
+                    process p = f in 1..d;
                   }|});
           test_case "self type constrained through a procedure parameter"
             `Quick (fun () ->
