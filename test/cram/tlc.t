@@ -69,6 +69,33 @@ through the stack frames.
   $ tlc fact fact_check
   No error has been found
 
+Every finishing path of a procedure must end in an explicit return — a
+fall-through used to jump straight to Done with every frame stacked,
+silently skipping the caller's continuation while Termination passed. A
+procedure that never finishes (while (true) with no break) needs none.
+With the returns written, the caller resumes and the property holds:
+
+  $ cat > fallthrough.snp <<'EOF'
+  > mod fallthrough {
+  >   var a = 0;
+  >   procedure helper() { a = 1; return (); }
+  >   procedure main() {
+  >     helper();
+  >     a = 2;
+  >     return ();
+  >   }
+  >   fair process p = main in 1..1;
+  >   property done2 = finally(a == 2);
+  > }
+  > EOF
+  $ cat > fallthrough.json <<'EOF'
+  > { "checks": { "deadlock": true, "termination": true },
+  >   "properties": ["done2"] }
+  > EOF
+  $ sanpou compile fallthrough.snp -o fallthrough
+  $ tlc fallthrough fallthrough
+  No error has been found
+
 Blocked awaits are reported as deadlocks: a single process stuck on an await
 that can never fire, and two processes each waiting on the other.
 

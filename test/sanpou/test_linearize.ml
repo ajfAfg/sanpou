@@ -126,15 +126,19 @@ let () =
           test_case "empty step" `Quick (fun () ->
               let m =
                 make_module "m" ~processes:[ default_process ]
-                  [ make_proc "foo" [ empty_step ] ]
+                  [
+                    make_proc "foo"
+                      [ empty_step; simple_step (cl1 (return_ tuple0)) ];
+                  ]
               in
               let ir = linearize_one m in
               let proc = find_proc ir "foo" in
-              check int "one action" 1 (List.length proc.actions);
+              check int "two actions" 2 (List.length proc.actions);
               let a = List.hd (plain_actions proc.actions) in
+              let ret = List.nth (plain_actions proc.actions) 1 in
               match a.pc_dest with
-              | PcNext "Done" -> ()
-              | _ -> fail "expected PcNext Done");
+              | PcNext l when l = ret.label -> ()
+              | _ -> fail "expected PcNext to the return action");
           test_case "fair process preserved in ir" `Quick (fun () ->
               let m =
                 make_module "m"
@@ -143,7 +147,7 @@ let () =
                       make_process ~fairness:WeakFair "ps" "foo" (intlit 1)
                         (intlit 2);
                     ]
-                  [ make_proc "foo" [ empty_step ] ]
+                  [ make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ] ]
               in
               let ir = linearize_one m in
               match ir.processes with
@@ -207,6 +211,7 @@ let () =
                             [ simple_step (cl1 (assign "x" (intlit 1))) ];
                             [ simple_step (cl1 (assign "x" (intlit 2))) ];
                           ];
+                        simple_step (cl1 (return_ tuple0));
                       ];
                   ]
               in
@@ -234,8 +239,8 @@ let () =
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               match entry.pc_dest with
-              | PcBranch (_, _, "Done") -> ()
-              | _ -> fail "expected PcBranch with Done as false branch");
+              | PcBranch (_, _, "__foo_fallthrough__") -> ()
+              | _ -> fail "expected PcBranch to the fall-through sentinel");
           test_case "while pre runs before every check" `Quick (fun () ->
               let m =
                 make_module "m" ~processes:[ default_process ]
@@ -300,8 +305,8 @@ let () =
               let proc = find_proc ir "foo" in
               let entry = find_action ir proc.entry_label in
               match entry.pc_dest with
-              | PcBranch (_, _, "Done") -> ()
-              | _ -> fail "expected PcBranch with Done as false branch");
+              | PcBranch (_, _, "__foo_fallthrough__") -> ()
+              | _ -> fail "expected PcBranch to the fall-through sentinel");
           test_case "break targets after loop" `Quick (fun () ->
               let m =
                 make_module "m" ~processes:[ default_process ]

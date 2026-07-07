@@ -132,7 +132,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   procedure f() { x = 1 - x; }\n\
+                   procedure f() { while (true) { x = 1 - x; } }\n\
                    fair process p = f in 1..1;\n\
                    }\n"
               in
@@ -146,7 +146,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   procedure f() { x = 1 - x; }\n\
+                   procedure f() { while (true) { x = 1 - x; } }\n\
                    fair process p = f in 1..1;\n\
                    }\n"
               in

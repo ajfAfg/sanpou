@@ -203,6 +203,10 @@ mod example {
   procedure calls (with return values; recursion is supported), `await`,
   `assert`, `return`, `break`, `continue`; `if`/`else if`/`else`, `while`,
   `either { } or { }`, `with (x in S) { }`.
+- **Returns are explicit**: every finishing path of a procedure must end in
+  `return` (`return ();` when there is nothing to return) — the compiler
+  rejects a body that can fall off its end. A procedure that never
+  finishes, such as a `while (true)` loop with no `break`, needs none.
 - **Steps and atomicity**: statements joined by commas and ended with `;`
   form one atomic action; block statements evaluate their condition in an
   action of its own; a bare `;` is an explicit yield point.

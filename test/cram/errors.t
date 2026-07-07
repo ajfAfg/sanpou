@@ -304,6 +304,35 @@ and the push share one action.)
   step_call.snp:6:26: a procedure call cannot appear in the same step as an await: the hoisted call would run before the guard is tested
   [1]
 
+Every finishing path of a procedure must end in a return; a body that can
+fall off its end is rejected (a procedure that never finishes — while (true)
+with no break — needs none):
+
+  $ cat > fall_through.snp <<'EOF'
+  > mod m {
+  >   var a = 0;
+  >   procedure helper() { a = 1; }
+  >   procedure main() { helper(); a = 2; return (); }
+  >   process p = main in 1..1;
+  > }
+  > EOF
+  $ sanpou compile fall_through.snp -o out
+  fall_through.snp:3:3: procedure helper can fall off its end without a return: every finishing path must end in `return`
+  [1]
+
+  $ cat > if_no_else.snp <<'EOF'
+  > mod m {
+  >   var x = 0;
+  >   procedure f() {
+  >     if (x == 0) { return (); }
+  >   }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ sanpou compile if_no_else.snp -o out
+  if_no_else.snp:3:3: procedure f can fall off its end without a return: every finishing path must end in `return`
+  [1]
+
 Lexical error:
 
   $ cat > lexical.snp <<'EOF'
@@ -343,7 +372,7 @@ Invalid sidecar config:
 
   $ cat > cfg.snp <<'EOF'
   > mod m {
-  >   procedure f() {}
+  >   procedure f() { return (); }
   >   process p = f in 1..1;
   > }
   > EOF

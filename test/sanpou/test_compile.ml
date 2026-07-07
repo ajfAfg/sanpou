@@ -46,7 +46,7 @@ let () =
                 parse
                   "mod foo {\n\
                    var x = 0;\n\
-                   procedure foo() { x = 1 - x; }\n\
+                   procedure foo() { while (true) { x = 1 - x; } }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
               in
@@ -58,7 +58,7 @@ let () =
                 parse
                   "mod foo {\n\
                    var x = 0;\n\
-                   procedure foo() { x = 1 - x; }\n\
+                   procedure foo() { while (true) { x = 1 - x; } }\n\
                    fair+ process ps = foo in 1..2;\n\
                    }\n"
               in
@@ -141,7 +141,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   procedure f() { x = 1 - x; }\n\
+                   procedure f() { while (true) { x = 1 - x; } }\n\
                    process a = f in 1..2;\n\
                    process b = f in 3..4;\n\
                    process c = f in {9};\n\
@@ -157,7 +157,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   procedure f() { x = 1 - x; }\n\
+                   procedure f() { while (true) { x = 1 - x; } }\n\
                    process a = f in 1..2;\n\
                    }\n"
               in
@@ -644,7 +644,7 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   procedure foo() { x = 1 - x; }\n\
+                   procedure foo() { while (true) { x = 1 - x; } }\n\
                    process ps = foo in 1..2;\n\
                    }\n"
               in
