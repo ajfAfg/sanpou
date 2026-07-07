@@ -218,15 +218,19 @@ let ty_prim fresh_tyvar ~lhs_loc ~rhs_loc op ty1 ty2 =
       unify rhs_loc ty2 (TySet ty1);
       TyBool
 
-(* Subscripting works on sequences and on int-keyed maps: pick by what is
-   already known about the collection, defaulting to a sequence. *)
+(* Subscripting works on sequences (int indices) and on maps (whose keys
+   take the domain's element type): pick by what is already known about the
+   collection, defaulting to a sequence. *)
 let infer_indexed_access fresh_tyvar ~collection_loc ~index_loc collection_ty
     index_ty =
-  unify index_loc index_ty TyInt;
   let elem_ty = fresh_tyvar () in
   (match repr collection_ty with
-  | TyMap _ -> unify collection_loc collection_ty (TyMap (TyInt, elem_ty))
-  | _ -> unify collection_loc collection_ty (TySeq elem_ty));
+  | TyMap (key_ty, _) ->
+      unify index_loc index_ty key_ty;
+      unify collection_loc collection_ty (TyMap (key_ty, elem_ty))
+  | _ ->
+      unify index_loc index_ty TyInt;
+      unify collection_loc collection_ty (TySeq elem_ty));
   elem_ty
 
 (* Record field access. Without row polymorphism the record's full type must
@@ -353,10 +357,13 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;
       TySet TyInt
   | MapInit { binder; domain; value } ->
-      (* Maps are int-keyed, so the domain must be a set of integers. *)
-      unify domain.loc (infer_expr fresh_tyvar env domain) (TySet TyInt);
-      let binder_env = (binder, tysc_of_ty TyInt) :: env in
-      TyMap (TyInt, infer_expr fresh_tyvar binder_env value)
+      (* The key type is the domain's element type: any set works — ints,
+         strings, atoms (so per-process state can be keyed by any process
+         ID set). *)
+      let key_ty = fresh_tyvar () in
+      unify domain.loc (infer_expr fresh_tyvar env domain) (TySet key_ty);
+      let binder_env = (binder, tysc_of_ty key_ty) :: env in
+      TyMap (key_ty, infer_expr fresh_tyvar binder_env value)
   | Tuple elems ->
       if elems = [] then TyUnit
       else TyTuple (List.map (infer_expr fresh_tyvar env) elems)

@@ -460,6 +460,27 @@ emitted CONSTANTs compare as distinct opaque values.
   $ tlc mv_check mv_check
   No error has been found
 
+Maps keyed by a process ID set: per-process state (the idiomatic PlusCal
+pattern) works for non-integer IDs too — each string-ID process bumps its
+own slot and waits until all slots are set, then the module terminates.
+
+  $ cat > strmap.snp <<'EOF'
+  > mod strmap {
+  >   def ids = {"a", "b"};
+  >   var t = { x in ids -> 0 };
+  >   procedure f() {
+  >     t[self] = t[self] + 1;
+  >     await forall (i in ids) { t[i] == 1 };
+  >     return ();
+  >   }
+  >   fair process p = f in ids;
+  > }
+  > EOF
+  $ cp either_guard.json strmap.json
+  $ sanpou compile strmap.snp -o strmap
+  $ tlc strmap strmap
+  No error has been found
+
 Processes over a non-integer ID set: the process ranges over a set of strings,
 so ProcSet, pc, and stack are all keyed by strings and self has string type.
 Both processes run to completion, so termination confirms the emitted spec
