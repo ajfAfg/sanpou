@@ -60,6 +60,33 @@ let check_expr props (e : Resolved_ast.expr) : unit =
   | Some (message, loc) -> error message loc
   | None -> ()
 
+(* Inside a property body, a temporal subformula (a globally/finally
+   application or a property reference) is a TLA+ temporal-level formula:
+   it may be combined with the boolean connectives, but cannot appear as
+   an operand of a comparison, a collection element, or an argument —
+   SANY rejects a temporal formula in those positions. At temporal level
+   the connectives recurse and temporal leaves are fine; any other node
+   drops to state level, below which a temporal occurrence is an error. *)
+let rec check_property_expr props (e : Resolved_ast.expr) : unit =
+  match e.desc with
+  | Builtin ((Builtin.Globally | Builtin.Finally), args) ->
+      (* the argument may itself be temporal: globally(finally(p)) *)
+      List.iter (check_property_expr props) args
+  | Var i when List.mem i.name props -> ()
+  | UnOp (Not, rhs) -> check_property_expr props rhs
+  | BinOp ((And | Or), lhs, rhs) ->
+      check_property_expr props lhs;
+      check_property_expr props rhs
+  | _ -> (
+      match temporal_occurrence props e with
+      | Some (_, loc) ->
+          error
+            "a temporal formula may only be combined with && / || / ! here: \
+             TLA+ does not allow one inside comparisons, collections, or \
+             arguments"
+            loc
+      | None -> ())
+
 let check_stmt props (stmt : Resolved_ast.simple_stmt) : unit =
   let check = check_expr props in
   match stmt.desc with
@@ -101,9 +128,11 @@ let check_module (m : Resolved_ast.module_def) : unit =
     List.fold_left
       (fun props (item : Resolved_ast.item) ->
         match item.desc with
-        | PropDef { name; _ } ->
+        | PropDef { name; value } ->
             (* Temporal operators and references to preceding properties
-               are exactly what a property body is for. *)
+               are exactly what a property body is for — in the positions
+               TLA+ allows them. *)
+            check_property_expr props value;
             name :: props
         | ConstDef { value; _ } | FunDef { body_expr = value; _ } ->
             check_expr props value;

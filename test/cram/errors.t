@@ -106,6 +106,22 @@ referencing a property from a runtime context, is rejected:
   temporal_ref.snp:5:11: p is a property and can only be referenced from another property
   [1]
 
+Inside a property, temporal formulas live at TLA+'s temporal level: they
+combine with the boolean connectives but cannot be operands of comparisons,
+collection elements, or arguments:
+
+  $ cat > temporal_eq.snp <<'EOF'
+  > mod m {
+  >   var x = 0;
+  >   property q = globally(x >= 0) == true;
+  >   procedure f() { x = 1; return (); }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ sanpou compile temporal_eq.snp -o out
+  temporal_eq.snp:3:16: a temporal formula may only be combined with && / || / ! here: TLA+ does not allow one inside comparisons, collections, or arguments
+  [1]
+
 Syntax error:
 
   $ cat > syntax.snp <<'EOF'
