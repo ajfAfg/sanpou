@@ -19,10 +19,21 @@ let indent_lines n s =
   String.split_on_char '\n' s |> List.map (fun line -> pad ^ line)
   |> String.concat "\n"
 
+(* TLA+ string literals interpret backslash escape sequences; sanpou strings
+   are raw, so backslashes and quotes must be escaped on emission. *)
+let escape_string s =
+  let buf = Buffer.create (String.length s) in
+  String.iter
+    (fun c ->
+      (match c with '\\' | '"' -> Buffer.add_char buf '\\' | _ -> ());
+      Buffer.add_char buf c)
+    s;
+  Buffer.contents buf
+
 let rec render_expr = function
   | TInt i -> string_of_int i
   | TBool b -> if b then "TRUE" else "FALSE"
-  | TStr s -> "\"" ^ s ^ "\""
+  | TStr s -> "\"" ^ escape_string s ^ "\""
   | TId s -> s
   | TBinOp (op, e1, e2) -> render_expr e1 ^ " " ^ op ^ " " ^ render_expr e2
   | TApp (name, args) ->

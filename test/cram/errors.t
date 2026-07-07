@@ -176,6 +176,17 @@ Lexical error:
   lexical.snp:3:5: Unexpected character: '?'
   [1]
 
+Unterminated string literal:
+
+  $ cat > unterm.snp <<'EOF'
+  > mod m {
+  >   def x = "abc;
+  > }
+  > EOF
+  $ sanpou compile unterm.snp -o out
+  unterm.snp:2:11: Unterminated string literal (strings cannot span lines)
+  [1]
+
 Invalid sidecar config:
 
   $ cat > cfg.snp <<'EOF'

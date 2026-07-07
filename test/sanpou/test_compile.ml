@@ -126,6 +126,27 @@ let () =
               has "tags == {\"idle\", \"busy\"}";
               has "s = \"idle\"";
               has "s' = \"busy\"");
+          Alcotest.test_case "backslashes and quotes are escaped in tla strings"
+            `Quick (fun () ->
+              let ast =
+                parse
+                  "mod esc {\n\
+                  \  var s = \"a\\b\";\n\
+                  \  procedure main() {\n\
+                  \    assert s == \"a\\b\";\n\
+                  \    s = \"x\\\";\n\
+                  \    return ();\n\
+                  \  }\n\
+                  \  process ps = main in 1..1;\n\
+                  \  }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "s = \"a\\\\b\"";
+              has "s' = \"x\\\\\"";
+              (* The assert message embeds the pretty-printed condition, so
+                 the quotes around its string literal must be escaped. *)
+              has ": s == \\\"a\\\\b\\\"\"");
           Alcotest.test_case "model values compile to tla constants" `Quick
             (fun () ->
               let ast =

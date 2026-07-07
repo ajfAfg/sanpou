@@ -45,6 +45,8 @@ rule main = parse
    or newline, with no escape sequences. *)
 | '"' ([^ '"' '\n']* as s) '"'
     { Parser.STRINGV s }
+| '"' [^ '"' '\n']* ('\n' | eof)
+    { raise (Error "Unterminated string literal (strings cannot span lines)") }
 | "=="
     { Parser.EQEQ }
 | "!="

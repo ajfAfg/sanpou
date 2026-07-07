@@ -259,6 +259,27 @@ correctly under TLC.
   $ tlc str_check str_check
   No error has been found
 
+String escaping end-to-end: sanpou strings are raw, so a backslash in a
+literal (including a trailing one) and the quotes that `assert` embeds in
+its message via the pretty-printed condition must all be escaped in the
+emitted TLA+ — SANY would otherwise reject the spec.
+
+  $ cat > str_esc.snp <<'EOF'
+  > mod str_esc {
+  >   var s = "a\b";
+  >   procedure f() {
+  >     assert s == "a\b";
+  >     s = "x\";
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json str_esc.json
+  $ sanpou compile str_esc.snp -o str_esc
+  $ tlc str_esc str_esc
+  No error has been found
+
 Records end-to-end: a record-valued variable is read in the loop guard and
 two of its fields are updated in one step (a single EXCEPT). The process runs
 to completion, so termination confirms the emitted record literal, field
