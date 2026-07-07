@@ -45,6 +45,7 @@ type type_error =
   | Unknown_field of id * ty
   | Self_outside_procedure
   | Atom_name_clash of id
+  | Reserved_module_name of id
 
 exception Type_error of type_error * loc
 
@@ -502,14 +503,23 @@ let check_module (m : Surface_ast.module_def) : unit =
      the shadowed declarations. Atoms are the exception: an atom's name is
      the model value's identity in traces and the TLC config, so renaming
      one would change observable output — atom names are module-wide unique
-     in both directions. [declared] tracks every module-level name, [atoms]
-     the atom subset. *)
+     in both directions. Names the emitter itself generates (or pulls in
+     via EXTENDS) are reserved outright. [declared] tracks every
+     module-level name, [atoms] the atom subset. *)
+  let check_reserved loc name =
+    if
+      List.mem name Emit_tla.reserved_module_names
+      || Emit_tla.is_generated_action_label name
+    then type_error (Reserved_module_name name) loc
+  in
   let declare_atom (atoms, declared) loc name =
     if List.mem name declared then type_error (Atom_name_clash name) loc;
+    check_reserved loc name;
     (name :: atoms, name :: declared)
   in
   let declare (atoms, declared) loc name =
     if List.mem name atoms then type_error (Atom_name_clash name) loc;
+    check_reserved loc name;
     (atoms, name :: declared)
   in
   let (_ : tyenv * id list * (id list * id list)) =
@@ -691,6 +701,10 @@ let string_of_type_error = function
         "%s collides with an atom of the same name: an atom's name is its \
          identity (in traces and the TLC config), so it cannot be shadowed \
          or reused"
+        id
+  | Reserved_module_name id ->
+      Printf.sprintf
+        "%s is reserved: it collides with a name in the emitted TLA+ module"
         id
   | Break_outside_loop -> "break outside of loop"
   | Continue_outside_loop -> "continue outside of loop"

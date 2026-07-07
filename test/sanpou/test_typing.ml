@@ -636,6 +636,18 @@ let () =
               check_fails "mod m { atom a; atom a; }");
           test_case "duplicate atom within one declaration" `Quick (fun () ->
               check_fails "mod m { atom a, a; }");
+          test_case "reserved: generated spec name" `Quick (fun () ->
+              check_fails "mod m { def vars = 1; }");
+          test_case "reserved: generated variable name" `Quick (fun () ->
+              check_fails "mod m { var pc = 0; }");
+          test_case "reserved: the null frame sentinel" `Quick (fun () ->
+              check_fails "mod m { atom defaultInitValue; }");
+          test_case "reserved: stdlib operator from EXTENDS" `Quick (fun () ->
+              check_fails "mod m { def Cardinality(s) = 42; }");
+          test_case "reserved: generated action label shape" `Quick (fun () ->
+              check_fails "mod m { def L3 = 1; }");
+          test_case "label lookalikes are not reserved" `Quick (fun () ->
+              check_ok "mod m { def L = 1; def L3x = 2; def l3 = 3; }");
           test_case "comprehension predicate non-bool" `Quick (fun () ->
               check_fails "mod m { def s = { x in 1..3 : x }; }");
           test_case "head on tuple" `Quick (fun () ->

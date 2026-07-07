@@ -109,6 +109,23 @@ let () =
               (* f writes the first x; main writes the second *)
               has "x__2' = a";
               has "x' = (x + b)");
+          Alcotest.test_case "binders named like reserved TLA names renamed"
+            `Quick (fun () ->
+              (* pc is a generated VARIABLE and Len a Sequences operator:
+                 declarations of these names are rejected, but a binder just
+                 renames like any other collision *)
+              let ast =
+                parse
+                  "mod m {\n\
+                   def s = { pc in 1..3 : pc > 0 };\n\
+                   def n = forall (Len in s) { Len >= 1 };\n\
+                   procedure f() { return (); }\n\
+                   process p = f in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "{pc__1 \\in 1..3 : (pc__1 > 0)}" tla;
+              has_in "(\\A Len__2 \\in s: (Len__2 >= 1))" tla);
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
               let ast =
