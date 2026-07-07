@@ -94,7 +94,9 @@ summary is keyed by the ids.
 Non-deadlock verdicts are reported instead of silently truncating the
 output: an assert failure surfaces TLC's message (with the sanpou source
 position baked into it), and a temporal violation reports the stuttering
-loop point and the violation.
+loop point and the violation. (TLC's nonzero exit codes differ across
+versions/platforms, so they are swallowed with || true — the annotated
+output is what these tests assert.)
 
   $ cat > afail.snp <<'EOF'
   > mod afail {
@@ -115,8 +117,7 @@ loop point and the violation.
   $ sanpou compile afail.snp -o out
   $ "$SANPOU_JAVA" -cp "$SANPOU_TLA2TOOLS_JAR" -XX:+UseParallelGC tlc2.TLC \
   >   -tool -config out/afail.cfg -metadir out/afail_states -workers 1 \
-  >   out/afail.tla > out/afail.out 2>&1
-  [12]
+  >   out/afail.tla > out/afail.out 2>&1 || true
   $ sanpou trace out/afail.out -o out | tail -n 2
   ERROR — The first argument of Assert evaluated to FALSE; the second argument was:
   "assertion failed at line 5, col 7: x != 2"
@@ -140,8 +141,7 @@ loop point and the violation.
   $ sanpou compile tviol.snp -o out
   $ "$SANPOU_JAVA" -cp "$SANPOU_TLA2TOOLS_JAR" -XX:+UseParallelGC tlc2.TLC \
   >   -tool -config out/tviol.cfg -metadir out/tviol_states -workers 1 \
-  >   out/tviol.tla > out/tviol.out 2>&1
-  [12]
+  >   out/tviol.tla > out/tviol.out 2>&1 || true
   $ sanpou trace out/tviol.out -o out | tail -n 3
   Step 4: (stuttering — the behavior can loop here forever)
   
