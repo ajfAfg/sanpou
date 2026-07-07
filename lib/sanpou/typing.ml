@@ -544,9 +544,16 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
         (infer_expr ctx.fresh_tyvar ctx.env domain)
         (TySet elem_ty);
       (* The binder is readable but not assignable: it is absent from
-         mutable_vars, so assignments to it fail as to any non-variable. *)
+         mutable_vars — and it shadows any same-named mutable variable, so
+         that name is subtracted too (alpha-conversion resolves the target
+         to the binder, so the outer variable is not writable here). *)
       let binder_ctx =
-        { ctx with env = (binder, tysc_of_ty elem_ty) :: ctx.env }
+        {
+          ctx with
+          env = (binder, tysc_of_ty elem_ty) :: ctx.env;
+          mutable_vars =
+            List.filter (fun (id, _) -> id <> binder) ctx.mutable_vars;
+        }
       in
       check_no_conflicting_writes stmts;
       check_control_transfer_last stmts;
@@ -709,6 +716,9 @@ let check_module (m : Surface_ast.module_def) : unit =
                             | VarDecl { name; _ } -> name = id
                             | _ -> false)
                           m.items
+                        (* a parameter shadows a same-named module var, and
+                           parameters are not assignable *)
+                        && not (List.mem id params)
                       then Some (id, ty)
                       else None
                   | _ -> None)

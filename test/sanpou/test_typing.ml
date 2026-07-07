@@ -630,6 +630,38 @@ let () =
                     procedure f(n) { x = n + 1; return (); }
                     process p = f in 1..1;
                   }|});
+          test_case "assign to with-binder shadowing a var" `Quick (fun () ->
+              (* alpha resolves the target to the binder, so the outer
+                 mutable x is not writable here; approving it against the
+                 global used to emit a primed bound identifier *)
+              check_fails
+                {|mod m {
+                    var x = 0;
+                    procedure p() {
+                      with (x in {1, 2}) { x = x + 1; }
+                      return ();
+                    }
+                    process ps = p in 1..1;
+                  }|});
+          test_case "assign to param shadowing a var" `Quick (fun () ->
+              check_fails
+                {|mod m {
+                    var g = 0;
+                    procedure p(g) { g = 5; return (); }
+                    procedure main() { p(1); return (); }
+                    process ps = main in 1..1;
+                  }|});
+          test_case "var still assignable outside the with" `Quick (fun () ->
+              check_ok
+                {|mod m {
+                    var x = 0;
+                    procedure p() {
+                      with (x in {1, 2}) { await x > 0; }
+                      x = 5;
+                      return ();
+                    }
+                    process ps = p in 1..1;
+                  }|});
           test_case "compare bool" `Quick (fun () ->
               check_fails "mod m { def x = true < 1; }");
           test_case "unbound var" `Quick (fun () ->

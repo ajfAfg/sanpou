@@ -345,6 +345,23 @@ without arguments):
   $ sanpou compile root_param.snp -o out
   root_param.snp:3:43: f takes 1 parameter; a process root procedure must take none (the process wrapper calls it without arguments)
   [1]
+Assignment targets resolve lexically: a with-binder or parameter that
+shadows a mutable variable is not itself assignable, so the write is
+rejected instead of silently going to the wrong binding:
+
+  $ cat > with_shadow.snp <<'EOF'
+  > mod m {
+  >   var x = 0;
+  >   procedure p() {
+  >     with (x in {1, 2}) { x = x + 1; }
+  >     return ();
+  >   }
+  >   process ps = p in 1..1;
+  > }
+  > EOF
+  $ sanpou compile with_shadow.snp -o out
+  with_shadow.snp:4:26: Cannot assign to x: not a mutable variable
+  [1]
 
 Lexical error:
 
