@@ -204,9 +204,16 @@ let normalize_simple_stmt st (stmt : Resolved_ast.simple_stmt) :
       (steps, at (Return value))
   | Break -> ([], at Break)
   | Continue -> ([], at Continue)
-  | Await cond ->
-      let steps, cond = normalize_expr st cond in
-      (steps, at (Await cond))
+  | Await cond -> (
+      (* A call spans several actions, so a guard containing one would be
+         evaluated once and frozen instead of re-tested with the guard. *)
+      match normalize_expr st cond with
+      | [], cond -> ([], at (Await cond))
+      | first :: _, _ ->
+          error
+            "an await condition cannot contain a procedure call: the call \
+             would be evaluated once, not re-evaluated with the guard"
+            first.loc)
   | Assert cond ->
       let steps, cond = normalize_expr st cond in
       (steps, at (Assert cond))
@@ -229,6 +236,24 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
             (List.rev_append steps steps_acc, stmt :: stmts_acc))
           ([], []) stmts
       in
+      (* Hoisted calls run before the whole step, so they would jump over a
+         same-step await: the call's effects would happen in states where
+         the guard never held (and inside either, an arm whose guard cannot
+         hold would still execute the call). A statement call is fine — the
+         guard and the push share one action. *)
+      let has_await =
+        List.exists
+          (fun (stmt : Normalized_ast.simple_stmt) ->
+            match stmt.desc with Await _ -> true | _ -> false)
+          stmts_rev
+      in
+      (match (List.rev steps_rev, has_await) with
+      | first :: _, true ->
+          error
+            "a procedure call cannot appear in the same step as an await: \
+             the hoisted call would run before the guard is tested"
+            first.loc
+      | _ -> ());
       List.rev steps_rev
       @ [ at (Normalized_ast.SimpleStep (List.rev stmts_rev)) ]
   | WithStep { binder; domain; stmts } ->

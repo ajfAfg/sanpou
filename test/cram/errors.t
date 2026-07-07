@@ -252,6 +252,41 @@ one would be silently overwritten:
   $ sanpou compile two_calls.snp -o out
   two_calls.snp:5:5: a procedure call must be the last statement of its step: the following statements merge into the same atomic action and the transfer would discard them
   [1]
+Procedure calls do not compose with await: a hoisted call would run before
+the guard is tested, and a call inside the condition would be evaluated once
+instead of re-tested. (A statement call after the await is fine — the guard
+and the push share one action.)
+
+  $ cat > await_call.snp <<'EOF'
+  > mod m {
+  >   var flag = false;
+  >   procedure get() { return flag; }
+  >   procedure waiter() {
+  >     await get();
+  >     return ();
+  >   }
+  >   process p = waiter in 1..1;
+  > }
+  > EOF
+  $ sanpou compile await_call.snp -o out
+  await_call.snp:5:11: an await condition cannot contain a procedure call: the call would be evaluated once, not re-evaluated with the guard
+  [1]
+
+  $ cat > step_call.snp <<'EOF'
+  > mod m {
+  >   var lock = 0;
+  >   var y = 0;
+  >   procedure bump() { return 1; }
+  >   procedure f() {
+  >     await lock == 0, y = bump();
+  >     return ();
+  >   }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ sanpou compile step_call.snp -o out
+  step_call.snp:6:26: a procedure call cannot appear in the same step as an await: the hoisted call would run before the guard is tested
+  [1]
 
 Lexical error:
 
