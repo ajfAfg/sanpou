@@ -163,6 +163,24 @@ let () =
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_not_in "ASSUME" tla);
+          Alcotest.test_case "multiple awaits in one step conjoin" `Quick
+            (fun () ->
+              (* the guard used to be overwritten (last await wins), letting
+                 a step fire in states the program excludes *)
+              let ast =
+                parse
+                  "mod m {\n\
+                   var x = 0;\n\
+                   var y = 0;\n\
+                   procedure f() {\n\
+                   await x >= 0, await y >= 0, x = 1;\n\
+                   return ();\n\
+                   }\n\
+                   process ps = f in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "((x >= 0) /\\ (y >= 0))" tla);
           Alcotest.test_case "sequence builtins compile to tla sequences" `Quick
             (fun () ->
               let ast =

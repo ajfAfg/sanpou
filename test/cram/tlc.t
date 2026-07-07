@@ -273,6 +273,29 @@ pairwise-disjointness ASSUME fails fast instead.
   $ sanpou compile overlap.snp -o overlap
   $ tlc overlap overlap
   Assumption line 10, col 8 to line 10, col 32 of module overlap is false
+Multiple awaits in one step conjoin: `await false` keeps the step disabled
+even when a later `await true` follows it in the same comma list, so the
+invariant that x never changes holds. (The guard used to be overwritten by
+the last await, letting the step fire.)
+
+  $ cat > await_conj.snp <<'EOF'
+  > mod await_conj {
+  >   var x = 0;
+  >   def xzero = x == 0;
+  >   procedure f() {
+  >     await false, await true, x = 1;
+  >     return ();
+  >   }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ cat > await_conj.json <<'EOF'
+  > { "checks": { "deadlock": false, "termination": false },
+  >   "invariants": ["xzero"], "properties": [] }
+  > EOF
+  $ sanpou compile await_conj.snp -o await_conj
+  $ tlc await_conj await_conj
+  No error has been found
 
 Sets end-to-end: two processes drawn from a set literal each unblock only if
 the set operations (union, comprehension, cardinality, difference, subseteq)
