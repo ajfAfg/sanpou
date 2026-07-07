@@ -715,8 +715,14 @@ let next_decls config (ir : module_ir) : tla_decl list =
                TApp (p.wrapper.proc_name, [ TId "self" ]) )))
       ir.processes
   in
+  (* An explicit "Termination" in the sidecar's properties implies the
+     Termination property definition even when the check flag is off; the
+     Terminating stuttering disjunct is unconditional either way. *)
+  let wants_termination =
+    config.checks.termination || List.mem "Termination" config.properties
+  in
   terminating_decls
-  @ (if config.checks.termination then termination_property_decls else [])
+  @ (if wants_termination then termination_property_decls else [])
   @ [
       DOpDef
         ( "Next",

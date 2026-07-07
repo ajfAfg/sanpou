@@ -48,6 +48,52 @@ let check_has_processes (prog : Surface_ast.program) : diagnostic option =
           })
     prog
 
+(* The sidecar config's property/invariant names go verbatim into the
+   generated .cfg, where a typo only fails later inside TLC with an obscure
+   message. Validate them against the module items instead: a property must
+   name a [property] item ("Termination" is compiler-provided), an invariant
+   a [def]. *)
+let check_config_names (config : Config.t) (prog : Surface_ast.program) :
+    diagnostic option =
+  let item_names f (m : Surface_ast.module_def) =
+    List.filter_map (fun (item : Surface_ast.item) -> f item.desc) m.items
+  in
+  List.find_map
+    (fun (m : Surface_ast.module_def) ->
+      let props =
+        item_names
+          (function Generic_ast.PropDef { name; _ } -> Some name | _ -> None)
+          m
+      in
+      let defs =
+        item_names
+          (function Generic_ast.ConstDef { name; _ } -> Some name | _ -> None)
+          m
+      in
+      let missing kind item_kind available names =
+        List.find_map
+          (fun name ->
+            if List.mem name available then None
+            else
+              Some
+                {
+                  loc = m.mod_loc;
+                  message =
+                    Printf.sprintf
+                      "the sidecar config lists %s '%s', but module %s \
+                       defines no such %s"
+                      kind name m.mod_name item_kind;
+                })
+          names
+      in
+      let user_properties =
+        List.filter (fun p -> p <> "Termination") config.properties
+      in
+      match missing "property" "property item" props user_properties with
+      | Some d -> Some d
+      | None -> missing "invariant" "def" defs config.invariants)
+    prog
+
 let compile ?config (source : string) : (output list, diagnostic) result =
   match parse source with
   | Error d -> Error d
@@ -59,25 +105,29 @@ let compile ?config (source : string) : (output list, diagnostic) result =
           match check_has_processes prog with
           | Some d -> Error d
           | None -> (
-          let resolved = Alpha_convert.transform prog in
-          match
-            Check_temporal.check resolved;
-            Normalize_calls.normalize resolved
-          with
-          | exception Check_temporal.Error (message, loc) ->
-              Error { loc; message }
-          | exception Normalize_calls.Error (message, loc) ->
-              Error { loc; message }
-          | normalized -> (
-              match Linearize.linearize normalized with
-              | exception Linearize.Error (message, loc) ->
-                  Error { loc; message }
-              | irs ->
-                  Ok
-                    (List.map
-                       (fun ir ->
-                         {
-                           tla_module = Emit_tla.generate_module ?config ir;
-                           source_map = Source_map.extract ir;
-                         })
-                       irs)))))
+              match Option.bind config (fun c -> check_config_names c prog) with
+              | Some d -> Error d
+              | None -> (
+                  let resolved = Alpha_convert.transform prog in
+                  match
+                    Check_temporal.check resolved;
+                    Normalize_calls.normalize resolved
+                  with
+                  | exception Check_temporal.Error (message, loc) ->
+                      Error { loc; message }
+                  | exception Normalize_calls.Error (message, loc) ->
+                      Error { loc; message }
+                  | normalized -> (
+                      match Linearize.linearize normalized with
+                      | exception Linearize.Error (message, loc) ->
+                          Error { loc; message }
+                      | irs ->
+                          Ok
+                            (List.map
+                               (fun ir ->
+                                 {
+                                   tla_module =
+                                     Emit_tla.generate_module ?config ir;
+                                   source_map = Source_map.extract ir;
+                                 })
+                               irs))))))

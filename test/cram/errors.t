@@ -425,6 +425,24 @@ Invalid sidecar config:
   Error: invalid sanpou config 'cfg.json': Json.parse: unexpected char 'n' at 0
   [1]
 
+Sidecar property/invariant names are validated against the module:
+
+  $ cat > cfg_typo.snp <<'EOF'
+  > mod m {
+  >   var x = 0;
+  >   property live = finally(x == 1);
+  >   procedure f() { x = 1; return (); }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cat > cfg_typo.json <<'EOF'
+  > { "checks": { "deadlock": true, "termination": false },
+  >   "properties": ["liev"], "invariants": [] }
+  > EOF
+  $ sanpou compile cfg_typo.snp -o out
+  cfg_typo.snp:1:1: the sidecar config lists property 'liev', but module m defines no such property item
+  [1]
+
 Trace without a compile output directory:
 
   $ sanpou trace missing.out -o nonexistent
