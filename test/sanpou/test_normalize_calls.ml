@@ -306,6 +306,43 @@ let () =
                        (n_intlit 1) (n_intlit 2));
                 ]
                 (normalize_proc_body body));
+          test_case "call in await condition rejected" `Quick (fun () ->
+              let body = [ simple_step [ await_ (proc_app "foo" []) ] ] in
+              check_raises "located error"
+                (Sanpou.Normalize_calls.Error
+                   ( "an await condition cannot contain a procedure call: the \
+                      call would be evaluated once, not re-evaluated with the \
+                      guard",
+                     loc0 ))
+                (fun () -> ignore (normalize_proc_body body)));
+          test_case "call beside an await in one step rejected" `Quick
+            (fun () ->
+              let body =
+                [
+                  simple_step
+                    [
+                      await_ (var "flag"); assign "y" (proc_app "foo" []);
+                    ];
+                ]
+              in
+              check_raises "located error"
+                (Sanpou.Normalize_calls.Error
+                   ( "a procedure call cannot appear in the same step as an \
+                      await: the hoisted call would run before the guard is \
+                      tested",
+                     loc0 ))
+                (fun () -> ignore (normalize_proc_body body)));
+          test_case "statement call beside an await stays in one action"
+            `Quick (fun () ->
+              (* a guard and a push share one action, so this is sound *)
+              let body =
+                [ simple_step [ await_ (var "flag"); call_ "foo" [] ] ]
+              in
+              check_body "guarded call"
+                [
+                  n_simple [ n_await (n_var "flag"); n_call "foo" [] ];
+                ]
+                (normalize_proc_body body));
           test_case "call in with body rejected" `Quick (fun () ->
               let with_step : Sanpou.Resolved_ast.step =
                 node
