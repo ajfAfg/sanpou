@@ -83,7 +83,7 @@ let colon_items_desc (items : (Surface_ast.expr * Surface_ast.expr) list) =
 %type <Surface_ast.accessor list> nonempty_list(accessor)
 %type <Surface_ast.block_stmt> block_stmt if_stmt
 %type <Surface_ast.expr> expr or_expr and_expr comparison_expr range_expr add_expr
-%type <Surface_ast.expr> mult_expr postfix_expr primary_expr
+%type <Surface_ast.expr> mult_expr unary_expr postfix_expr primary_expr
 %type <Surface_ast.expr * Surface_ast.expr> colon_item
 %type <(Surface_ast.expr * Surface_ast.expr) list> separated_nonempty_list(COMMA, colon_item)
 %type <Surface_ast.expr list> separated_nonempty_list(COMMA, expr)
@@ -220,10 +220,17 @@ add_expr:
   | e1=add_expr MINUS e2=mult_expr { mk $startpos (BinOp (Minus, e1, e2)) }
 
 mult_expr:
+  | e=unary_expr { e }
+  | e1=mult_expr MULT e2=unary_expr { mk $startpos (BinOp (Mult, e1, e2)) }
+  | e1=mult_expr DIV e2=unary_expr { mk $startpos (BinOp (Div, e1, e2)) }
+  | e1=mult_expr PERCENT e2=unary_expr { mk $startpos (BinOp (Mod, e1, e2)) }
+
+(* Unary operators bind looser than postfix subscript/field access, so
+   -s[1] negates the element and !r.f negates the field. *)
+unary_expr:
   | e=postfix_expr { e }
-  | e1=mult_expr MULT e2=postfix_expr { mk $startpos (BinOp (Mult, e1, e2)) }
-  | e1=mult_expr DIV e2=postfix_expr { mk $startpos (BinOp (Div, e1, e2)) }
-  | e1=mult_expr PERCENT e2=postfix_expr { mk $startpos (BinOp (Mod, e1, e2)) }
+  | MINUS rhs=unary_expr { mk $startpos (UnOp (Neg, rhs)) }
+  | NOT rhs=unary_expr { mk $startpos (UnOp (Not, rhs)) }
 
 postfix_expr:
   | e=primary_expr { e }
@@ -233,8 +240,6 @@ postfix_expr:
       { mk $startpos (Field (lhs, field)) }
 
 primary_expr:
-  | MINUS rhs=primary_expr { mk $startpos (UnOp (Neg, rhs)) }
-  | NOT rhs=primary_expr { mk $startpos (UnOp (Not, rhs)) }
   | IF LPAREN cond=expr RPAREN LBRACE then_e=expr RBRACE
       ELSE LBRACE else_e=expr RBRACE
       { mk $startpos (IfExpr (cond, then_e, else_e)) }
