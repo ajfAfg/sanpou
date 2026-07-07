@@ -575,7 +575,14 @@ let check_module (m : Surface_ast.module_def) : unit =
               }
             in
             check_body ctx body;
-            ((proc_name, generalize env fn_ty) :: env, proc_names)
+            (* Generalize with [self] in scope: [self_ty] is not part of the
+               module-level env, so a procedure whose type mentions it (via a
+               parameter or return value unified with [self]) would otherwise
+               get it quantified — and each call site would then instantiate
+               its own [self] type, breaking the one-self-type-per-module
+               invariant. *)
+            let gen_env = ("self", tysc_of_ty self_ty) :: env in
+            ((proc_name, generalize gen_env fn_ty) :: env, proc_names)
         | Process { proc; domain; _ } ->
             (* The root must be a procedure: a def function here would
                reach the emitter's procedure table and crash. *)

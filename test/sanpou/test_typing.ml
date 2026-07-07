@@ -588,6 +588,18 @@ let () =
                     process a = f in 1..2;
                     process b = f in {"x"};
                   }|});
+          test_case "self type constrained through a procedure parameter"
+            `Quick (fun () ->
+              (* f's parameter unifies with self, so f's scheme must keep the
+                 module-shared self type monomorphic; generalizing it would
+                 let the int argument coexist with a string id set. *)
+              check_fails
+                {|mod m {
+                    var ok = 0;
+                    procedure f(x) { await x == self, ok = 1; return (); }
+                    procedure g() { f(1); return (); }
+                    fair process p = g in {"a"};
+                  }|});
           test_case "comprehension predicate non-bool" `Quick (fun () ->
               check_fails "mod m { def s = { x in 1..3 : x }; }");
           test_case "head on tuple" `Quick (fun () ->
