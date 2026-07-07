@@ -37,8 +37,9 @@ let describe_simple_stmts (stmts : Normalized_ast.simple_stmt list) =
 (* ===== Simple statement linearization ===== *)
 
 (* Cumulative effect of the simple statements merged into one action.
-   [assignments] accumulates across statements; [guard], [stack_op], [next]
-   and [extra_actions] are overwritten (last statement wins), matching how
+   [assignments], [asserts], and [guard] accumulate across statements
+   (guards conjoin, like PlusCal's `when`); [stack_op], [next] and
+   [extra_actions] are overwritten (last statement wins), matching how
    at most one control-transferring statement is meaningful per step. *)
 type stmt_effect = {
   guard : Normalized_ast.expr option;
@@ -69,7 +70,19 @@ let apply_simple_stmt ctx ~next_label ~source eff
         | Generic_ast.PathTarget (i, path) -> AssignPath (i.name, path, value)
       in
       { eff with assignments = eff.assignments @ [ assignment ] }
-  | Generic_ast.Await cond -> { eff with guard = Some cond }
+  | Generic_ast.Await cond ->
+      (* Multiple awaits in one step conjoin: with pre-state reads every
+         guard constrains the same state, so order is immaterial. *)
+      let guard =
+        match eff.guard with
+        | None -> cond
+        | Some g ->
+            {
+              Generic_ast.desc = Generic_ast.BinOp (Generic_ast.And, g, cond);
+              loc = g.loc;
+            }
+      in
+      { eff with guard = Some guard }
   | Generic_ast.Assert cond ->
       let message =
         Printf.sprintf "assertion failed at line %d, col %d: %s" stmt.loc.line
