@@ -359,5 +359,17 @@ let render (trace : trace) (smap : Source_map.t) : string =
         (render_step ~prev_state step smap ^ "\n\n")
         :: render_steps step.state rest
   in
+  let stuttering_line =
+    match trace.stuttering_step with
+    | Some n ->
+        Printf.sprintf
+          "Step %d: (stuttering — the behavior can loop here forever)\n\n" n
+    | None -> ""
+  in
+  let error_lines =
+    List.map (fun msg -> "ERROR — " ^ msg ^ "\n") trace.errors
+  in
   String.concat "" (render_steps [] trace.steps)
+  ^ stuttering_line
+  ^ String.concat "" error_lines
   ^ if trace.is_deadlock then render_deadlock_summary trace smap else ""

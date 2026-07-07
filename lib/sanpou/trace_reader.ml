@@ -18,6 +18,11 @@ type trace = {
   is_deadlock : bool;
   steps : trace_step list;
   module_name : string option;
+  errors : string list;
+      (* error-severity TLC messages (assert failures, invariant and
+         temporal violations, evaluation errors), in output order *)
+  stuttering_step : int option;
+      (* the step number of a "N: Stuttering" loop marker, if any *)
 }
 
 (* ===== Parsing helpers ===== *)
@@ -109,6 +114,11 @@ type parse_state = {
   current_vars : state_var list;
   in_state_block : bool;
   continuation_value : bool;
+  capture : (int * string list) option;
+      (* message code and accumulated lines (reversed) of the error/verdict
+         message currently being read *)
+  errors_rev : string list;
+  stuttering_step : int option;
 }
 
 let initial_state =
@@ -120,6 +130,9 @@ let initial_state =
     current_vars = [];
     in_state_block = false;
     continuation_value = false;
+    capture = None;
+    errors_rev = [];
+    stuttering_step = None;
   }
 
 let flush_step st =
@@ -167,6 +180,32 @@ let parse_state_line st line =
             (* Could be a continuation of the previous value *)
             if String.trim line <> "" then extend_last_value line st else st)
 
+(* "@!@!@STARTMSG <code>:<severity> @!@!@" — severity 1 marks errors. *)
+let startmsg_re = Str.regexp {|@!@!@STARTMSG \([0-9]+\):\([0-9]+\)|}
+
+let finish_capture st =
+  match st.capture with
+  | None -> st
+  | Some (code, lines_rev) -> (
+      let text = String.trim (String.concat "\n" (List.rev lines_rev)) in
+      let st = { st with capture = None } in
+      match code with
+      | 2218 ->
+          (* "N: Stuttering" — the loop point of a liveness counterexample *)
+          let step =
+            match String.index_opt text ':' with
+            | Some i -> int_of_string_opt (String.sub text 0 i)
+            | None -> None
+          in
+          { st with stuttering_step = step }
+      | 2121 | 2103 | 2264 ->
+          (* trace-introduction / evaluation-stack boilerplate: "The
+             behavior up to this point is:", "The error occurred when TLC
+             was evaluating the nested expressions ...", "The following
+             behavior constitutes a counter-example:" *)
+          st
+      | _ -> { st with errors_rev = text :: st.errors_rev })
+
 let parse_line st line =
   let st =
     match parse_module_name line with
@@ -175,17 +214,35 @@ let parse_line st line =
   in
   if starts_with "@!@!@STARTMSG 2114" line then { st with is_deadlock = true }
   else if starts_with "@!@!@STARTMSG 2217" line then
-    { (flush_step st) with in_state_block = true; continuation_value = false }
+    {
+      (flush_step (finish_capture st)) with
+      in_state_block = true;
+      continuation_value = false;
+    }
   else if starts_with "@!@!@ENDMSG 2217" line then
     { st with in_state_block = false; continuation_value = false }
-  else if st.in_state_block then parse_state_line st line
-  else st
+  else if Str.string_match startmsg_re line 0 then
+    let code = int_of_string (Str.matched_group 1 line) in
+    let severity = int_of_string (Str.matched_group 2 line) in
+    let st = finish_capture st in
+    if severity = 1 || code = 2218 then { st with capture = Some (code, []) }
+    else st
+  else if starts_with "@!@!@ENDMSG" line then finish_capture st
+  else
+    match st.capture with
+    | Some (code, lines_rev) ->
+        { st with capture = Some (code, line :: lines_rev) }
+    | None -> if st.in_state_block then parse_state_line st line else st
 
 let parse (input : string) : trace =
   let lines = String.split_on_char '\n' input in
-  let st = flush_step (List.fold_left parse_line initial_state lines) in
+  let st =
+    flush_step (finish_capture (List.fold_left parse_line initial_state lines))
+  in
   {
     is_deadlock = st.is_deadlock;
     steps = List.rev st.steps_rev;
     module_name = st.module_name;
+    errors = List.rev st.errors_rev;
+    stuttering_step = st.stuttering_step;
   }

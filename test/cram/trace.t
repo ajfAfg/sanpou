@@ -91,3 +91,58 @@ summary is keyed by the ids.
   DEADLOCK — all processes blocked:
     process alice (f): await turn == 1, turn = 2  [line 6]
     process bob (f): await turn == 1, turn = 2  [line 6]
+Non-deadlock verdicts are reported instead of silently truncating the
+output: an assert failure surfaces TLC's message (with the sanpou source
+position baked into it), and a temporal violation reports the stuttering
+loop point and the violation.
+
+  $ cat > afail.snp <<'EOF'
+  > mod afail {
+  >   var x = 0;
+  >   procedure f() {
+  >     while (x < 3) {
+  >       assert x != 2,
+  >       x = x + 1;
+  >     }
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cat > afail.json <<'EOF'
+  > { "checks": { "deadlock": false, "termination": false }, "properties": [] }
+  > EOF
+  $ sanpou compile afail.snp -o out
+  $ "$SANPOU_JAVA" -cp "$SANPOU_TLA2TOOLS_JAR" -XX:+UseParallelGC tlc2.TLC \
+  >   -tool -config out/afail.cfg -metadir out/afail_states -workers 1 \
+  >   out/afail.tla > out/afail.out 2>&1
+  [12]
+  $ sanpou trace out/afail.out -o out | tail -n 2
+  ERROR — The first argument of Assert evaluated to FALSE; the second argument was:
+  "assertion failed at line 5, col 7: x != 2"
+
+  $ cat > tviol.snp <<'EOF'
+  > mod tviol {
+  >   var x = 0;
+  >   procedure f() {
+  >     while (true) {
+  >       await x == 1;
+  >     }
+  >   }
+  >   process p = f in 1..1;
+  >   property never = finally(x == 1);
+  > }
+  > EOF
+  $ cat > tviol.json <<'EOF'
+  > { "checks": { "deadlock": false, "termination": false },
+  >   "properties": ["never"] }
+  > EOF
+  $ sanpou compile tviol.snp -o out
+  $ "$SANPOU_JAVA" -cp "$SANPOU_TLA2TOOLS_JAR" -XX:+UseParallelGC tlc2.TLC \
+  >   -tool -config out/tviol.cfg -metadir out/tviol_states -workers 1 \
+  >   out/tviol.tla > out/tviol.out 2>&1
+  [12]
+  $ sanpou trace out/tviol.out -o out | tail -n 3
+  Step 4: (stuttering — the behavior can loop here forever)
+  
+  ERROR — Temporal properties were violated.
