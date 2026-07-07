@@ -122,7 +122,7 @@ mod example {
   def msg = {kind: "req", src: 1}; // record value; msg.kind reads a field
   def ids = {1, 2, 3};             // set value
   def evens = { i in 1..n : i % 2 == 0 };  // set comprehension (filter)
-  def table = { i in 1..n -> 0 };  // map with domain 1..n (a set of ints)
+  def table = { i in 1..n -> 0 };  // map with domain 1..n (any set works)
 
   var count = 0;                   // mutable variable declaration
   var start in 1..n;               // non-deterministic initial value (from a set)
@@ -159,7 +159,8 @@ mod example {
   `< > <= >= == !=`, `&& || !`, and `in` (set membership: `x in S`).
 - **Values**: tuples `(a, b)` may mix types; sequences `[a, b, c]` are
   homogeneous; sets `{a, b, c}` (and `{}`) are homogeneous; maps
-  `{ x in S -> e }` have an integer-set domain. Strings `"idle"` support
+  `{ x in S -> e }` take any set as their domain — ints, strings, or model
+  values — and subscript keys take the domain's element type. Strings `"idle"` support
   only equality (`==` / `!=`); there is no concatenation or indexing.
   Records `{f1: e1, f2: e2}` have fixed named fields (field types may differ);
   read a field with `r.f`. Records are structural: two record types match only

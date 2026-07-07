@@ -131,6 +131,24 @@ let () =
                 \  procedure foo() { assert x >= 0, x = x + 1; return (); }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
+          test_case "string-keyed map with per-process state" `Quick
+            (fun () ->
+              (* the main use case for non-int process IDs: a state table
+                 keyed by the process ID set *)
+              check_ok
+                {|mod m {
+                    def ids = {"a", "b"};
+                    var t = { x in ids -> 0 };
+                    procedure f() { t[self] = t[self] + 1; return (); }
+                    process p = f in ids;
+                  }|});
+          test_case "atom-keyed map" `Quick (fun () ->
+              check_ok
+                {|mod m {
+                    var t = { x in {`p, `q} -> 0 };
+                    procedure f() { t[`p] = 1; return (); }
+                    process p = f in 1..1;
+                  }|});
           test_case "nested subscript assignment" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -596,8 +614,17 @@ let () =
               check_fails "mod m { def x = union({1}, {true}); }");
           test_case "cardinality on non-set" `Quick (fun () ->
               check_fails "mod m { def x = cardinality([1, 2]); }");
-          test_case "map domain non-int set" `Quick (fun () ->
-              check_fails "mod m { def x = { i in {true} -> i }; }");
+          test_case "map subscript key type mismatch" `Quick (fun () ->
+              check_fails
+                {|mod m { def x = { i in {"a"} -> 0 }[1]; }|});
+          test_case "map keys from mixed domains do not unify" `Quick
+            (fun () ->
+              check_fails
+                {|mod m {
+                    def x = { i in {"a"} -> 0 };
+                    def y = { i in 1..2 -> 0 };
+                    def eq = x == y;
+                  }|});
           test_case "self used outside a procedure" `Quick (fun () ->
               check_fails "mod m { def d = self; }");
           test_case "self used at two id types" `Quick (fun () ->
