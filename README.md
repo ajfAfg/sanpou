@@ -192,6 +192,16 @@ mod example {
 - **Steps and atomicity**: statements joined by commas and ended with `;`
   form one atomic action; block statements evaluate their condition in an
   action of its own; a bare `;` is an explicit yield point.
+- **Reads within a step see the pre-state**: the statements of one step
+  execute *simultaneously*, not in sequence — every expression (an
+  assignment's right-hand side, an `await`, an `assert`) reads the state
+  from before the step. So in `x = 1, y = x;` the new `y` is the *old* `x`,
+  and `x = 1, await x == 1;` blocks forever when `x` starts at 0. This is
+  TLA+'s (and multi-assignment's) semantics but the *opposite* of PlusCal,
+  where a read after an assignment in the same step sees the new value —
+  split the step with `;` when you want sequencing. Guards are also checked
+  before asserts regardless of their order in the step, so a disabled step
+  never fires its asserts.
 - **Processes**: `process name = proc in S;` instantiates a procedure per id
   in the set `S` (readable as `self`). `S` may be any set — integers, strings,
   or model values — and `self` takes its element type; all processes in a
