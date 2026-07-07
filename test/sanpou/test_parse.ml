@@ -168,16 +168,17 @@ let () =
       ( "record_vs_comprehension",
         [
           (* A `key : value` brace form is a record unless it is a single
-             `x in S : p` (membership key). Record fields are stored
-             label-sorted. *)
+             `x in S : p` (membership key). Record fields are stored in
+             source order: calls in field values are evaluated left to
+             right, so the order must survive parsing. *)
           test_case "single label key is a record" `Quick (fun () ->
               check_items {|def x = {n: 0};|}
                 [ const_def "x" (node (Record [ ("n", intlit 0) ])) ]);
-          test_case "record fields are label-sorted" `Quick (fun () ->
+          test_case "record fields keep source order" `Quick (fun () ->
               check_items {|def x = {src: 1, kind: 2};|}
                 [
                   const_def "x"
-                    (node (Record [ ("kind", intlit 2); ("src", intlit 1) ]));
+                    (node (Record [ ("src", intlit 1); ("kind", intlit 2) ]));
                 ]);
           test_case "membership key is a comprehension" `Quick (fun () ->
               check_items {|def x = {i in s : true};|}

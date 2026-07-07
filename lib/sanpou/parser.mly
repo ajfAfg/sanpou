@@ -26,24 +26,26 @@ let label_of (e : Surface_ast.expr) : id =
 
 (* A brace body of `key : value` items is a set comprehension when it is a
    single `x in <set> : p` (membership key), and a record literal otherwise
-   (every key a field label). Record fields are stored label-sorted so
-   structurally equal records compare equal regardless of source order. *)
+   (every key a field label). Record fields are kept in source order —
+   procedure calls in field values are hoisted (and hence evaluated) left to
+   right — and canonicalized by label where order must not matter: in the
+   record type (Typing) and in the emitted TLA+ literal (Emit_tla). *)
 let colon_items_desc (items : (Surface_ast.expr * Surface_ast.expr) list) =
   match items with
   | [ ({ desc = BinOp (In, _, _); _ } as key, pred) ] ->
       let binder, domain = binder_of key ~what:"set comprehension" in
       SetComp { binder; domain; pred }
   | _ ->
-      let fields =
-        List.map (fun (key, value) -> (label_of key, value)) items
+      let rec check_dups seen = function
+        | [] -> ()
+        | ((key : Surface_ast.expr), _) :: rest ->
+            let label = label_of key in
+            if List.mem label seen then
+              raise (Parse_error (key.loc, "duplicate record field: " ^ label))
+            else check_dups (label :: seen) rest
       in
-      let labels = List.map fst fields in
-      (match List.find_opt (fun l -> List.length (List.filter (( = ) l) labels) > 1) labels with
-       | Some dup ->
-           let loc = (fst (List.hd items)).loc in
-           raise (Parse_error (loc, "duplicate record field: " ^ dup))
-       | None -> ());
-      Record (List.sort (fun (a, _) (b, _) -> compare a b) fields)
+      check_dups [] items;
+      Record (List.map (fun (key, value) -> (label_of key, value)) items)
 %}
 
 %token <int> INTV

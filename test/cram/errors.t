@@ -178,7 +178,7 @@ A record with a repeated field is rejected:
   > }
   > EOF
   $ sanpou compile dup_field.snp -o out
-  dup_field.snp:2:13: duplicate record field: a
+  dup_field.snp:2:19: duplicate record field: a
   [1]
 
 Atoms are literals in their own syntactic namespace, so they cannot clash

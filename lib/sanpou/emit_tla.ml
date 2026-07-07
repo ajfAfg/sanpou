@@ -153,7 +153,13 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
   | Generic_ast.Field (record, label) ->
       TDot (expr_to_tla local_vars record, label)
   | Generic_ast.Record fields ->
-      TRecord (List.map (fun (l, e) -> (l, expr_to_tla local_vars e)) fields)
+      (* The AST keeps fields in source order (evaluation order for hoisted
+         calls); a TLA+ record is a function, so emitting label-sorted is
+         semantics-preserving and keeps the output canonical. *)
+      TRecord
+        (fields
+        |> List.sort (fun (a, _) (b, _) -> compare a b)
+        |> List.map (fun (l, e) -> (l, expr_to_tla local_vars e)))
   | Generic_ast.Range (lo, hi) ->
       TRange (expr_to_tla local_vars lo, expr_to_tla local_vars hi)
   | Generic_ast.MapInit { binder; domain; value } ->
