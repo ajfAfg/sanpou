@@ -255,6 +255,16 @@ let () =
               check_ok "mod m { def x = -1; }");
           test_case "unary minus paren expr" `Quick (fun () ->
               check_ok "mod m { def x = -(1 + 2); }");
+          test_case "unary binds looser than postfix" `Quick (fun () ->
+              (* -s[1] negates the element, !r.f negates the field; parsing
+                 them as (-s)[1] / (!r).f used to be a type error *)
+              check_ok
+                "mod m {\n\
+                \  def s = [1, 2, 3];\n\
+                \  def a = -s[1];\n\
+                \  def r = {f: true};\n\
+                \  def b = !r.f;\n\
+                \  }");
           test_case "function def" `Quick (fun () ->
               check_ok "mod m { def f(x) = x + 1; }");
           test_case "function app in const" `Quick (fun () ->

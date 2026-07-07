@@ -264,6 +264,22 @@ let () =
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_before "double(k) ==" "n ==" tla;
               has_before "n ==" "sum(a, b) ==" tla);
+          Alcotest.test_case "unary binds looser than postfix" `Quick
+            (fun () ->
+              let ast =
+                parse
+                  "mod u {\n\
+                   def s = [1, 2, 3];\n\
+                   def a = -s[1];\n\
+                   def r = {f: true};\n\
+                   def b = !r.f;\n\
+                   procedure main() { return (); }\n\
+                   process ps = main in 1..1;\n\
+                   }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              has_in "a == (0 - s[1])" tla;
+              has_in "b == ~(r.f)" tla);
           Alcotest.test_case "string literals compile to tla strings" `Quick
             (fun () ->
               let ast =
