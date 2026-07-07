@@ -124,6 +124,22 @@ let () =
                 \  procedure g() { f(1); return (); }\n\
                 \  process ps = g in 1..1;\n\
                 \  }");
+          test_case "multiple path writes to one variable in one step" `Quick
+            (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var r = {a: 0, b: 0};\n\
+                \  procedure foo() { r.a = 1, r.b = 2; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "whole writes to one variable in separate steps" `Quick
+            (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  procedure foo() { x = 1; x = 2; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "assert statement" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -495,6 +511,43 @@ let () =
         [
           test_case "add bool" `Quick (fun () ->
               check_fails "mod m { def x = 1 + true; }");
+          test_case "two whole writes in one step" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  procedure foo() { x = 1, x = 2; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "whole write then path write in one step" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var r = {a: 0, b: 0};\n\
+                \  procedure foo() { r = {a: 9, b: 9}, r.a = 5; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "path write then whole write in one step" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var r = {a: 0, b: 0};\n\
+                \  procedure foo() { r.a = 5, r = {a: 9, b: 9}; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "two whole writes to a local in one step" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  procedure foo() { var l = 0; l = 1, l = 2; return (); }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
+          test_case "conflicting writes in a with step" `Quick (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  procedure foo() {\n\
+                \    with (v in 1..3) { x = v, x = 0; }\n\
+                \    return ();\n\
+                \  }\n\
+                \  process ps = foo in 1..1;\n\
+                \  }");
           test_case "compare bool" `Quick (fun () ->
               check_fails "mod m { def x = true < 1; }");
           test_case "unbound var" `Quick (fun () ->

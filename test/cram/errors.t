@@ -152,6 +152,24 @@ key that is not a plain field label is diagnosed as such:
   bad_field.snp:2:13: a record field label must be a plain name
   [1]
 
+A whole-variable assignment combined with another assignment to the same
+variable in one step is rejected (path updates alone compose into one
+EXCEPT and stay legal):
+
+  $ cat > conflict.snp <<'EOF'
+  > mod m {
+  >   var r = {a: 0, b: 0};
+  >   procedure f() {
+  >     r = {a: 9, b: 9}, r.a = 5;
+  >     return ();
+  >   }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ sanpou compile conflict.snp -o out
+  conflict.snp:4:23: conflicting assignments to r in one step: a whole-variable assignment cannot be combined with another assignment to the same variable
+  [1]
+
 A record with a repeated field is rejected:
 
   $ cat > dup_field.snp <<'EOF'

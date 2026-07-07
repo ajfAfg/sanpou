@@ -21,6 +21,7 @@ type type_error =
   | Unknown_field of Generic_ast.id * ty
   | Self_outside_procedure
   | Reserved_module_name of Generic_ast.id
+  | Conflicting_assignments of Generic_ast.id
 
 exception Type_error of type_error * Generic_ast.loc
 
