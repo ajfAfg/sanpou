@@ -100,8 +100,8 @@ let () =
                 "mod m { var x = 0; property p = finally(x == 1); }");
           test_case "module-level names shadow sequentially" `Quick
             (fun () ->
-              (* everything but atoms shadows: defs, vars, procedures, and
-                 process names; alpha-conversion renames the shadowed ones *)
+              (* defs, vars, procedures, and process names all shadow
+                 sequentially; alpha-conversion renames the shadowed ones *)
               check_ok
                 {|mod m {
                     def a = 1;
@@ -312,13 +312,13 @@ let () =
           test_case "set of strings" `Quick (fun () ->
               check_ok {|mod m { def x = {"idle", "busy"}; def y = "idle" in x; }|});
           test_case "atom declaration and reference" `Quick (fun () ->
-              check_ok "mod m { atom NoValue; def x = NoValue; }");
+              check_ok "mod m { def x = `noValue; }");
           test_case "atom equality" `Quick (fun () ->
-              check_ok "mod m { atom A, B; def x = A == B; def y = A != B; }");
+              check_ok "mod m { def x = `a == `b; def y = `a != `b; }");
           test_case "set of atoms and membership" `Quick (fun () ->
-              check_ok "mod m { atom R, G, B; def s = {R, G, B}; def m2 = R in s; }");
+              check_ok "mod m { def s = {`r, `g, `b}; def m2 = `r in s; }");
           test_case "atom as record field" `Quick (fun () ->
-              check_ok "mod m { atom Idle; def r = {phase: Idle, n: 0}; }");
+              check_ok "mod m { def r = {phase: `idle, n: 0}; }");
           test_case "record literal" `Quick (fun () ->
               check_ok {|mod m { def r = {kind: "req", src: 1}; }|});
           test_case "field access" `Quick (fun () ->
@@ -387,9 +387,8 @@ let () =
           test_case "process over an atom id set" `Quick (fun () ->
               check_ok
                 {|mod m {
-                    atom Main;
                     procedure f() { return (); }
-                    process p = f in {Main};
+                    process p = f in {`main};
                   }|});
           test_case "self as int when id set is a range" `Quick (fun () ->
               check_ok
@@ -557,13 +556,13 @@ let () =
           test_case "heterogeneous set literal" `Quick (fun () ->
               check_fails "mod m { def x = {1, true}; }");
           test_case "atom arithmetic" `Quick (fun () ->
-              check_fails "mod m { atom A; def x = A + 1; }");
+              check_fails "mod m { def x = `a + 1; }");
           test_case "atom compared to int" `Quick (fun () ->
-              check_fails "mod m { atom A; def x = A == 1; }");
+              check_fails "mod m { def x = `a == 1; }");
           test_case "atom ordering" `Quick (fun () ->
-              check_fails "mod m { atom A, B; def x = A < B; }");
+              check_fails "mod m { def x = `a < `b; }");
           test_case "set mixing atoms and ints" `Quick (fun () ->
-              check_fails "mod m { atom A; def x = {A, 1}; }");
+              check_fails "mod m { def x = {`a, 1}; }");
           test_case "field access on non-record" `Quick (fun () ->
               check_fails "mod m { def x = 1; def y = x.f; }");
           test_case "unknown field" `Quick (fun () ->
@@ -626,22 +625,12 @@ let () =
                     procedure g() { f(1); return (); }
                     fair process p = g in {"a"};
                   }|});
-          test_case "atom then def of the same name" `Quick (fun () ->
-              check_fails "mod m { atom a; def a = 1; }");
-          test_case "def then atom of the same name" `Quick (fun () ->
-              check_fails "mod m { def a = 1; atom a; }");
-          test_case "atom then var of the same name" `Quick (fun () ->
-              check_fails "mod m { atom a; var a = 1; }");
-          test_case "duplicate atom declarations" `Quick (fun () ->
-              check_fails "mod m { atom a; atom a; }");
-          test_case "duplicate atom within one declaration" `Quick (fun () ->
-              check_fails "mod m { atom a, a; }");
           test_case "reserved: generated spec name" `Quick (fun () ->
               check_fails "mod m { def vars = 1; }");
           test_case "reserved: generated variable name" `Quick (fun () ->
               check_fails "mod m { var pc = 0; }");
           test_case "reserved: the null frame sentinel" `Quick (fun () ->
-              check_fails "mod m { atom defaultInitValue; }");
+              check_fails "mod m { def x = `defaultInitValue; }");
           test_case "reserved: stdlib operator from EXTENDS" `Quick (fun () ->
               check_fails "mod m { def Cardinality(s) = 42; }");
           test_case "reserved: generated action label shape" `Quick (fun () ->

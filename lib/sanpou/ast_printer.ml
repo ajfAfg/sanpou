@@ -45,7 +45,8 @@ let prec (e : ('n, 'c) expr) =
   | Range _ -> 4
   | Subscript _ | Field _ -> 7
   | UnOp _ -> 8
-  | IntLit _ | BoolLit _ | StrLit _ | Var _ | Self | App _ | Builtin _
+  | IntLit _ | BoolLit _ | StrLit _ | AtomLit _ | Var _ | Self | App _
+  | Builtin _
   | MapInit _ | SetLit _ | SetComp _ | Record _ | Tuple _ | Sequence _
   | IfExpr _ | Quant _ ->
       9
@@ -59,6 +60,7 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
   | IntLit value -> string_of_int value
   | BoolLit value -> if value then "true" else "false"
   | StrLit s -> "\"" ^ s ^ "\""
+  | AtomLit a -> "`" ^ a
   | Var n -> name_of n
   | Self -> "self"
   | UnOp (op, rhs) -> unop_str op ^ at 8 rhs
@@ -220,7 +222,6 @@ and pretty_body name_of callee_of indent steps =
 
 let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
   match item.desc with
-  | AtomDecl { names } -> indent ^ "atom " ^ String.concat ", " names ^ ";\n"
   | ConstDef { name; value } ->
       indent ^ "def " ^ name ^ " = "
       ^ pretty_expr name_of callee_of value

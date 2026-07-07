@@ -91,6 +91,9 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
   | Generic_ast.IntLit value -> TInt value
   | Generic_ast.BoolLit value -> TBool value
   | Generic_ast.StrLit s -> TStr s
+  | Generic_ast.AtomLit a ->
+      (* the atom's text is its CONSTANT's name *)
+      TId a
   | Generic_ast.Var i ->
       (* Locals live in the top stack frame; globals are plain variables *)
       if List.mem i.name local_vars then
@@ -196,7 +199,7 @@ let rec expr_uses_cardinality (e : Normalized_ast.expr) : bool =
   match e.desc with
   | Generic_ast.Builtin (Builtin.Cardinality, _) -> true
   | Generic_ast.IntLit _ | Generic_ast.BoolLit _ | Generic_ast.StrLit _
-  | Generic_ast.Var _ | Generic_ast.Self ->
+  | Generic_ast.AtomLit _ | Generic_ast.Var _ | Generic_ast.Self ->
       false
   | Generic_ast.UnOp (_, e) -> expr_uses_cardinality e
   | Generic_ast.BinOp (_, a, b)

@@ -41,7 +41,7 @@ let rec temporal_occurrence (props : id list) (e : Resolved_ast.expr) :
                property",
             e.loc )
       else None
-  | IntLit _ | BoolLit _ | StrLit _ | Self -> None
+  | IntLit _ | BoolLit _ | StrLit _ | AtomLit _ | Self -> None
   | UnOp (_, rhs) -> find rhs
   | BinOp (_, lhs, rhs) -> first [ lhs; rhs ]
   | App (_, args) -> first args
@@ -101,7 +101,6 @@ let check_module (m : Resolved_ast.module_def) : unit =
     List.fold_left
       (fun props (item : Resolved_ast.item) ->
         match item.desc with
-        | AtomDecl _ -> props
         | PropDef { name; _ } ->
             (* Temporal operators and references to preceding properties
                are exactly what a property body is for. *)

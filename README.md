@@ -113,7 +113,6 @@ sanpou trace dist/rwlock.out -o dist
 
 ```sanpou
 mod example {
-  atom Red, Green, Blue;           // opaque model values (distinct constants)
   def n = 3;                       // constant definition
   def inc(x) = x + 1;              // function definition (pure expression)
   def abs(x) = if (x < 0) { -x } else { x };   // if expression
@@ -165,11 +164,17 @@ mod example {
   Records `{f1: e1, f2: e2}` have fixed named fields (field types may differ);
   read a field with `r.f`. Records are structural: two record types match only
   when their field sets are identical (no row polymorphism).
-- **Model values**: `atom Red, Green, Blue;` declares opaque constants that
-  compare unequal to everything else — the idiomatic way to write sentinels
-  and enumeration-like tags without integer encodings. They share one type,
-  support only `==` / `!=`, and are referenced by name (`state = Red`). Each
-  becomes a TLA+ `CONSTANT` assigned a model value in the generated `.cfg`.
+- **Atoms**: `` `red `` is an opaque constant that compares unequal to
+  everything but itself — the idiomatic way to write sentinels and
+  enumeration-like tags without integer encodings. Atoms are literals
+  (Elixir-style): no declaration, their own syntactic namespace, usable
+  anywhere (`state = `red`, `{`red, `green}`). They share one type and
+  support only `==` / `!=`. Every atom used in a module becomes a TLA+
+  `CONSTANT` of the same name, assigned a model value in the generated
+  `.cfg` — the name is the value's identity in traces, so an atom whose
+  text collides with a compiler-generated name is rejected. Note that a
+  typo makes a fresh atom, not an error: `` s == `redy `` is simply always
+  false.
 - **Subscript and field paths**: read with `a[i]` and `r.f`, and they compose
   (`grid[i].tag`). An assignment target is a variable followed by any mix of
   `[i]` and `.f` steps (`grid[i].tag = e`), compiling to a TLA+ `EXCEPT`
@@ -186,9 +191,11 @@ mod example {
 - **Scoping**: name resolution is sequential and lexical everywhere, module
   level included — a later `def`/`var`/`procedure`/`process` of the same
   name shadows the earlier one from its point onward (the compiler renames
-  the shadowed declarations apart in the emitted TLA+). Atoms are the
-  exception: an atom's name is the model value's identity in traces and the
-  TLC config, so atom names cannot be shadowed or reused.
+  the shadowed declarations apart in the emitted TLA+). Atom literals live
+  in their own syntactic namespace and never clash with declarations; a
+  declaration whose name coincides with a used atom's text is renamed apart
+  in the emitted TLA+ (the atom keeps its name — it is the model value's
+  identity).
 - **Quantifiers**: `forall (x in S) { p }` and `exists (x in S) { p }` are
   boolean expressions ranging over the set `S`.
 - **Statements**: assignment (including nested subscripts `a[i][j] = e`),

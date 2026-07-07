@@ -35,6 +35,7 @@ let rec normalize_expr st (e : Resolved_ast.expr) :
   | IntLit v -> ([], at (IntLit v))
   | BoolLit b -> ([], at (BoolLit b))
   | StrLit s -> ([], at (StrLit s))
+  | AtomLit a -> ([], at (AtomLit a))
   | Var i -> ([], at (Var i))
   | Self -> ([], at Self)
   | UnOp (op, rhs) ->
@@ -283,18 +284,87 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
 and normalize_body st (steps : Resolved_ast.body) : Normalized_ast.body =
   List.concat_map (normalize_step st) steps
 
+(* ===== Used atoms =====
+   Atoms are literals, not declarations: a module's CONSTANT list is the
+   set of atom texts used anywhere in it, sorted for stable output. *)
+
+let rec expr_atoms (e : Normalized_ast.expr) : Generic_ast.id list =
+  match e.desc with
+  | AtomLit a -> [ a ]
+  | IntLit _ | BoolLit _ | StrLit _ | Var _ | Self -> []
+  | UnOp (_, e1) -> expr_atoms e1
+  | BinOp (_, a, b) | Range (a, b) | Subscript (a, b) ->
+      expr_atoms a @ expr_atoms b
+  | Field (r, _) -> expr_atoms r
+  | Record fields -> List.concat_map (fun (_, e) -> expr_atoms e) fields
+  | App (_, args) | Builtin (_, args) | Tuple args | Sequence args
+  | SetLit args ->
+      List.concat_map expr_atoms args
+  | MapInit { domain; value; _ } -> expr_atoms domain @ expr_atoms value
+  | SetComp { domain; pred; _ } -> expr_atoms domain @ expr_atoms pred
+  | IfExpr (a, b, c) -> expr_atoms a @ expr_atoms b @ expr_atoms c
+  | Quant { domain; body; _ } -> expr_atoms domain @ expr_atoms body
+
+let stmt_atoms (stmt : Normalized_ast.simple_stmt) : Generic_ast.id list =
+  match stmt.desc with
+  | Assign (target, value) ->
+      (match target with
+      | VarTarget _ -> []
+      | PathTarget (_, path) ->
+          List.concat_map
+            (function AccIndex e -> expr_atoms e | AccField _ -> [])
+            path)
+      @ expr_atoms value
+  | Call (_, args) -> List.concat_map expr_atoms args
+  | Return e | Await e | Assert e -> expr_atoms e
+  | Break | Continue -> []
+
+let rec body_atoms (steps : Normalized_ast.body) : Generic_ast.id list =
+  List.concat_map
+    (fun (step : Normalized_ast.step) ->
+      match step.desc with
+      | Normalized_ast.SimpleStep stmts -> List.concat_map stmt_atoms stmts
+      | Normalized_ast.EmptyStep -> []
+      | Normalized_ast.VarStep (_, value) -> expr_atoms value
+      | Normalized_ast.CallBindStep { args; _ } ->
+          List.concat_map expr_atoms args
+      | Normalized_ast.WithStep { domain; stmts; _ } ->
+          expr_atoms domain @ List.concat_map stmt_atoms stmts
+      | Normalized_ast.BlockStep (While { pre; cond; body }) ->
+          body_atoms pre @ expr_atoms cond @ body_atoms body
+      | Normalized_ast.BlockStep (If { cond; body; else_body }) ->
+          expr_atoms cond @ body_atoms body
+          @ (match else_body with Some b -> body_atoms b | None -> [])
+      | Normalized_ast.BlockStep (Either arms) ->
+          List.concat_map body_atoms arms)
+    steps
+
+let module_atoms (m : Normalized_ast.module_def) : Generic_ast.id list =
+  List.sort_uniq compare
+    (List.concat_map (fun (_, e) -> expr_atoms e) m.const_defs
+    @ List.concat_map (fun (_, e) -> expr_atoms e) m.prop_defs
+    @ List.concat_map (fun (_, _, e) -> expr_atoms e) m.fun_defs
+    @ List.concat_map
+        (fun (_, init) ->
+          match init with
+          | Generic_ast.InitValue e | Generic_ast.InitIn e -> expr_atoms e)
+        m.var_decls
+    @ List.concat_map
+        (fun (p : Normalized_ast.proc_def) -> body_atoms p.body)
+        m.procs
+    @ List.concat_map
+        (fun (p : Normalized_ast.process_def) -> expr_atoms p.domain)
+        m.processes)
+
 (* ===== Modules ===== *)
 
 let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
   let st = { temp_counter = ref 0 } in
   let partition f = List.filter_map f m.items in
+  let built : Normalized_ast.module_def =
   {
     name = m.mod_name;
-    atoms =
-      List.concat_map
-        (fun (item : Resolved_ast.item) ->
-          match item.desc with AtomDecl { names } -> names | _ -> [])
-        m.items;
+    atoms = [] (* filled from the built module below *);
     const_defs =
       partition (fun (item : Resolved_ast.item) ->
           match item.desc with
@@ -345,6 +415,8 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
                   : Normalized_ast.process_def)
           | _ -> None);
   }
+  in
+  { built with atoms = module_atoms built }
 
 (* ===== Public API ===== *)
 

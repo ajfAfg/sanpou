@@ -220,19 +220,18 @@ let () =
               let ast =
                 parse
                   "mod mv {\n\
-                  \  atom NoValue;\n\
-                  \  atom Red, Green;\n\
-                  \  def missing = NoValue;\n\
-                  \  def colors = {Red, Green};\n\
+                  \  def missing = `noValue;\n\
+                  \  def colors = {`red, `green};\n\
                   \  procedure main() { return (); }\n\
                   \  process ps = main in 1..1;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
-              has "CONSTANT NoValue, Red, Green";
-              has "missing == NoValue";
-              has "colors == {Red, Green}");
+              (* used atoms are collected and sorted into one CONSTANT *)
+              has "CONSTANT green, noValue, red";
+              has "missing == noValue";
+              has "colors == {red, green}");
           Alcotest.test_case "user atoms and the null sentinel coexist" `Quick
             (fun () ->
               (* the recursive proc uses defaultInitValue for unbound frame
@@ -240,15 +239,34 @@ let () =
               let ast =
                 parse
                   "mod m {\n\
-                  \  atom A;\n\
-                  \  var g = A;\n\
+                  \  var g = `a;\n\
                   \  procedure f(n) { if (n == 0) { return 1; } else { var r = f(n - 1); return r; } }\n\
-                  \  procedure main() { g = A; return (); }\n\
+                  \  procedure main() { g = `a; return (); }\n\
                   \  process ps = main in 1..1;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              has_in "CONSTANT A, defaultInitValue" tla);
+              has_in "CONSTANT a, defaultInitValue" tla);
+          Alcotest.test_case "declaration named like a used atom renames"
+            `Quick (fun () ->
+              (* the atom's text is the model value's identity, so the atom
+                 keeps the bare TLA+ name and the def renames apart *)
+              let ast =
+                parse
+                  "mod m {\n\
+                  \  def red = 999;\n\
+                  \  var seen = 0;\n\
+                  \  var tag = `nobody;\n\
+                  \  procedure main() { seen = red, tag = `red; return (); }\n\
+                  \  process ps = main in 1..1;\n\
+                  \  }\n"
+              in
+              let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
+              let has s = has_in s tla in
+              has "CONSTANT nobody, red";
+              has "red__1 == 999";
+              has "seen' = red__1";
+              has "tag' = red");
           Alcotest.test_case "records compile to tla records" `Quick (fun () ->
               let ast =
                 parse

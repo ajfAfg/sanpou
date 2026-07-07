@@ -159,12 +159,10 @@ let () =
               pretty_roundtrip {|mod m { def x = s == "busy"; }|});
           test_case "set of strings" `Quick (fun () ->
               pretty_roundtrip {|mod m { def x = {"idle", "busy"}; }|});
-          test_case "atom declaration" `Quick (fun () ->
-              pretty_roundtrip "mod m { atom NoValue; }");
-          test_case "atom declaration list" `Quick (fun () ->
-              pretty_roundtrip "mod m { atom Red, Green, Blue; }");
-          test_case "atom reference" `Quick (fun () ->
-              pretty_roundtrip "mod m { atom A; def x = A; }");
+          test_case "atom literal" `Quick (fun () ->
+              pretty_roundtrip "mod m { def x = `noValue; }");
+          test_case "atoms in a set" `Quick (fun () ->
+              pretty_roundtrip "mod m { def s = {`red, `green}; }");
           test_case "record literal" `Quick (fun () ->
               pretty_roundtrip {|mod m { def x = {kind: "req", src: 1}; }|});
           test_case "record single field" `Quick (fun () ->
@@ -295,9 +293,9 @@ let () =
           test_case "string literal" `Quick (fun () ->
               pretty_prints {|mod m { def x = "idle"; }|}
                 "mod m {\n  def x = \"idle\";\n}\n");
-          test_case "atom declaration list" `Quick (fun () ->
-              pretty_prints "mod m { atom Red, Green, Blue; }"
-                "mod m {\n  atom Red, Green, Blue;\n}\n");
+          test_case "atom literal" `Quick (fun () ->
+              pretty_prints "mod m { def x = `noValue; }"
+                "mod m {\n  def x = `noValue;\n}\n");
           test_case "record literal (fields sorted)" `Quick (fun () ->
               pretty_prints {|mod m { def x = {src: 1, kind: "req"}; }|}
                 "mod m {\n  def x = {kind: \"req\", src: 1};\n}\n");
