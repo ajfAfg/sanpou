@@ -34,6 +34,15 @@ let () =
                 \  }");
           test_case "state predicate as a property" `Quick (fun () ->
               check_ok "mod m { var x = 0; property p = x >= 0; }");
+          test_case "temporal formulas under all boolean connectives" `Quick
+            (fun () ->
+              check_ok
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  property a = globally(x >= 0);\n\
+                \  property b = finally(x == 1) && !globally(x == 0) || a;\n\
+                \  property c = globally(x >= 0 && finally(x == 1));\n\
+                \  }");
           test_case "shadowed globally is an ordinary function" `Quick
             (fun () ->
               (* a user def shadows the builtin (see #79), so this call is
@@ -57,6 +66,21 @@ let () =
         ] );
       ( "rejected",
         [
+          test_case "temporal operand of a comparison" `Quick (fun () ->
+              (* TLA+ rejects a temporal formula as an = operand *)
+              check_fails
+                "mod m { var x = 0; property q = globally(x >= 0) == true; }");
+          test_case "temporal formula in a set literal" `Quick (fun () ->
+              check_fails
+                "mod m { var x = 0; property q = finally(x == 1) in {true}; }");
+          test_case "property reference as a comparison operand" `Quick
+            (fun () ->
+              check_fails
+                "mod m {\n\
+                \  var x = 0;\n\
+                \  property p = globally(x == 0);\n\
+                \  property q = p == true;\n\
+                \  }");
           test_case "temporal operator in a def" `Quick (fun () ->
               check_fails "mod m { var x = 0; def p = globally(x == 0); }");
           test_case "temporal operator in await" `Quick (fun () ->
