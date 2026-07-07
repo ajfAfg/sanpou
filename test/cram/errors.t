@@ -332,6 +332,19 @@ with no break — needs none):
   $ sanpou compile if_no_else.snp -o out
   if_no_else.snp:3:3: procedure f can fall off its end without a return: every finishing path must end in `return`
   [1]
+A process root procedure must take no parameters (the wrapper calls it
+without arguments):
+
+  $ cat > root_param.snp <<'EOF'
+  > mod m {
+  >   var x = 0;
+  >   procedure f(n) { x = n + 1; return (); }
+  >   process p = f in 1..1;
+  > }
+  > EOF
+  $ sanpou compile root_param.snp -o out
+  root_param.snp:3:43: f takes 1 parameter; a process root procedure must take none (the process wrapper calls it without arguments)
+  [1]
 
 Lexical error:
 
