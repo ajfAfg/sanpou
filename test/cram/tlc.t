@@ -374,6 +374,29 @@ renamed apart while the atom keeps its name, and both survive TLC.
   $ tlc atom_ns atom_ns
   No error has been found
 
+Procedure calls in a record literal evaluate left to right in source order
+(fields are canonicalized by label only in the type and the emitted TLA+,
+never before call hoisting): pb's append lands before pa's.
+
+  $ cat > rec_order.snp <<'EOF'
+  > mod rec_order {
+  >   var log = [];
+  >   var r = {a: 0, b: 0};
+  >   procedure pa() { log = append(log, 1); return 1; }
+  >   procedure pb() { log = append(log, 2); return 2; }
+  >   procedure f() {
+  >     r = {b: pb(), a: pa()};
+  >     assert log == [2, 1];
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp either_guard.json rec_order.json
+  $ sanpou compile rec_order.snp -o rec_order
+  $ tlc rec_order rec_order
+  No error has been found
+
 Model values end-to-end: a state variable holds opaque atoms, transitions on
 atom-equality guards and set membership, and runs to completion. TLC assigns
 each atom a model value (from the generated .cfg), so termination confirms the

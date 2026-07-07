@@ -339,8 +339,13 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
       let record_ty = infer_expr fresh_tyvar env record in
       infer_field_access ~loc:record.loc record_ty label
   | Record fields ->
+      (* The AST keeps fields in source order (evaluation order for hoisted
+         calls); the type sorts them so unify's positional walk matches
+         labels regardless of literal order. Values are inferred in source
+         order so type errors surface left to right. *)
       TyRecord
-        (List.map (fun (l, e) -> (l, infer_expr fresh_tyvar env e)) fields)
+        (List.map (fun (l, e) -> (l, infer_expr fresh_tyvar env e)) fields
+        |> List.sort (fun (a, _) (b, _) -> compare a b))
   | Range (lo, hi) ->
       unify lo.loc (infer_expr fresh_tyvar env lo) TyInt;
       unify hi.loc (infer_expr fresh_tyvar env hi) TyInt;

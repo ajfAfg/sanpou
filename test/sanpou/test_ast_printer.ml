@@ -296,9 +296,9 @@ let () =
           test_case "atom literal" `Quick (fun () ->
               pretty_prints "mod m { def x = `noValue; }"
                 "mod m {\n  def x = `noValue;\n}\n");
-          test_case "record literal (fields sorted)" `Quick (fun () ->
+          test_case "record literal (fields in source order)" `Quick (fun () ->
               pretty_prints {|mod m { def x = {src: 1, kind: "req"}; }|}
-                "mod m {\n  def x = {kind: \"req\", src: 1};\n}\n");
+                "mod m {\n  def x = {src: 1, kind: \"req\"};\n}\n");
           test_case "field access" `Quick (fun () ->
               pretty_prints "mod m { def x = m.kind; }"
                 "mod m {\n  def x = m.kind;\n}\n");
