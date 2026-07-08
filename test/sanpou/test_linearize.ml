@@ -167,10 +167,7 @@ let () =
                         either_block
                           [
                             [ simple_step (cl1 (assign "x" (intlit 1))) ];
-                            [
-                              simple_step
-                                (cl1 (await_ (boollit false)))
-                            ];
+                            [ simple_step (cl1 (await_ (boollit false))) ];
                           ];
                         simple_step (cl1 (return_ tuple0));
                       ];
@@ -480,9 +477,7 @@ let () =
               let m =
                 make_module "mymod"
                   ~defs:
-                    [
-                      DefConst ("c", intlit 5); DefFun ("f", [ "x" ], var "x");
-                    ]
+                    [ DefConst ("c", intlit 5); DefFun ("f", [ "x" ], var "x") ]
                   ~var_decls:[ ("x", intlit 0) ]
                   ~processes:[ default_process ]
                   [ make_proc "foo" [ simple_step (cl1 (return_ tuple0)) ] ]

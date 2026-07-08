@@ -56,8 +56,8 @@ let display_var_name (smap : Source_map.t) (tla_name : string) : string =
 
 (* Split [inner] on a top-level [delim], respecting << >>, [ ], ( ), { }
    nesting and quoted strings. Returns None on malformed input. *)
-let split_top_level_delim (delim : string) (inner : string) :
-    string list option =
+let split_top_level_delim (delim : string) (inner : string) : string list option
+    =
   let n = String.length inner in
   let dn = String.length delim in
   let buf = Buffer.create 16 in
@@ -119,8 +119,7 @@ let split_tuple_elements (s : string) : string list option =
 let split_function_entries (s : string) : (string * string) list option =
   let s = String.trim s in
   match split_tuple_elements s with
-  | Some elems ->
-      Some (List.mapi (fun i v -> (string_of_int (i + 1), v)) elems)
+  | Some elems -> Some (List.mapi (fun i v -> (string_of_int (i + 1), v)) elems)
   | None -> (
       let len = String.length s in
       let inner =

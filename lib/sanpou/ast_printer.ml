@@ -46,9 +46,8 @@ let prec (e : ('n, 'c) expr) =
   | Subscript _ | Field _ -> 7
   | UnOp _ -> 8
   | IntLit _ | BoolLit _ | StrLit _ | AtomLit _ | Var _ | Self | App _
-  | Builtin _
-  | MapInit _ | SetLit _ | SetComp _ | Record _ | Tuple _ | Sequence _
-  | IfExpr _ | Quant _ ->
+  | Builtin _ | MapInit _ | SetLit _ | SetComp _ | Record _ | Tuple _
+  | Sequence _ | IfExpr _ | Quant _ ->
       9
 
 let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
@@ -83,8 +82,7 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       "{"
       ^ String.concat ", "
           (List.map
-             (fun (label, e) ->
-               label ^ ": " ^ pretty_expr name_of callee_of e)
+             (fun (label, e) -> label ^ ": " ^ pretty_expr name_of callee_of e)
              fields)
       ^ "}"
   | Range (lo, hi) -> at 5 lo ^ ".." ^ at 5 hi
@@ -190,8 +188,7 @@ and pretty_block_stmt name_of callee_of indent = function
       indent ^ pretty_if name_of callee_of indent cond body else_body
   | Either arms ->
       indent ^ "either {\n"
-      ^ String.concat
-          (indent ^ "} or {\n")
+      ^ String.concat (indent ^ "} or {\n")
           (List.map
              (fun arm -> pretty_body name_of callee_of (indent ^ "  ") arm)
              arms)

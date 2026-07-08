@@ -80,8 +80,8 @@ let check_config_names (config : Config.t) (prog : Surface_ast.program) :
                   loc = m.mod_loc;
                   message =
                     Printf.sprintf
-                      "the sidecar config lists %s '%s', but module %s \
-                       defines no such %s"
+                      "the sidecar config lists %s '%s', but module %s defines \
+                       no such %s"
                       kind name m.mod_name item_kind;
                 })
           names

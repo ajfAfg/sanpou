@@ -15,7 +15,7 @@ type ty =
   | TySeq of ty
   | TySet of ty
   | TyRecord of (id * ty) list
-      (* fixed-field structural record; fields kept label-sorted so identical
+    (* fixed-field structural record; fields kept label-sorted so identical
          field sets compare and unify regardless of order *)
   | TyMap of ty * ty
   | TyVar of tyvar ref
@@ -430,7 +430,9 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
                   (fun collection_ty accessor ->
                     match accessor with
                     | AccIndex index ->
-                        let index_ty = infer_expr ctx.fresh_tyvar ctx.env index in
+                        let index_ty =
+                          infer_expr ctx.fresh_tyvar ctx.env index
+                        in
                         infer_indexed_access ctx.fresh_tyvar ~collection_loc:loc
                           ~index_loc:index.loc collection_ty index_ty
                     | AccField field ->
@@ -486,6 +488,7 @@ let check_no_conflicting_writes (stmts : Surface_ast.simple_stmt list) : unit =
       (List.filter_map write stmts)
   in
   ()
+
 (* One statement list (SimpleStep / WithStep) merges into one atomic action
    whose call/return/break/continue slot is single-valued: a second control
    transfer would silently overwrite the first (an entire procedure call can
@@ -760,7 +763,7 @@ let check_module (m : Surface_ast.module_def) : unit =
             (match List.assoc_opt proc env with
             | Some (TyScheme (_, ty)) -> (
                 match repr ty with
-                | TyFun (_ :: _ as params, _) ->
+                | TyFun ((_ :: _ as params), _) ->
                     type_error
                       (Process_root_takes_params (proc, List.length params))
                       item.loc
@@ -768,9 +771,7 @@ let check_module (m : Surface_ast.module_def) : unit =
             | None -> ());
             (* The ID set's element type is [self]'s type, shared across the
                module (all processes must agree). *)
-            unify domain.loc
-              (infer_expr fresh_tyvar env domain)
-              (TySet self_ty);
+            unify domain.loc (infer_expr fresh_tyvar env domain) (TySet self_ty);
             (match first_nonconst_ref nonconst domain with
             | Some (name, loc) ->
                 type_error (Non_constant_process_domain name) loc
@@ -842,8 +843,8 @@ let string_of_type_error = function
   | Not_a_function id -> Printf.sprintf "%s is not a function" id
   | Callable_as_value id ->
       Printf.sprintf
-        "%s is a function or procedure and cannot be used as a value; apply \
-         it instead"
+        "%s is a function or procedure and cannot be used as a value; apply it \
+         instead"
         id
   | Not_a_procedure id -> Printf.sprintf "%s is not a procedure" id
   | Not_a_record ty ->
@@ -854,8 +855,7 @@ let string_of_type_error = function
   | Self_outside_procedure -> "self can only be used inside a procedure"
   | Reserved_module_name id ->
       Printf.sprintf
-        "%s is reserved: it collides with a name in the emitted TLA+ module"
-        id
+        "%s is reserved: it collides with a name in the emitted TLA+ module" id
   | Conflicting_assignments id ->
       Printf.sprintf
         "conflicting assignments to %s in one step: a whole-variable \
@@ -874,8 +874,8 @@ let string_of_type_error = function
         kind
   | Process_root_takes_params (id, n) ->
       Printf.sprintf
-        "%s takes %d parameter%s; a process root procedure must take none \
-         (the process wrapper calls it without arguments)"
+        "%s takes %d parameter%s; a process root procedure must take none (the \
+         process wrapper calls it without arguments)"
         id n
         (if n = 1 then "" else "s")
   | Duplicate_module id -> Printf.sprintf "module %s is already defined" id

@@ -50,7 +50,8 @@ let () =
               check_ok
                 "mod m {\n\
                 \  var x = 0;\n\
-                \  procedure foo() { x = if (x == 0) { 1 } else { x }; return (); }\n\
+                \  procedure foo() { x = if (x == 0) { 1 } else { x }; return \
+                 (); }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
           test_case "forall over range" `Quick (fun () ->
@@ -62,8 +63,7 @@ let () =
                 "mod m { def p = forall (i in 1..2) { exists (j in 1..2) { i \
                  == j } }; }");
           test_case "quantifier as operand" `Quick (fun () ->
-              check_ok
-                "mod m { def p = forall (i in 1..2) { i < 3 } && true; }");
+              check_ok "mod m { def p = forall (i in 1..2) { i < 3 } && true; }");
           test_case "quantifier in await" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -96,8 +96,7 @@ let () =
                 \  process ps = f in 1..1;\n\
                 \  }");
           test_case "property is bool" `Quick (fun () ->
-              check_ok
-                "mod m { var x = 0; property p = finally(x == 1); }");
+              check_ok "mod m { var x = 0; property p = finally(x == 1); }");
           test_case "constant process domains" `Quick (fun () ->
               (* defs of constants, comprehension binders shadowing a var,
                  and fun params shadowing a var are all constant *)
@@ -109,8 +108,7 @@ let () =
                 \  procedure f() { return (); }\n\
                 \  process p = f in { x in 1..widen(2) : x > 0 };\n\
                 \  }");
-          test_case "module-level names shadow sequentially" `Quick
-            (fun () ->
+          test_case "module-level names shadow sequentially" `Quick (fun () ->
               (* defs, vars, procedures, and process names all shadow
                  sequentially; alpha-conversion renames the shadowed ones *)
               check_ok
@@ -170,8 +168,7 @@ let () =
                 \  procedure foo() { assert x >= 0, x = x + 1; return (); }\n\
                 \  process ps = foo in 1..1;\n\
                 \  }");
-          test_case "string-keyed map with per-process state" `Quick
-            (fun () ->
+          test_case "string-keyed map with per-process state" `Quick (fun () ->
               (* the main use case for non-int process IDs: a state table
                  keyed by the process ID set *)
               check_ok
@@ -362,8 +359,8 @@ let () =
                  foo in 1..2; }");
           test_case "if else" `Quick (fun () ->
               check_ok
-                "mod m { procedure foo() { if (true) { ; } else { ; } return (); } \
-                 process ps = foo in 1..1; }");
+                "mod m { procedure foo() { if (true) { ; } else { ; } return \
+                 (); } process ps = foo in 1..1; }");
           test_case "sequence builtins" `Quick (fun () ->
               check_ok
                 "mod m { def xs = [1, 2]; def y = head(xs); def zs = tail(xs); \
@@ -377,7 +374,8 @@ let () =
           test_case "string inequality" `Quick (fun () ->
               check_ok {|mod m { def x = "idle" != "busy"; }|});
           test_case "set of strings" `Quick (fun () ->
-              check_ok {|mod m { def x = {"idle", "busy"}; def y = "idle" in x; }|});
+              check_ok
+                {|mod m { def x = {"idle", "busy"}; def y = "idle" in x; }|});
           test_case "atom declaration and reference" `Quick (fun () ->
               check_ok "mod m { def x = `noValue; }");
           test_case "atom equality" `Quick (fun () ->
@@ -389,7 +387,8 @@ let () =
           test_case "record literal" `Quick (fun () ->
               check_ok {|mod m { def r = {kind: "req", src: 1}; }|});
           test_case "field access" `Quick (fun () ->
-              check_ok {|mod m { def r = {kind: "req", src: 1}; def k = r.kind; }|});
+              check_ok
+                {|mod m { def r = {kind: "req", src: 1}; def k = r.kind; }|});
           test_case "field access type" `Quick (fun () ->
               check_ok {|mod m { def r = {n: 0}; def m2 = r.n + 1; }|});
           test_case "records unify regardless of field order" `Quick (fun () ->
@@ -420,7 +419,8 @@ let () =
           test_case "membership over bool set" `Quick (fun () ->
               check_ok "mod m { def b = true in {false, true}; }");
           test_case "set comprehension" `Quick (fun () ->
-              check_ok "mod m { def s = { x in 1..3 : x > 1 }; def y = 2 in s; }");
+              check_ok
+                "mod m { def s = { x in 1..3 : x > 1 }; def y = 2 in s; }");
           test_case "set comprehension over set literal" `Quick (fun () ->
               check_ok "mod m { def s = { x in {1, 2, 3} : x % 2 == 0 }; }");
           test_case "set operations" `Quick (fun () ->
@@ -780,10 +780,8 @@ let () =
           test_case "cardinality on non-set" `Quick (fun () ->
               check_fails "mod m { def x = cardinality([1, 2]); }");
           test_case "map subscript key type mismatch" `Quick (fun () ->
-              check_fails
-                {|mod m { def x = { i in {"a"} -> 0 }[1]; }|});
-          test_case "map keys from mixed domains do not unify" `Quick
-            (fun () ->
+              check_fails {|mod m { def x = { i in {"a"} -> 0 }[1]; }|});
+          test_case "map keys from mixed domains do not unify" `Quick (fun () ->
               check_fails
                 {|mod m {
                     def x = { i in {"a"} -> 0 };
@@ -812,8 +810,7 @@ let () =
                     procedure f() { n = n + 1; return (); }
                     process p = f in 1..n;
                   }|});
-          test_case "process domain reads a var through a def" `Quick
-            (fun () ->
+          test_case "process domain reads a var through a def" `Quick (fun () ->
               check_fails
                 {|mod m {
                     var n = 2;
@@ -821,8 +818,8 @@ let () =
                     procedure f() { return (); }
                     process p = f in 1..d;
                   }|});
-          test_case "self type constrained through a procedure parameter"
-            `Quick (fun () ->
+          test_case "self type constrained through a procedure parameter" `Quick
+            (fun () ->
               (* f's parameter unifies with self, so f's scheme must keep the
                  module-shared self type monomorphic; generalizing it would
                  let the int argument coexist with a string id set. *)
@@ -859,8 +856,7 @@ let () =
               check_fails "mod m { var x in 1..3; def p = x && true; }");
           test_case "builtin call before its shadowing def" `Quick (fun () ->
               (* head is still the builtin here: seq argument required *)
-              check_fails
-                "mod m { def y = head(2); def head(x) = x + 1; }");
+              check_fails "mod m { def y = head(2); def head(x) = x + 1; }");
           test_case "statement call to a def function" `Quick (fun () ->
               check_fails
                 "mod m {\n\
@@ -948,8 +944,7 @@ let () =
               check_fails
                 "mod m { def x = forall (i in true..false) { true }; }");
           test_case "quantifier binder is int" `Quick (fun () ->
-              check_fails
-                "mod m { def x = forall (i in 1..2) { i && true }; }");
+              check_fails "mod m { def x = forall (i in 1..2) { i && true }; }");
           test_case "if expression branch mismatch" `Quick (fun () ->
               check_fails "mod m { def x = if (true) { 1 } else { false }; }");
           test_case "len on tuple" `Quick (fun () ->
@@ -958,8 +953,8 @@ let () =
               check_fails "mod m { def x = head({ i in 1..2 -> 0 }); }");
           test_case "continue outside loop" `Quick (fun () ->
               check_fails
-                "mod m { procedure foo() { continue; return (); } process ps = foo in \
-                 1..1; }");
+                "mod m { procedure foo() { continue; return (); } process ps = \
+                 foo in 1..1; }");
           test_case "local var used at two types" `Quick (fun () ->
               check_fails
                 "mod m {\n\

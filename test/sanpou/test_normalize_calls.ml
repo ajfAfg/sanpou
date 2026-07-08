@@ -38,7 +38,8 @@ let map_init lo hi value =
 let if_expr c t f = node (IfExpr (c, t, f))
 
 let forall_ lo hi body =
-  node (Quant { quant = Forall; binder = ident "i"; domain = range lo hi; body })
+  node
+    (Quant { quant = Forall; binder = ident "i"; domain = range lo hi; body })
 
 let make_proc name body : Sanpou.Resolved_ast.item =
   node (ProcDef { name; params = []; body })
@@ -92,13 +93,11 @@ let n_if cond body : Sanpou.Normalized_ast.step =
   node (Sanpou.Normalized_ast.BlockStep (If { cond; body; else_body = None }))
 
 let n_if_expr c t f : Sanpou.Normalized_ast.expr = node (IfExpr (c, t, f))
-
 let n_range lo hi : Sanpou.Normalized_ast.expr = node (Range (lo, hi))
 
 let n_forall lo hi body : Sanpou.Normalized_ast.expr =
   node
-    (Quant
-       { quant = Forall; binder = ident "i"; domain = n_range lo hi; body })
+    (Quant { quant = Forall; binder = ident "i"; domain = n_range lo hi; body })
 
 (* ----- harness ----- *)
 
@@ -320,9 +319,7 @@ let () =
               let body =
                 [
                   simple_step
-                    [
-                      await_ (var "flag"); assign "y" (proc_app "foo" []);
-                    ];
+                    [ await_ (var "flag"); assign "y" (proc_app "foo" []) ];
                 ]
               in
               check_raises "located error"
@@ -332,16 +329,14 @@ let () =
                       tested",
                      loc0 ))
                 (fun () -> ignore (normalize_proc_body body)));
-          test_case "statement call beside an await stays in one action"
-            `Quick (fun () ->
+          test_case "statement call beside an await stays in one action" `Quick
+            (fun () ->
               (* a guard and a push share one action, so this is sound *)
               let body =
                 [ simple_step [ await_ (var "flag"); call_ "foo" [] ] ]
               in
               check_body "guarded call"
-                [
-                  n_simple [ n_await (n_var "flag"); n_call "foo" [] ];
-                ]
+                [ n_simple [ n_await (n_var "flag"); n_call "foo" [] ] ]
                 (normalize_proc_body body));
           test_case "call in with body rejected" `Quick (fun () ->
               let with_step : Sanpou.Resolved_ast.step =
@@ -419,8 +414,8 @@ let () =
               in
               check_raises "located error"
                 (Sanpou.Normalize_calls.Error
-                   ( "procedure calls are not allowed in the then branch of \
-                      an if-expression",
+                   ( "procedure calls are not allowed in the then branch of an \
+                      if-expression",
                      loc0 ))
                 (fun () -> ignore (normalize_proc_body body)));
           test_case "call in if-expression else branch rejected" `Quick
@@ -433,8 +428,8 @@ let () =
               in
               check_raises "located error"
                 (Sanpou.Normalize_calls.Error
-                   ( "procedure calls are not allowed in the else branch of \
-                      an if-expression",
+                   ( "procedure calls are not allowed in the else branch of an \
+                      if-expression",
                      loc0 ))
                 (fun () -> ignore (normalize_proc_body body)));
           test_case "call in map-init value rejected" `Quick (fun () ->

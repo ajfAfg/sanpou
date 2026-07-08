@@ -250,8 +250,8 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
       (match (List.rev steps_rev, has_await) with
       | first :: _, true ->
           error
-            "a procedure call cannot appear in the same step as an await: \
-             the hoisted call would run before the guard is tested"
+            "a procedure call cannot appear in the same step as an await: the \
+             hoisted call would run before the guard is tested"
             first.loc
       | _ -> ());
       List.rev steps_rev
@@ -277,8 +277,7 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
                       first.loc))
           stmts
       in
-      domain_steps
-      @ [ at (Normalized_ast.WithStep { binder; domain; stmts }) ]
+      domain_steps @ [ at (Normalized_ast.WithStep { binder; domain; stmts }) ]
   | BlockStep (While { cond; body }) ->
       let pre, cond = normalize_expr st cond in
       [
@@ -302,8 +301,7 @@ let rec normalize_step st (step : Resolved_ast.step) : Normalized_ast.step list
   | BlockStep (Either arms) ->
       [
         at
-          (Normalized_ast.BlockStep
-             (Either (List.map (normalize_body st) arms)));
+          (Normalized_ast.BlockStep (Either (List.map (normalize_body st) arms)));
       ]
 
 and normalize_body st (steps : Resolved_ast.body) : Normalized_ast.body =
@@ -322,8 +320,8 @@ let rec expr_atoms (e : Normalized_ast.expr) : Generic_ast.id list =
       expr_atoms a @ expr_atoms b
   | Field (r, _) -> expr_atoms r
   | Record fields -> List.concat_map (fun (_, e) -> expr_atoms e) fields
-  | App (_, args) | Builtin (_, args) | Tuple args | Sequence args
-  | SetLit args ->
+  | App (_, args) | Builtin (_, args) | Tuple args | Sequence args | SetLit args
+    ->
       List.concat_map expr_atoms args
   | MapInit { domain; value; _ } -> expr_atoms domain @ expr_atoms value
   | SetComp { domain; pred; _ } -> expr_atoms domain @ expr_atoms pred
@@ -334,11 +332,11 @@ let stmt_atoms (stmt : Normalized_ast.simple_stmt) : Generic_ast.id list =
   match stmt.desc with
   | Assign (target, value) ->
       (match target with
-      | VarTarget _ -> []
-      | PathTarget (_, path) ->
-          List.concat_map
-            (function AccIndex e -> expr_atoms e | AccField _ -> [])
-            path)
+        | VarTarget _ -> []
+        | PathTarget (_, path) ->
+            List.concat_map
+              (function AccIndex e -> expr_atoms e | AccField _ -> [])
+              path)
       @ expr_atoms value
   | Call (_, args) -> List.concat_map expr_atoms args
   | Return e | Await e | Assert e -> expr_atoms e
@@ -357,9 +355,9 @@ let rec body_atoms (steps : Normalized_ast.body) : Generic_ast.id list =
           expr_atoms domain @ List.concat_map stmt_atoms stmts
       | Normalized_ast.BlockStep (While { pre; cond; body }) ->
           body_atoms pre @ expr_atoms cond @ body_atoms body
-      | Normalized_ast.BlockStep (If { cond; body; else_body }) ->
+      | Normalized_ast.BlockStep (If { cond; body; else_body }) -> (
           expr_atoms cond @ body_atoms body
-          @ (match else_body with Some b -> body_atoms b | None -> [])
+          @ match else_body with Some b -> body_atoms b | None -> [])
       | Normalized_ast.BlockStep (Either arms) ->
           List.concat_map body_atoms arms)
     steps
@@ -390,61 +388,66 @@ let normalize_module (m : Resolved_ast.module_def) : Normalized_ast.module_def =
   let st = { temp_counter = ref 0 } in
   let partition f = List.filter_map f m.items in
   let built : Normalized_ast.module_def =
-  {
-    name = m.mod_name;
-    atoms = [] (* filled from the built module below *);
-    defs =
-      (* one list, in source order: sequential name resolution means a
+    {
+      name = m.mod_name;
+      atoms = [] (* filled from the built module below *);
+      defs =
+        (* one list, in source order: sequential name resolution means a
          constant may use an earlier function (and vice versa), so the
          emitted module must keep the interleaving *)
-      partition (fun (item : Resolved_ast.item) ->
-          match item.desc with
-          | ConstDef { name; value } ->
-              Some (Normalized_ast.DefConst (name, call_free_expr st value))
-          | FunDef { name; params; body_expr } ->
-              Some
-                (Normalized_ast.DefFun
-                   (name, params, call_free_expr st body_expr))
-          | _ -> None);
-    prop_defs =
-      partition (fun (item : Resolved_ast.item) ->
-          match item.desc with
-          | PropDef { name; value } -> Some (name, call_free_expr st value)
-          | _ -> None);
-    var_decls =
-      partition (fun (item : Resolved_ast.item) ->
-          match item.desc with
-          | VarDecl { name; init } ->
-              let init =
-                match init with
-                | InitValue value -> InitValue (call_free_expr st value)
-                | InitIn domain -> InitIn (call_free_expr st domain)
-              in
-              Some (name, init)
-          | _ -> None);
-    procs =
-      partition (fun (item : Resolved_ast.item) ->
-          match item.desc with
-          | ProcDef { name; params; body } ->
-              Some
-                ({ name; params; body = normalize_body st body; loc = item.loc }
-                  : Normalized_ast.proc_def)
-          | _ -> None);
-    processes =
-      partition (fun (item : Resolved_ast.item) ->
-          match item.desc with
-          | Process { name; proc; fairness; domain } ->
-              Some
-                ({
-                   name;
-                   proc;
-                   fairness;
-                   domain = call_free_expr st domain;
-                   loc = item.loc;
-                 }
-                  : Normalized_ast.process_def)
-          | _ -> None);
-  }
+        partition (fun (item : Resolved_ast.item) ->
+            match item.desc with
+            | ConstDef { name; value } ->
+                Some (Normalized_ast.DefConst (name, call_free_expr st value))
+            | FunDef { name; params; body_expr } ->
+                Some
+                  (Normalized_ast.DefFun
+                     (name, params, call_free_expr st body_expr))
+            | _ -> None);
+      prop_defs =
+        partition (fun (item : Resolved_ast.item) ->
+            match item.desc with
+            | PropDef { name; value } -> Some (name, call_free_expr st value)
+            | _ -> None);
+      var_decls =
+        partition (fun (item : Resolved_ast.item) ->
+            match item.desc with
+            | VarDecl { name; init } ->
+                let init =
+                  match init with
+                  | InitValue value -> InitValue (call_free_expr st value)
+                  | InitIn domain -> InitIn (call_free_expr st domain)
+                in
+                Some (name, init)
+            | _ -> None);
+      procs =
+        partition (fun (item : Resolved_ast.item) ->
+            match item.desc with
+            | ProcDef { name; params; body } ->
+                Some
+                  ({
+                     name;
+                     params;
+                     body = normalize_body st body;
+                     loc = item.loc;
+                   }
+                    : Normalized_ast.proc_def)
+            | _ -> None);
+      processes =
+        partition (fun (item : Resolved_ast.item) ->
+            match item.desc with
+            | Process { name; proc; fairness; domain } ->
+                Some
+                  ({
+                     name;
+                     proc;
+                     fairness;
+                     domain = call_free_expr st domain;
+                     loc = item.loc;
+                   }
+                    : Normalized_ast.process_def)
+            | _ -> None);
+    }
   in
   { built with atoms = module_atoms built }
 
