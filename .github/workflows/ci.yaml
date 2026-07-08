@@ -16,6 +16,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DUNE_CACHE: enabled
+
 jobs:
   test:
     strategy:
@@ -24,8 +27,6 @@ jobs:
         os:
           - macos-latest
           - ubuntu-latest
-        ocaml-compiler:
-          - 5.2.0
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -36,38 +37,61 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Use OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
-        with:
-          ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          dune-cache: true
+      # Installs everything in mise.toml [tools] (java, opam) and loads
+      # [env] into GITHUB_ENV. This is the same setup contributors run
+      # locally; mise.toml is the single source of truth for tool pins.
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
 
-      # setup-ocaml intentionally does not cache the project dependencies
-      # (https://github.com/ocaml/setup-ocaml#caching), so cache the local
-      # switch ourselves, keyed on the committed dependency list.
-      - name: Cache opam dependencies
-        id: opam-deps
+      # The opam root holds the repository index `mise run setup` needs;
+      # _opam is the project-local switch (compiler + deps). A cold switch
+      # build compiles OCaml, so cache both. The OCaml version pin lives in
+      # sanpou.opam, so the hash covers compiler bumps too.
+      - name: Cache the opam root and local switch
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: _opam
-          key: opam-deps-${{ runner.os }}-${{ matrix.ocaml-compiler }}-${{ hashFiles('sanpou.opam') }}
+          path: |
+            ~/.opam
+            _opam
+          key: opam-${{ runner.os }}-${{ hashFiles('sanpou.opam', 'mise.toml') }}
 
-      - name: Install opam dependencies
-        if: steps.opam-deps.outputs.cache-hit != 'true'
-        run: opam install . --deps-only --with-test
+      - name: Provision the opam switch
+        run: mise run setup
 
-      - name: Set up TLA+
-        uses: ./.github/actions/setup-tlaplus
-        id: tlaplus
+      - name: Cache dune build artifacts
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/dune
+          key: dune-${{ runner.os }}-${{ github.sha }}
+          restore-keys: dune-${{ runner.os }}-
+
+      - name: Read the pinned tla2tools version from mise.toml
+        id: pin
+        run: |
+          version="$(sed -n 's/^tla2tools_version = "\(.*\)"$/\1/p' mise.toml)"
+          if [ -z "$version" ]; then
+            echo "::error::tla2tools_version not found in mise.toml" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache tla2tools.jar
+        id: tla2tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tla2tools.jar
+          key: tla2tools-${{ steps.pin.outputs.version }}
+
+      - name: Download tla2tools.jar
+        if: steps.tla2tools.outputs.cache-hit != 'true'
+        run: mise run download-tla2tools
 
       - name: Build
-        run: opam exec -- dune build
+        run: mise x -- dune build
 
+      # SANPOU_JAVA / SANPOU_TLA2TOOLS_JAR come from mise.toml [env].
       - name: Run tests
-        run: opam exec -- dune runtest
-        env:
-          SANPOU_JAVA: ${{ steps.tlaplus.outputs.java-path }}
-          SANPOU_TLA2TOOLS_JAR: ${{ steps.tlaplus.outputs.tla2tools-jar }}
+        run: mise x -- dune runtest
 
   lint:
     runs-on: ubuntu-latest
@@ -79,32 +103,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Use OCaml 5.2.0
-        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
-        with:
-          ocaml-compiler: 5.2.0
-          dune-cache: true
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
 
-      - name: Cache opam dependencies
-        id: opam-deps
+      - name: Cache the opam root and local switch
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: _opam
-          key: opam-deps-${{ runner.os }}-5.2.0-${{ hashFiles('sanpou.opam') }}
+          path: |
+            ~/.opam
+            _opam
+          key: opam-${{ runner.os }}-${{ hashFiles('sanpou.opam', 'mise.toml') }}
 
-      - name: Install opam dependencies
-        if: steps.opam-deps.outputs.cache-hit != 'true'
-        run: opam install . --deps-only --with-test
+      - name: Provision the opam switch
+        run: mise run setup
 
       - name: Check formatting
-        run: opam exec -- dune build @fmt
+        run: mise x -- dune build @fmt
 
       - name: Lint opam file
-        run: opam lint sanpou.opam
+        run: mise x -- opam lint sanpou.opam
 
       - name: Check sanpou.opam is regenerated from dune-project
         run: |
-          opam exec -- dune build sanpou.opam
+          mise x -- dune build sanpou.opam
           git diff --exit-code sanpou.opam
 
   actionlint:

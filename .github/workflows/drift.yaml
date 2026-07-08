@@ -20,6 +20,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DUNE_CACHE: enabled
+
 jobs:
   test-latest-tla2tools:
     runs-on: ubuntu-latest
@@ -31,37 +34,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Use OCaml 5.2.0
-        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
-        with:
-          ocaml-compiler: 5.2.0
-          dune-cache: true
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
 
-      - name: Cache opam dependencies
-        id: opam-deps
+      - name: Cache the opam root and local switch
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: _opam
-          key: opam-deps-${{ runner.os }}-5.2.0-${{ hashFiles('sanpou.opam') }}
+          path: |
+            ~/.opam
+            _opam
+          key: opam-${{ runner.os }}-${{ hashFiles('sanpou.opam', 'mise.toml') }}
 
-      - name: Install opam dependencies
-        if: steps.opam-deps.outputs.cache-hit != 'true'
-        run: opam install . --deps-only --with-test
+      - name: Provision the opam switch
+        run: mise run setup
 
-      - name: Set up Java
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
-        with:
-          distribution: zulu
-          java-version: "25"
-
+      # Deliberately the latest release, not the mise.toml pin. It lands at
+      # the project root, which is where mise.toml's [env] points
+      # SANPOU_TLA2TOOLS_JAR.
       - name: Download the latest tla2tools.jar
         run: curl -fsSL -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
 
       - name: Run tests
-        run: opam exec -- dune runtest
-        env:
-          SANPOU_JAVA: java
-          SANPOU_TLA2TOOLS_JAR: ${{ github.workspace }}/tla2tools.jar
+        run: mise x -- dune runtest
 
   model-check-examples:
     runs-on: ubuntu-latest
@@ -73,34 +67,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Use OCaml 5.2.0
-        uses: ocaml/setup-ocaml@fefd9c240b9d934d5d25aa9c2a8caae6c7b40079 # v3.6.0
-        with:
-          ocaml-compiler: 5.2.0
-          dune-cache: true
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
 
-      - name: Cache opam dependencies
-        id: opam-deps
+      - name: Cache the opam root and local switch
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: _opam
-          key: opam-deps-${{ runner.os }}-5.2.0-${{ hashFiles('sanpou.opam') }}
+          path: |
+            ~/.opam
+            _opam
+          key: opam-${{ runner.os }}-${{ hashFiles('sanpou.opam', 'mise.toml') }}
 
-      - name: Install opam dependencies
-        if: steps.opam-deps.outputs.cache-hit != 'true'
-        run: opam install . --deps-only --with-test
-
-      - name: Set up Java
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
-        with:
-          distribution: zulu
-          java-version: "25"
+      - name: Provision the opam switch
+        run: mise run setup
 
       - name: Download the latest tla2tools.jar
         run: curl -fsSL -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
 
       - name: Build the sanpou CLI
-        run: opam exec -- dune build bin/main.exe
+        run: mise x -- dune build bin/main.exe
 
       # Compile every shipped example that has a sidecar config and run TLC
       # on the generated spec. Each example finishes in a couple of seconds
@@ -117,14 +102,14 @@ jobs:
             name="$(basename "$snp" .snp)"
             out="dist/$name"
             mkdir -p "$out"
-            opam exec -- dune exec sanpou -- compile "$snp" -o "$out"
+            mise x -- dune exec sanpou -- compile "$snp" -o "$out"
             # The generated file names come from the module name, which may
             # differ from the .snp file name (e.g. barrier.snp declares
             # `mod bakery_algorithm`), so glob for the generated config.
             for cfg in "$out"/*.cfg; do
               tla="${cfg%.cfg}.tla"
               echo "::group::TLC $tla"
-              java -XX:+UseParallelGC -jar tla2tools.jar -workers auto -config "$cfg" "$tla"
+              mise x -- java -XX:+UseParallelGC -jar tla2tools.jar -workers auto -config "$cfg" "$tla"
               echo "::endgroup::"
             done
           done

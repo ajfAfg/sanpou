@@ -1,10 +1,6 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directories:
-      # Workflows in .github/workflows.
-      - /
-      # Composite actions.
-      - /.github/actions/setup-tlaplus
+    directory: /
     schedule:
       interval: weekly
