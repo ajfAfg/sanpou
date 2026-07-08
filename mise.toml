@@ -1,5 +1,8 @@
 [tools]
 java = "openjdk-26"
+# Pinned opam release (https://github.com/ocaml/opam/releases).
+# Bump deliberately; do not track the latest release automatically.
+opam = "2.5.1"
 
 [vars]
 # Pinned TLA+ tools release (https://github.com/tlaplus/tlaplus/releases).
@@ -12,6 +15,25 @@ tla2tools_version = "v1.7.4"
 # so `which java` resolves to the mise-installed Java.
 SANPOU_JAVA = { value = "{{ exec(command='which java') }}", tools = true }
 SANPOU_TLA2TOOLS_JAR = "{{ config_root }}/tla2tools.jar"
+# Put the project-local opam switch first so dune/menhir/sanpou resolve
+# without `opam exec --` in mise-activated shells (and under `mise x --`).
+_.path = ["{{ config_root }}/_opam/bin"]
+
+[tasks.setup]
+description = "Provision the project-local opam switch (_opam) and install dependencies"
+run = [
+  # One-time opam global state (~/.opam); --bare skips creating a default switch.
+  # Guarded because re-running is safe but slow.
+  'test -d "$HOME/.opam" || opam init --bare -n',
+  # Create the local switch unless it already exists. This compiles OCaml,
+  # so the first run takes several minutes. The compiler version must match
+  # the `ocaml` pin in dune-project / sanpou.opam.
+  'test -d "{{ config_root }}/_opam" || opam switch create "{{ config_root }}" 5.2.0 --no-install -y',
+  # Install (or update) the project dependencies into the local switch.
+  # --switch pins the target even if the caller's shell has another opam
+  # switch activated (OPAMSWITCH / OPAM_SWITCH_PREFIX).
+  'opam install "{{ config_root }}" --switch "{{ config_root }}" --deps-only --with-test -y',
+]
 
 [tasks.download-tla2tools]
 description = "Download the pinned tla2tools.jar into the project root"
