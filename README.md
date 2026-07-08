@@ -151,7 +151,7 @@ mod example {
     return ();
   }
 
-  fair process workers = worker in 1..n;   // process definition
+  fair process workers(self in 1..n) = worker;   // process definition
 }
 ```
 
@@ -220,13 +220,15 @@ mod example {
   split the step with `;` when you want sequencing. Guards are also checked
   before asserts regardless of their order in the step, so a disabled step
   never fires its asserts.
-- **Processes**: `process name = proc in S;` instantiates a procedure per id
-  in the set `S` (readable as `self`). `S` may be any set — integers, strings,
-  or model values — and `self` takes its element type; all processes in a
-  module share one id type. `fair` adds weak fairness, `fair+` strong fairness.
-  The id sets of different processes must be pairwise disjoint; the compiler
-  emits `ASSUME` disjointness checks, so TLC fails fast at startup if they
-  overlap.
+- **Processes**: `process name(self in S) = proc;` instantiates the procedure
+  `proc` once per id in the set `S`; inside the procedure the instance's id is
+  read as `self`, which is exactly the binding the head introduces. `S` may be
+  any set — integers, strings, or model values — and `self` takes its element
+  type; all processes in a module share one id type. For a single instance,
+  write a one-element set: `process p(self in {1}) = f;`. `fair` adds weak
+  fairness, `fair+` strong fairness. The id sets of different processes must
+  be pairwise disjoint; the compiler emits `ASSUME` disjointness checks, so
+  TLC fails fast at startup if they overlap.
 - **Temporal properties**: `property name = ...;` is the only place
   `globally(p)` / `finally(p)` may appear, and only properties may
   reference other properties; list property names in the sidecar config's

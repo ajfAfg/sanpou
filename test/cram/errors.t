@@ -42,7 +42,7 @@ Type error:
   >   procedure f() {
   >     x = 1 + true;
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile add_bool.snp -o out
@@ -56,7 +56,7 @@ previously crash the emitter or compile to invalid TLA+ are diagnosed:
   > mod m {
   >   def f(x) = x;
   >   procedure g() { f(1); return (); }
-  >   process p = g in 1..1;
+  >   process p(self in 1..1) = g;
   > }
   > EOF
   $ sanpou compile call_fun.snp -o out
@@ -84,7 +84,7 @@ referencing a property from a runtime context, is rejected:
   >     await globally(x == 0);
   >     return ();
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile temporal.snp -o out
@@ -99,7 +99,7 @@ referencing a property from a runtime context, is rejected:
   >     await p;
   >     return ();
   >   }
-  >   process ps = f in 1..1;
+  >   process ps(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile temporal_ref.snp -o out
@@ -115,7 +115,7 @@ collection elements, or arguments:
   >   var x = 0;
   >   property q = globally(x >= 0) == true;
   >   procedure f() { x = 1; return (); }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile temporal_eq.snp -o out
@@ -179,7 +179,7 @@ EXCEPT and stay legal):
   >     r = {a: 9, b: 9}, r.a = 5;
   >     return ();
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile conflict.snp -o out
@@ -244,11 +244,11 @@ TLC at runtime the moment the state changes:
   >     n = n + 1;
   >     return ();
   >   }
-  >   process p = f in 1..n;
+  >   process p(self in 1..n) = f;
   > }
   > EOF
   $ sanpou compile nc_domain.snp -o out
-  nc_domain.snp:7:23: a process ID set must be constant, but n is mutable state (or depends on it)
+  nc_domain.snp:7:24: a process ID set must be constant, but n is mutable state (or depends on it)
   [1]
 A step is one atomic action with a single control-transfer slot, so a call,
 return, break, or continue must be the step's final statement — an earlier
@@ -262,7 +262,7 @@ one would be silently overwritten:
   >     a(), b();
   >     return ();
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile two_calls.snp -o out
@@ -281,7 +281,7 @@ and the push share one action.)
   >     await get();
   >     return ();
   >   }
-  >   process p = waiter in 1..1;
+  >   process p(self in 1..1) = waiter;
   > }
   > EOF
   $ sanpou compile await_call.snp -o out
@@ -297,7 +297,7 @@ and the push share one action.)
   >     await lock == 0, y = bump();
   >     return ();
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile step_call.snp -o out
@@ -313,7 +313,7 @@ with no break — needs none):
   >   var a = 0;
   >   procedure helper() { a = 1; }
   >   procedure main() { helper(); a = 2; return (); }
-  >   process p = main in 1..1;
+  >   process p(self in 1..1) = main;
   > }
   > EOF
   $ sanpou compile fall_through.snp -o out
@@ -326,7 +326,7 @@ with no break — needs none):
   >   procedure f() {
   >     if (x == 0) { return (); }
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile if_no_else.snp -o out
@@ -339,7 +339,7 @@ without arguments):
   > mod m {
   >   var x = 0;
   >   procedure f(n) { x = n + 1; return (); }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ sanpou compile root_param.snp -o out
@@ -356,7 +356,7 @@ rejected instead of silently going to the wrong binding:
   >     with (x in {1, 2}) { x = x + 1; }
   >     return ();
   >   }
-  >   process ps = p in 1..1;
+  >   process ps(self in 1..1) = p;
   > }
   > EOF
   $ sanpou compile with_shadow.snp -o out
@@ -417,7 +417,7 @@ Invalid sidecar config:
   $ cat > cfg.snp <<'EOF'
   > mod m {
   >   procedure f() { return (); }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ echo 'not json' > cfg.json
@@ -432,7 +432,7 @@ Sidecar property/invariant names are validated against the module:
   >   var x = 0;
   >   property live = finally(x == 1);
   >   procedure f() { x = 1; return (); }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cat > cfg_typo.json <<'EOF'
