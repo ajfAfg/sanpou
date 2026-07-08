@@ -234,6 +234,8 @@ let test_render_frame_locals () =
     {
       is_deadlock = false;
       module_name = Some "factorial";
+      errors = [];
+      stuttering_step = None;
       steps =
         [
           {
@@ -337,6 +339,8 @@ let test_render_infers_process () =
     {
       is_deadlock = false;
       module_name = Some "factorial";
+      errors = [];
+      stuttering_step = None;
       steps =
         [
           {
