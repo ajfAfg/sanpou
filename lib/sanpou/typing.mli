@@ -25,6 +25,7 @@ type type_error =
   | Non_constant_process_domain of Generic_ast.id
   | Control_transfer_not_last of string
   | Process_root_takes_params of Generic_ast.id * int
+  | Duplicate_module of Generic_ast.id
 
 exception Type_error of type_error * Generic_ast.loc
 

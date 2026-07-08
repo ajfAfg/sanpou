@@ -397,6 +397,20 @@ error (it used to crash the compiler with an uncaught exception):
   $ sanpou compile bigint.snp -o out
   bigint.snp:2:11: Integer literal out of range
   [1]
+Two modules with the same name would write to the same output file, so the
+duplicate is rejected:
+
+  $ cat > dup_mod.snp <<'EOF'
+  > mod m {
+  >   def x = 1;
+  > }
+  > mod m {
+  >   def y = 2;
+  > }
+  > EOF
+  $ sanpou compile dup_mod.snp -o out
+  dup_mod.snp:4:1: module m is already defined
+  [1]
 
 Invalid sidecar config:
 

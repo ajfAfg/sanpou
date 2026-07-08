@@ -672,6 +672,12 @@ let () =
                     }
                     process ps = p in 1..1;
                   }|});
+          test_case "duplicate module names" `Quick (fun () ->
+              (* each module writes <name>.tla; a duplicate would silently
+                 overwrite the previous module's output *)
+              check_fails "mod m { def x = 1; } mod m { def y = 2; }");
+          test_case "distinct module names" `Quick (fun () ->
+              check_ok "mod a { def x = 1; } mod b { def y = 2; }");
           test_case "compare bool" `Quick (fun () ->
               check_fails "mod m { def x = true < 1; }");
           test_case "unbound var" `Quick (fun () ->
