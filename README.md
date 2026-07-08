@@ -7,27 +7,39 @@ A compiler that translates sanpou source code into TLA+. It can also annotate TL
 
 ## Requirements
 
-- OCaml 5.2.0
-- Dune 3.22.0
-- Menhir 20260209
-- opam (for dependency management)
+- [mise](https://mise.jdx.dev/) — the only tool you must preinstall
+
+Everything else is provisioned through mise: opam and Java are pinned in
+`mise.toml`, and the OCaml toolchain (OCaml 5.2.0, Dune 3.22.0, Menhir
+20260209 — pinned in `dune-project` / `sanpou.opam`) is installed into a
+project-local opam switch by `mise run setup`.
 
 ## Setup
 
 ```sh
-opam install . --deps-only
+mise install                # opam and Java, pinned in mise.toml
+mise run setup              # project-local opam switch with all dependencies
+mise run download-tla2tools # tla2tools.jar for the TLC-backed tests
 ```
+
+`mise run setup` creates a project-local opam switch in `_opam/`
+(git-ignored). The first run compiles the OCaml compiler and takes several
+minutes; re-running it is fast and idempotent. `mise.toml` puts `_opam/bin`
+on the PATH, so in mise-activated shells (or via `mise x --`) `dune`,
+`menhir`, and `sanpou` resolve without `opam exec --`.
 
 ## Build
 
 ```sh
-dune build
+mise x -- dune build
 ```
+
+In shells where mise is activated, plain `dune build` works too.
 
 ## Test
 
 ```sh
-dune test
+mise x -- dune test
 ```
 
 Unit tests (`test/sanpou/`, Alcotest) cover the compiler passes. E2E tests
@@ -41,10 +53,12 @@ expectations with `dune promote`.
 ## Install
 
 ```sh
-dune install
+mise x -- dune install
 ```
 
-This adds the `sanpou` command to your PATH.
+This installs the `sanpou` command into `_opam/bin`, which mise puts on
+the PATH, so `sanpou` is available in mise-activated shells and via
+`mise x -- sanpou`.
 
 ## Usage
 
