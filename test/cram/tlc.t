@@ -115,6 +115,27 @@ Next. (It used to be gated on the termination check, so this reported
   $ sanpou compile run_done.snp -o run_done
   $ tlc run_done run_done
   No error has been found
+Listing "Termination" in the sidecar's properties implies the termination
+definitions even when the check flag is off (it used to emit a cfg naming an
+undefined operator):
+
+  $ cat > term_prop.snp <<'EOF'
+  > mod term_prop {
+  >   var x = 0;
+  >   procedure f() {
+  >     x = 1;
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cat > term_prop.json <<'EOF'
+  > { "checks": { "deadlock": true, "termination": false },
+  >   "properties": ["Termination"] }
+  > EOF
+  $ sanpou compile term_prop.snp -o term_prop
+  $ tlc term_prop term_prop
+  No error has been found
 
 Blocked awaits are reported as deadlocks: a single process stuck on an await
 that can never fire, and two processes each waiting on the other.
