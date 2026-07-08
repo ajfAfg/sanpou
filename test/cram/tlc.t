@@ -95,6 +95,26 @@ With the returns written, the caller resumes and the property holds:
   $ sanpou compile fallthrough.snp -o fallthrough
   $ tlc fallthrough fallthrough
   No error has been found
+Normal completion is not a deadlock: with the default config (deadlock
+checking on, termination checking off) a program that simply runs to
+completion passes — the Terminating stuttering disjunct is always part of
+Next. (It used to be gated on the termination check, so this reported
+"Deadlock reached".)
+
+  $ cat > run_done.snp <<'EOF'
+  > mod run_done {
+  >   var x = 0;
+  >   procedure f() {
+  >     x = 1;
+  >     return ();
+  >   }
+  >   fair process p = f in 1..1;
+  > }
+  > EOF
+  $ cp fact.json run_done.json
+  $ sanpou compile run_done.snp -o run_done
+  $ tlc run_done run_done
+  No error has been found
 
 Blocked awaits are reported as deadlocks: a single process stuck on an await
 that can never fire, and two processes each waiting on the other.

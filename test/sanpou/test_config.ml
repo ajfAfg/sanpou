@@ -126,8 +126,12 @@ let () =
         ] );
       ( "emit",
         [
-          test_case "termination disabled leaves tla unchanged" `Quick
-            (fun () ->
+          test_case "termination disabled still emits the Terminating branch"
+            `Quick (fun () ->
+              (* the stuttering disjunct is what keeps deadlock checking
+                 from reporting normal completion as a deadlock, so it is
+                 unconditional (as in PlusCal); only the Termination
+                 property is gated on the flag *)
               let ast =
                 parse
                   "mod m {\n\
@@ -137,9 +141,9 @@ let () =
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
-              check_not_has "Terminating ==" tla;
-              check_not_has "Termination ==" tla;
-              check_not_has "\\/ Terminating" tla);
+              check_has "Terminating ==" tla;
+              check_has "\\/ Terminating" tla;
+              check_not_has "Termination ==" tla);
           test_case "termination enabled emits predicates and next branch"
             `Quick (fun () ->
               let ast =
