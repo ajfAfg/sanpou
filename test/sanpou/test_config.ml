@@ -116,7 +116,8 @@ let () =
               let config = Sanpou.Config.default in
               let with_constants =
                 Sanpou.Config.to_cfg_string
-                  ~constants:[ "defaultInitValue"; "NoValue" ] config
+                  ~constants:[ "defaultInitValue"; "NoValue" ]
+                  config
               in
               check_has "CONSTANT defaultInitValue = defaultInitValue"
                 with_constants;

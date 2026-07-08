@@ -3,7 +3,6 @@ let parse input =
 
 (* The pass runs on the resolved tree, after scoping is settled. *)
 let run input = parse input |> Sanpou.Alpha_convert.transform
-
 let check_ok input = Sanpou.Check_temporal.check (run input)
 
 let check_fails input =
@@ -23,8 +22,7 @@ let () =
               check_ok "mod m { var x = 0; property p = globally(x == 0); }");
           test_case "nested temporal operators" `Quick (fun () ->
               check_ok
-                "mod m { var x = 0; property p = globally(finally(x == 0)); \
-                 }");
+                "mod m { var x = 0; property p = globally(finally(x == 0)); }");
           test_case "property referencing a property" `Quick (fun () ->
               check_ok
                 "mod m {\n\

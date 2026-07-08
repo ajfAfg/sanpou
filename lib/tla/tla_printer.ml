@@ -16,7 +16,8 @@ let bullet prefix s =
 
 let indent_lines n s =
   let pad = String.make n ' ' in
-  String.split_on_char '\n' s |> List.map (fun line -> pad ^ line)
+  String.split_on_char '\n' s
+  |> List.map (fun line -> pad ^ line)
   |> String.concat "\n"
 
 (* TLA+ string literals interpret backslash escape sequences; sanpou strings
@@ -71,22 +72,16 @@ let rec render_expr = function
   | TNot e -> "~(" ^ render_expr e ^ ")"
   | TConj (Inline, es) -> String.concat " /\\ " (List.map render_expr es)
   | TConj (Block, es) ->
-      String.concat "\n"
-        (List.map (fun e -> bullet "/\\ " (render_expr e)) es)
+      String.concat "\n" (List.map (fun e -> bullet "/\\ " (render_expr e)) es)
   | TDisj (Inline, es) -> String.concat " \\/ " (List.map render_expr es)
   | TDisj (Block, es) ->
-      String.concat "\n"
-        (List.map (fun e -> bullet "\\/ " (render_expr e)) es)
+      String.concat "\n" (List.map (fun e -> bullet "\\/ " (render_expr e)) es)
   (* [bullet] pads a multi-line body so a nested bullet list keeps its
      column alignment after the binder prefix. *)
   | TExists (x, set, body) ->
-      bullet
-        ("\\E " ^ x ^ " \\in " ^ render_expr set ^ ": ")
-        (render_expr body)
+      bullet ("\\E " ^ x ^ " \\in " ^ render_expr set ^ ": ") (render_expr body)
   | TForall (x, set, body) ->
-      bullet
-        ("\\A " ^ x ^ " \\in " ^ render_expr set ^ ": ")
-        (render_expr body)
+      bullet ("\\A " ^ x ^ " \\in " ^ render_expr set ^ ": ") (render_expr body)
   | TCase cases -> (
       let rendered =
         List.map

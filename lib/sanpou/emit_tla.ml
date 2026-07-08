@@ -104,8 +104,7 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
       match rhs.desc with
       | Generic_ast.IntLit value -> TInt (-value)
       | _ -> TParens (TBinOp ("-", TInt 0, expr_to_tla local_vars rhs)))
-  | Generic_ast.UnOp (Generic_ast.Not, rhs) ->
-      TNot (expr_to_tla local_vars rhs)
+  | Generic_ast.UnOp (Generic_ast.Not, rhs) -> TNot (expr_to_tla local_vars rhs)
   | Generic_ast.BinOp (op, lhs, rhs) ->
       TParens
         (TBinOp
@@ -177,9 +176,7 @@ let rec expr_to_tla local_vars (e : Normalized_ast.expr) =
   | Generic_ast.SetLit elems -> TSet (List.map (expr_to_tla local_vars) elems)
   | Generic_ast.SetComp { binder; domain; pred } ->
       TSetFilter
-        ( binder.name,
-          expr_to_tla local_vars domain,
-          expr_to_tla local_vars pred )
+        (binder.name, expr_to_tla local_vars domain, expr_to_tla local_vars pred)
   | Generic_ast.IfExpr (cond, then_e, else_e) ->
       TParens
         (TIf
@@ -258,8 +255,7 @@ let action_uses_cardinality (a : action) : bool =
   || List.exists (fun (c, _) -> expr_uses_cardinality c) a.asserts
   || List.exists assignment_uses a.assignments
   || List.exists (fun (_, d) -> expr_uses_cardinality d) a.binders
-  || pc_dest_uses a.pc_dest
-  || stack_op_uses a.stack_op
+  || pc_dest_uses a.pc_dest || stack_op_uses a.stack_op
 
 let node_uses_cardinality = function
   | Action a -> action_uses_cardinality a
@@ -360,7 +356,8 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
             Some ([ SubSel (TInt 1); FieldSel var ], to_tla expr)
         | AssignPath (var, path, expr) when List.mem var local_vars ->
             Some
-              ([ SubSel (TInt 1); FieldSel var ] @ selectors_of path, to_tla expr)
+              ( [ SubSel (TInt 1); FieldSel var ] @ selectors_of path,
+                to_tla expr )
         | _ -> None)
       action.assignments
   in
@@ -394,7 +391,9 @@ let action_conjuncts proc_entry_labels frame_fields local_vars (ir : module_ir)
         let assigned =
           (* A whole-variable assignment takes the variable; otherwise the
              per-field/subscript updates combine into a single EXCEPT. *)
-          match List.find_opt (function `Whole _ -> true | _ -> false) entries with
+          match
+            List.find_opt (function `Whole _ -> true | _ -> false) entries
+          with
           | Some (`Whole v) -> v
           | _ ->
               let updates =
@@ -516,8 +515,7 @@ let node_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
       DOpDef
         ( action.label,
           [ "self" ],
-          TConj (Block, pc_test_conjunct action.label :: conjuncts_of action)
-        )
+          TConj (Block, pc_test_conjunct action.label :: conjuncts_of action) )
   | Choice { label; arms; _ } ->
       (* One pc value; the transition disjoins the arms, each carrying its
          own guard, effect, pc', and UNCHANGED. TLC picks any enabled arm. *)
@@ -530,9 +528,8 @@ let node_to_decl proc_entry_labels frame_fields local_vars (ir : module_ir)
                 pc_test_conjunct label;
                 TDisj
                   ( Block,
-                    List.map
-                      (fun arm -> TConj (Block, conjuncts_of arm))
-                      arms );
+                    List.map (fun arm -> TConj (Block, conjuncts_of arm)) arms
+                  );
               ] ) )
 
 let proc_to_decls proc_entry_labels frame_fields local_vars (ir : module_ir)
@@ -623,8 +620,7 @@ let proc_set_decls (ir : module_ir) : tla_decl list =
     in
     List.map
       (fun (d1, d2) ->
-        DAssume
-          (TBinOp ("=", TParens (TBinOp ("\\cap", d1, d2)), TSet [])))
+        DAssume (TBinOp ("=", TParens (TBinOp ("\\cap", d1, d2)), TSet [])))
       (pairs parts)
   in
   [ DOpDef ("ProcSet", [], TCup parts); DSeparator ]
@@ -651,8 +647,7 @@ let init_decls (ir : module_ir) : tla_decl list =
         match init with
         | Generic_ast.InitValue expr ->
             TBinOp ("=", TId name, expr_to_tla_global expr)
-        | Generic_ast.InitIn domain ->
-            TIn (TId name, expr_to_tla_global domain))
+        | Generic_ast.InitIn domain -> TIn (TId name, expr_to_tla_global domain))
       ir.var_decls
     @ [
         TBinOp ("=", TId "stack", TFuncMap ("self", TId "ProcSet", TSeqLit []));
@@ -729,8 +724,8 @@ let next_decls config (ir : module_ir) : tla_decl list =
           [],
           TDisj
             ( Block,
-              procedure_disjuncts @ process_disjuncts @ [ TId "Terminating" ]
-            ) );
+              procedure_disjuncts @ process_disjuncts @ [ TId "Terminating" ] )
+        );
       DSeparator;
     ]
 
@@ -752,8 +747,7 @@ let spec_decls (ir : module_ir) : tla_decl list =
                 (TForall
                    ( "self",
                      process_range,
-                     TApp (fairness_op, [ TApp (proc_name, [ TId "self" ]) ])
-                   ))
+                     TApp (fairness_op, [ TApp (proc_name, [ TId "self" ]) ]) ))
             in
             fairness_for p.wrapper.proc_name
             :: List.map
