@@ -51,14 +51,13 @@ let rename st name : Resolved_ast.ident =
    exactly the enclosing binder (and, in procedures, local) names. Binders
    named like an emitter-generated TLA+ name (pc, Len, ...) collide just
    like module-level names do — TLA+ allows no shadowing — so they are
-   renamed too (declarations of those names are rejected by Typing; a
+   renamed too (declarations of those names are rejected by Check_scope; a
    binder is fine once renamed). *)
 let fresh st env name : Resolved_ast.ident =
   if
     st.rename_binders
     || List.mem name st.module_names
-    || List.mem name Emit_tla.reserved_module_names
-    || Emit_tla.is_generated_action_label name
+    || Reserved_names.is_reserved name
     || List.mem_assoc name env
   then rename st name
   else Resolved_ast.ident name

@@ -151,7 +151,7 @@ mod example {
     return ();
   }
 
-  fair process workers = worker in 1..n;   // process definition
+  fair process workers(self in 1..n) = worker;   // process definition
 }
 ```
 
@@ -207,6 +207,12 @@ mod example {
   `return` (`return ();` when there is nothing to return) — the compiler
   rejects a body that can fall off its end. A procedure that never
   finishes, such as a `while (true)` loop with no `break`, needs none.
+  The return type of such a never-finishing procedure is left fully
+  unconstrained (polymorphic), so binding its "result" (`x = p();`)
+  typechecks at any type; the statements after that call are simply
+  unreachable, and the compiler does not diagnose the dead code. This is a
+  deliberate trade-off — see the discussion in
+  [#153](https://github.com/ajfAfg/sanpou/issues/153).
 - **Steps and atomicity**: statements joined by commas and ended with `;`
   form one atomic action; block statements evaluate their condition in an
   action of its own; a bare `;` is an explicit yield point.
@@ -220,13 +226,15 @@ mod example {
   split the step with `;` when you want sequencing. Guards are also checked
   before asserts regardless of their order in the step, so a disabled step
   never fires its asserts.
-- **Processes**: `process name = proc in S;` instantiates a procedure per id
-  in the set `S` (readable as `self`). `S` may be any set — integers, strings,
-  or model values — and `self` takes its element type; all processes in a
-  module share one id type. `fair` adds weak fairness, `fair+` strong fairness.
-  The id sets of different processes must be pairwise disjoint; the compiler
-  emits `ASSUME` disjointness checks, so TLC fails fast at startup if they
-  overlap.
+- **Processes**: `process name(self in S) = proc;` instantiates the procedure
+  `proc` once per id in the set `S`; inside the procedure the instance's id is
+  read as `self`, which is exactly the binding the head introduces. `S` may be
+  any set — integers, strings, or model values — and `self` takes its element
+  type; all processes in a module share one id type. For a single instance,
+  write a one-element set: `process p(self in {1}) = f;`. `fair` adds weak
+  fairness, `fair+` strong fairness. The id sets of different processes must
+  be pairwise disjoint; the compiler emits `ASSUME` disjointness checks, so
+  TLC fails fast at startup if they overlap.
 - **Temporal properties**: `property name = ...;` is the only place
   `globally(p)` / `finally(p)` may appear, and only properties may
   reference other properties; list property names in the sidecar config's
@@ -263,14 +271,19 @@ lib/
     surface_ast.ml Surface-stage AST instantiation (as parsed)
     ast_printer.ml AST pretty printer
     builtin.ml     Built-in function registry
+    check_scope.ml Scope and context checks (names, callable kinds, statement context)
+    check_steps.ml Step-structure checks (conflicting writes, control transfer last)
     typing.ml      Hindley-Milner type checking
+    check_process_domains.ml  Process-domain constancy check
     alpha_convert.ml  Alpha conversion and callee resolution pass
     resolved_ast.ml   Resolved-stage AST instantiation (renamed idents, Fun/Proc callees)
+    check_temporal.ml Temporal-operator placement check
     normalize_calls.ml  Call normalization pass (procedure calls out of expressions)
     normalized_ast.ml   Call-normalized AST (call-free expressions, CallBindStep)
     ir.ml             Action IR shared by linearize and emit
     linearize.ml      AST → action IR lowering
     emit_tla.ml       Action IR → TLA+ AST
+    reserved_names.ml Names reserved by the emitted TLA+ module
     compile.ml        Pipeline driver with located diagnostics
     config.ml         Sidecar config parser and TLC .cfg generator
     source_map.ml  Label ↔ source line mapping

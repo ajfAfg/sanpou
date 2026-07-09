@@ -46,7 +46,7 @@ and termination checking.
   
   testing == <>((x = 120))
   
-  ProcSet == (1..1)
+  ProcSet == ({1})
   
   Init ==
       /\ x = 0
@@ -138,10 +138,10 @@ and termination checking.
   
   Next ==
       \/ (\E self \in ProcSet: fact(self) \/ worker(self))
-      \/ (\E self \in 1..1: __process_workers_wrapper__(self))
+      \/ (\E self \in {1}: __process_workers_wrapper__(self))
       \/ Terminating
   
-  Spec == Init /\ [][Next]_vars /\ (\A self \in 1..1: WF_vars(__process_workers_wrapper__(self))) /\ (\A self \in 1..1: WF_vars(fact(self))) /\ (\A self \in 1..1: WF_vars(worker(self)))
+  Spec == Init /\ [][Next]_vars /\ (\A self \in {1}: WF_vars(__process_workers_wrapper__(self))) /\ (\A self \in {1}: WF_vars(fact(self))) /\ (\A self \in {1}: WF_vars(worker(self)))
   
   ====
   $ cat out_factorial/factorial.cfg
