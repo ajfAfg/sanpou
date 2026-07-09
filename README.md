@@ -207,6 +207,12 @@ mod example {
   `return` (`return ();` when there is nothing to return) — the compiler
   rejects a body that can fall off its end. A procedure that never
   finishes, such as a `while (true)` loop with no `break`, needs none.
+  The return type of such a never-finishing procedure is left fully
+  unconstrained (polymorphic), so binding its "result" (`x = p();`)
+  typechecks at any type; the statements after that call are simply
+  unreachable, and the compiler does not diagnose the dead code. This is a
+  deliberate trade-off — see the discussion in
+  [#153](https://github.com/ajfAfg/sanpou/issues/153).
 - **Steps and atomicity**: statements joined by commas and ended with `;`
   form one atomic action; block statements evaluate their condition in an
   action of its own; a bare `;` is an explicit yield point.
