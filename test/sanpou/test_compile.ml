@@ -221,8 +221,8 @@ let () =
               has "zs == Append(xs, 3)";
               has "ws == (xs \\o << 4, 5 >>)";
               has "n == Len(xs)");
-          Alcotest.test_case "subscripting a concat result parenthesizes"
-            `Quick (fun () ->
+          Alcotest.test_case "subscripting a concat result parenthesizes" `Quick
+            (fun () ->
               let ast =
                 parse
                   "mod m {\n\
@@ -281,8 +281,7 @@ let () =
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_before "double(k) ==" "n ==" tla;
               has_before "n ==" "sum(a, b) ==" tla);
-          Alcotest.test_case "unary binds looser than postfix" `Quick
-            (fun () ->
+          Alcotest.test_case "unary binds looser than postfix" `Quick (fun () ->
               let ast =
                 parse
                   "mod u {\n\
@@ -361,15 +360,16 @@ let () =
                 parse
                   "mod m {\n\
                   \  var g = `a;\n\
-                  \  procedure f(n) { if (n == 0) { return 1; } else { var r = f(n - 1); return r; } }\n\
+                  \  procedure f(n) { if (n == 0) { return 1; } else { var r = \
+                   f(n - 1); return r; } }\n\
                   \  procedure main() { g = `a; return (); }\n\
                   \  process ps(self in 1..1) = main;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "CONSTANT a, defaultInitValue" tla);
-          Alcotest.test_case "declaration named like a used atom renames"
-            `Quick (fun () ->
+          Alcotest.test_case "declaration named like a used atom renames" `Quick
+            (fun () ->
               (* the atom's text is the model value's identity, so the atom
                  keeps the bare TLA+ name and the def renames apart *)
               let ast =
@@ -395,7 +395,8 @@ let () =
                   \  def msg = {kind: \"req\", src: 1};\n\
                   \  def k = msg.kind;\n\
                   \  var r = {tag: \"idle\", n: 0};\n\
-                  \  procedure main() { r.tag = \"busy\", r.n = r.n + 1; return (); }\n\
+                  \  procedure main() { r.tag = \"busy\", r.n = r.n + 1; \
+                   return (); }\n\
                   \  process ps(self in 1..1) = main;\n\
                   \  }\n"
               in
@@ -553,9 +554,8 @@ let () =
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "grid' = [grid EXCEPT ![1][2] = 5]" tla);
-          Alcotest.test_case
-            "with compiles to an existential over the range" `Quick
-            (fun () ->
+          Alcotest.test_case "with compiles to an existential over the range"
+            `Quick (fun () ->
               let ast =
                 parse
                   "mod m {\n\
@@ -571,9 +571,8 @@ let () =
               let has s = has_in s tla in
               has "\\E v__1 \\in 1..3: /\\ (v__1 > x)";
               has "x' = v__1");
-          Alcotest.test_case
-            "either compiles to a disjunction of guarded arms" `Quick
-            (fun () ->
+          Alcotest.test_case "either compiles to a disjunction of guarded arms"
+            `Quick (fun () ->
               let ast =
                 parse
                   "mod m {\n\
@@ -613,7 +612,8 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   procedure foo() { x = if (x == 0) { 1 } else { x }; return (); }\n\
+                   procedure foo() { x = if (x == 0) { 1 } else { x }; return \
+                   (); }\n\
                    process ps(self in 1..1) = foo;\n\
                    }\n"
               in

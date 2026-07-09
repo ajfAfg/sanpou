@@ -48,8 +48,7 @@ let cmd_compile file outdir =
               let cfg_path = Filename.concat outdir (name ^ ".cfg") in
               let constants =
                 List.concat_map
-                  (function
-                    | Tla.Tla_ast.DConstants names -> names | _ -> [])
+                  (function Tla.Tla_ast.DConstants names -> names | _ -> [])
                   o.tla_module.body
               in
               write_all cfg_path (Sanpou.Config.to_cfg_string ~constants config)

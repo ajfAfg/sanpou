@@ -1,5 +1,5 @@
 name: Set up TLA+
-description: Set up Java and download tla2tools.jar
+description: Set up Java and download the pinned tla2tools.jar
 
 outputs:
   java-path:
@@ -18,6 +18,26 @@ runs:
         distribution: zulu
         java-version: "25"
 
-    - name: Download tla2tools.jar
+    # yq is preinstalled on the GitHub-hosted ubuntu and macos runner images.
+    - name: Read the pinned tla2tools version from mise.toml
+      id: pin
       shell: bash
-      run: curl -fsSL -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+      run: |
+        version="$(yq -p toml -oy '.vars.tla2tools_version' mise.toml)"
+        if [ -z "$version" ] || [ "$version" = "null" ]; then
+          echo "::error::tla2tools_version not found in mise.toml" >&2
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Cache tla2tools.jar
+      id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: tla2tools.jar
+        key: tla2tools-${{ steps.pin.outputs.version }}
+
+    - name: Download tla2tools.jar
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: curl -fsSL -o tla2tools.jar "https://github.com/tlaplus/tlaplus/releases/download/${{ steps.pin.outputs.version }}/tla2tools.jar"

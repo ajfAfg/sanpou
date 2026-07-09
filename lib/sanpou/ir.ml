@@ -41,7 +41,7 @@ type pc_dest =
 type assignment =
   | AssignVar of string * Normalized_ast.expr
   | AssignPath of string * Normalized_ast.accessor list * Normalized_ast.expr
-    (* variable, access path (subscripts and/or fields, outermost first),
+(* variable, access path (subscripts and/or fields, outermost first),
        value *)
 
 type action = {
