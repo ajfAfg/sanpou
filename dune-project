@@ -7,20 +7,19 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github ajfAfg/sanpou))
 
-(authors "Author Name <author@example.com>")
+(authors "Shoichi Sasaki <56056962+ajfAfg@users.noreply.github.com>")
 
-(maintainers "Maintainer Name <maintainer@example.com>")
+(maintainers "Shoichi Sasaki <56056962+ajfAfg@users.noreply.github.com>")
 
 (license LICENSE)
 
-(documentation https://url/to/documentation)
-
 (package
  (name sanpou)
- (synopsis "A short synopsis")
- (description "A longer description")
+ (synopsis "Compiler from sanpou to TLA+")
+ (description
+  "A compiler that translates sanpou source code into TLA+. It can also annotate TLC model checker output traces with sanpou source line numbers.")
  (depends
   (ocaml
    (= 5.2.0))
@@ -37,7 +36,7 @@
   (ppx_deriving
    (>= 6.0.3)))
  (tags
-  ("add topics" "to describe" your project)))
+  (tla tlaplus model-checking formal-methods compiler)))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
 

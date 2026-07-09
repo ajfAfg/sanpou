@@ -408,7 +408,8 @@ let () =
               match (List.nth m.items 1).desc with
               | ConstDef
                   {
-                    value = { desc = App (Sanpou.Resolved_ast.Fun "head", _); _ };
+                    value =
+                      { desc = App (Sanpou.Resolved_ast.Fun "head", _); _ };
                     _;
                   } ->
                   ()
@@ -418,10 +419,7 @@ let () =
               let const =
                 node
                   (ConstDef
-                     {
-                       name = "c";
-                       value = node (App ("head", [ var "xs" ]));
-                     })
+                     { name = "c"; value = node (App ("head", [ var "xs" ])) })
               in
               let fd =
                 node
@@ -437,13 +435,13 @@ let () =
                 ->
                   ()
               | _ -> fail "expected the builtin Head");
-          test_case "procedure sees itself for self-recursion" `Quick
-            (fun () ->
+          test_case "procedure sees itself for self-recursion" `Quick (fun () ->
               let body =
                 [ simple_step [ return_ (node (App ("f", [ intlit 0 ]))) ] ]
               in
               let m =
-                transform_one (make_program [ make_module [ make_proc "f" body ] ])
+                transform_one
+                  (make_program [ make_module [ make_proc "f" body ] ])
               in
               match get_proc_body m "f" with
               | [
@@ -454,10 +452,7 @@ let () =
                        {
                          desc =
                            Return
-                             {
-                               desc = App (Sanpou.Resolved_ast.Proc "f", _);
-                               _;
-                             };
+                             { desc = App (Sanpou.Resolved_ast.Proc "f", _); _ };
                          _;
                        };
                      ];

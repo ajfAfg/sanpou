@@ -67,7 +67,8 @@ let () =
                 ]);
           test_case "await with comma merges into one step" `Quick (fun () ->
               check_items
-                "procedure foo() { await lock == false, lock = true; return (); }"
+                "procedure foo() { await lock == false, lock = true; return \
+                 (); }"
                 [
                   proc_def "foo" cl0
                     [
@@ -79,7 +80,8 @@ let () =
                     ];
                 ]);
           test_case "bare semicolon is an empty step" `Quick (fun () ->
-              check_items "procedure foo() { ; }" [ proc_def "foo" cl0 [ empty_step ] ]);
+              check_items "procedure foo() { ; }"
+                [ proc_def "foo" cl0 [ empty_step ] ]);
         ] );
       ( "else_if",
         [

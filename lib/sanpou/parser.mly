@@ -113,7 +113,9 @@ item:
       { mk $startpos (VarDecl { name; init = InitIn domain }) }
   | PROCEDURE_KW name=ID LPAREN params=separated_list(COMMA, ID) RPAREN LBRACE body=body RBRACE
       { mk $startpos (ProcDef { name; params; body }) }
-  | fairness=fairness_marker PROCESS name=ID EQ proc=ID IN domain=expr SEMI
+  (* The binder is literally `self`: process ids are read as `self` inside
+     the root procedure, so the head names the binding it actually creates. *)
+  | fairness=fairness_marker PROCESS name=ID LPAREN SELF IN domain=expr RPAREN EQ proc=ID SEMI
       { mk $startpos (Process { name; proc; fairness; domain }) }
 
 (* `fair+` lexes as FAIR PLUS; there is no dedicated token. *)
