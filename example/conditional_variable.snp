@@ -32,6 +32,6 @@ mod conditional_variable {
     return ();
   }
 
-  fair process p = producer in 1..1;
-  fair process w = consumer in 2..2;
+  fair process p(self in {1}) = producer;
+  fair process w(self in {2}) = consumer;
 }

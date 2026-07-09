@@ -50,7 +50,7 @@ let () =
                 \  var x = 0;\n\
                 \  def globally(p) = p;\n\
                 \  procedure f() { await globally(x == 0); return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  process ps(self in 1..1) = f;\n\
                 \  }");
           test_case "local shadowing a property is not a reference" `Quick
             (fun () ->
@@ -59,7 +59,7 @@ let () =
                 \  var x = 0;\n\
                 \  property p = globally(x == 0);\n\
                 \  procedure f() { var p = 1; x = p; return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  process ps(self in 1..1) = f;\n\
                 \  }");
         ] );
       ( "rejected",
@@ -86,7 +86,7 @@ let () =
                 "mod m {\n\
                 \  var x = 0;\n\
                 \  procedure f() { await globally(x == 0); return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  process ps(self in 1..1) = f;\n\
                 \  }");
           test_case "temporal operator in function def" `Quick (fun () ->
               check_fails "mod m { def g(y) = globally(y == 0); }");
@@ -98,7 +98,7 @@ let () =
                 \  var x = 0;\n\
                 \  property p = globally(x == 0);\n\
                 \  procedure f() { await p; return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  process ps(self in 1..1) = f;\n\
                 \  }");
           test_case "property referenced in a def" `Quick (fun () ->
               check_fails

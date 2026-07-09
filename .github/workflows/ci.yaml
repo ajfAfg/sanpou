@@ -65,11 +65,12 @@ jobs:
           key: dune-${{ runner.os }}-${{ github.sha }}
           restore-keys: dune-${{ runner.os }}-
 
+      # yq is preinstalled on the GitHub-hosted ubuntu and macos runner images.
       - name: Read the pinned tla2tools version from mise.toml
         id: pin
         run: |
-          version="$(sed -n 's/^tla2tools_version = "\(.*\)"$/\1/p' mise.toml)"
-          if [ -z "$version" ]; then
+          version="$(yq -p toml -oy '.vars.tla2tools_version' mise.toml)"
+          if [ -z "$version" ] || [ "$version" = "null" ]; then
             echo "::error::tla2tools_version not found in mise.toml" >&2
             exit 1
           fi
@@ -138,10 +139,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # Installs only actionlint (pinned in mise.toml [tools]), not the
+      # whole toolchain.
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install_args: actionlint
+
       - name: Run actionlint
-        env:
-          ACTIONLINT_VERSION: 1.7.12
-        run: |
-          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
-            | tar -xz actionlint
-          ./actionlint -color
+        run: mise x -- actionlint -color

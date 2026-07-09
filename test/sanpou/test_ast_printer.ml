@@ -212,18 +212,18 @@ let () =
           test_case "var domain set literal" `Quick (fun () ->
               pretty_roundtrip "mod m { var x in {1, 2, 3}; }");
           test_case "process over set literal" `Quick (fun () ->
-              pretty_roundtrip "mod m { process ps = foo in {1, 2}; }");
+              pretty_roundtrip "mod m { process ps(self in {1, 2}) = foo; }");
           test_case "with over set" `Quick (fun () ->
               pretty_roundtrip
                 "mod m { procedure foo() { with (v in {1, 2}) { x = v; } } }");
           test_case "subscript" `Quick (fun () ->
               pretty_roundtrip "mod m { def x = xs[1 + 2]; }");
           test_case "process" `Quick (fun () ->
-              pretty_roundtrip "mod m { process ps = foo in 1..n; }");
+              pretty_roundtrip "mod m { process ps(self in 1..n) = foo; }");
           test_case "fair process" `Quick (fun () ->
-              pretty_roundtrip "mod m { fair process ps = foo in 1..n; }");
+              pretty_roundtrip "mod m { fair process ps(self in 1..n) = foo; }");
           test_case "strongly fair process" `Quick (fun () ->
-              pretty_roundtrip "mod m { fair+ process ps = foo in 1..n; }");
+              pretty_roundtrip "mod m { fair+ process ps(self in 1..n) = foo; }");
           test_case "call stmt" `Quick (fun () ->
               pretty_roundtrip "mod m { procedure foo() { bar(1, 2); } }");
           test_case "app expr" `Quick (fun () ->
@@ -252,7 +252,7 @@ let () =
       rcnt = rcnt - 1;
     }
   }
-  process readers = reader in 1..readerNum;
+  process readers(self in 1..readerNum) = reader;
 }|});
         ] );
       ( "parenthesization",
@@ -306,11 +306,11 @@ let () =
               pretty_prints "mod m { def x = { y in s : y > 1 }; }"
                 "mod m {\n  def x = { y in s : y > 1 };\n}\n");
           test_case "fair process" `Quick (fun () ->
-              pretty_prints "mod m { fair process ps = foo in 1..n; }"
-                "mod m {\n  fair process ps = foo in 1..n;\n}\n");
+              pretty_prints "mod m { fair process ps(self in 1..n) = foo; }"
+                "mod m {\n  fair process ps(self in 1..n) = foo;\n}\n");
           test_case "strongly fair process" `Quick (fun () ->
-              pretty_prints "mod m { fair+ process ps = foo in 1..n; }"
-                "mod m {\n  fair+ process ps = foo in 1..n;\n}\n");
+              pretty_prints "mod m { fair+ process ps(self in 1..n) = foo; }"
+                "mod m {\n  fair+ process ps(self in 1..n) = foo;\n}\n");
           test_case "either arms print on the closing brace's line" `Quick
             (fun () ->
               pretty_prints
