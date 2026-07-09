@@ -271,14 +271,19 @@ lib/
     surface_ast.ml Surface-stage AST instantiation (as parsed)
     ast_printer.ml AST pretty printer
     builtin.ml     Built-in function registry
+    check_scope.ml Scope and context checks (names, callable kinds, statement context)
+    check_steps.ml Step-structure checks (conflicting writes, control transfer last)
     typing.ml      Hindley-Milner type checking
+    check_process_domains.ml  Process-domain constancy check
     alpha_convert.ml  Alpha conversion and callee resolution pass
     resolved_ast.ml   Resolved-stage AST instantiation (renamed idents, Fun/Proc callees)
+    check_temporal.ml Temporal-operator placement check
     normalize_calls.ml  Call normalization pass (procedure calls out of expressions)
     normalized_ast.ml   Call-normalized AST (call-free expressions, CallBindStep)
     ir.ml             Action IR shared by linearize and emit
     linearize.ml      AST → action IR lowering
     emit_tla.ml       Action IR → TLA+ AST
+    reserved_names.ml Names reserved by the emitted TLA+ module
     compile.ml        Pipeline driver with located diagnostics
     config.ml         Sidecar config parser and TLC .cfg generator
     source_map.ml  Label ↔ source line mapping

@@ -80,8 +80,8 @@ let check_config_names (config : Config.t) (prog : Surface_ast.program) :
                   loc = m.mod_loc;
                   message =
                     Printf.sprintf
-                      "the sidecar config lists %s '%s', but module %s \
-                       defines no such %s"
+                      "the sidecar config lists %s '%s', but module %s defines \
+                       no such %s"
                       kind name m.mod_name item_kind;
                 })
           names
@@ -98,9 +98,21 @@ let compile ?config (source : string) : (output list, diagnostic) result =
   match parse source with
   | Error d -> Error d
   | Ok prog -> (
-      match Typing.check prog with
+      match
+        (* Scope and step-structure checks precede inference so Typing can
+           assume a well-scoped tree; the domain-constancy check follows it
+           so a domain's type errors come first. *)
+        Check_scope.check prog;
+        Check_steps.check prog;
+        Typing.check prog;
+        Check_process_domains.check prog
+      with
+      | exception Check_scope.Error (message, loc) -> Error { loc; message }
+      | exception Check_steps.Error (message, loc) -> Error { loc; message }
       | exception Typing.Type_error (err, loc) ->
           Error { loc; message = Typing.string_of_type_error err }
+      | exception Check_process_domains.Error (message, loc) ->
+          Error { loc; message }
       | () -> (
           match check_has_processes prog with
           | Some d -> Error d

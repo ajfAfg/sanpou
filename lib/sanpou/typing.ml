@@ -15,7 +15,7 @@ type ty =
   | TySeq of ty
   | TySet of ty
   | TyRecord of (id * ty) list
-      (* fixed-field structural record; fields kept label-sorted so identical
+    (* fixed-field structural record; fields kept label-sorted so identical
          field sets compare and unify regardless of order *)
   | TyMap of ty * ty
   | TyVar of tyvar ref
@@ -31,25 +31,10 @@ type tysc = TyScheme of int list * ty
 
 type type_error =
   | Type_clash of ty * ty
-  | Unbound_variable of id
   | Arity_mismatch of id * int * int
-  | Not_a_function of id
-  | Break_outside_loop
-  | Continue_outside_loop
-  | Return_type_mismatch
-  | Assign_to_non_variable of id
   | Recursive_type
-  | Callable_as_value of id
-  | Not_a_procedure of id
   | Not_a_record of ty
   | Unknown_field of id * ty
-  | Self_outside_procedure
-  | Reserved_module_name of id
-  | Conflicting_assignments of id
-  | Non_constant_process_domain of id
-  | Control_transfer_not_last of string
-  | Process_root_takes_params of id * int
-  | Duplicate_module of id
 
 exception Type_error of type_error * loc
 
@@ -267,30 +252,16 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
   | IntLit _ -> TyInt
   | BoolLit _ -> TyBool
   | StrLit _ -> TyString
-  | AtomLit name ->
-      (* The atom's text is its TLA+ name (the model value's identity in
-         traces and the .cfg), so a reserved text cannot be renamed away
-         like a declaration could. *)
-      if
-        List.mem name Emit_tla.reserved_module_names
-        || Emit_tla.is_generated_action_label name
-      then type_error (Reserved_module_name name) e.loc;
-      TyAtom
+  | AtomLit _ -> TyAtom
   | Var name -> (
       match List.assoc_opt name env with
-      | Some tysc -> (
-          (* Functions and procedures are second-class: TLA+ operators
-             cannot be passed as plain values. Nothing but a callable can
-             carry a function type, so the type is the complete signal. *)
-          match repr (instantiate fresh_tyvar tysc) with
-          | TyFun _ -> type_error (Callable_as_value name) e.loc
-          | ty -> ty)
-      | None -> type_error (Unbound_variable name) e.loc)
+      | Some tysc -> instantiate fresh_tyvar tysc
+      | None -> assert false (* rejected by Check_scope *))
   | Self -> (
       (* [self] is the process id, bound only inside procedure bodies. *)
       match List.assoc_opt "self" env with
       | Some tysc -> instantiate fresh_tyvar tysc
-      | None -> type_error Self_outside_procedure e.loc)
+      | None -> assert false (* rejected by Check_scope *))
   | UnOp (Neg, rhs) ->
       unify rhs.loc (infer_expr fresh_tyvar env rhs) TyInt;
       TyInt
@@ -304,16 +275,11 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
   | App (name, args) ->
       (* Lexical resolution, mirroring Alpha_convert: a definition in the
          environment shadows the builtin of the same name; builtins are the
-         outermost scope. *)
+         outermost scope. Check_scope has already ensured the name resolves
+         to a callable, so a hit in the environment is a function type. *)
       let fn_ty =
         match List.assoc_opt name env with
-        | Some tysc -> (
-            (* Unifying a parameter or local with a function type would
-               accept first-class usage that TLA+ operators cannot express,
-               so only names already known to be functions are applicable. *)
-            match repr (instantiate fresh_tyvar tysc) with
-            | TyFun _ as fn_ty -> fn_ty
-            | _ -> type_error (Not_a_function name) e.loc)
+        | Some tysc -> instantiate fresh_tyvar tysc
         | None -> (
             match Builtin.of_name name with
             | Some b ->
@@ -326,7 +292,7 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
                        (Builtin.name b, List.length param_tys, List.length args))
                     e.loc;
                 TyFun (param_tys, ret_ty)
-            | None -> type_error (Unbound_variable name) e.loc)
+            | None -> assert false (* rejected by Check_scope *))
       in
       infer_app fresh_tyvar env e.loc fn_ty args
   | Builtin (b, args) ->
@@ -401,14 +367,14 @@ and infer_expr fresh_tyvar (env : tyenv) (e : Surface_ast.expr) : ty =
 type proc_ctx = {
   env : tyenv;
   mutable_vars : (id * ty) list;
-  proc_names : id list; (* procedures visible so far, including self *)
   return_ty : ty;
-  in_loop : bool;
   fresh_tyvar : unit -> ty;
 }
 
-(* Statement-level errors (assignment targets, break/continue) point at the
-   statement's own location; expression errors point at the expression. *)
+(* Statement-level errors (assignment targets) point at the statement's own
+   location; expression errors point at the expression. Scope and context
+   facts (assignable targets, callable kinds, break/continue placement) are
+   Check_scope's job; here every name is known to resolve. *)
 let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
   let loc = stmt.loc in
   match stmt.desc with
@@ -418,7 +384,7 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
           match List.assoc_opt name ctx.mutable_vars with
           | Some var_ty ->
               unify value.loc var_ty (infer_expr ctx.fresh_tyvar ctx.env value)
-          | None -> type_error (Assign_to_non_variable name) loc)
+          | None -> assert false (* rejected by Check_scope *))
       | PathTarget (name, path) -> (
           match List.assoc_opt name ctx.mutable_vars with
           | Some container_ty ->
@@ -430,7 +396,9 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
                   (fun collection_ty accessor ->
                     match accessor with
                     | AccIndex index ->
-                        let index_ty = infer_expr ctx.fresh_tyvar ctx.env index in
+                        let index_ty =
+                          infer_expr ctx.fresh_tyvar ctx.env index
+                        in
                         infer_indexed_access ctx.fresh_tyvar ~collection_loc:loc
                           ~index_loc:index.loc collection_ty index_ty
                     | AccField field ->
@@ -438,77 +406,21 @@ let check_simple_stmt (ctx : proc_ctx) (stmt : Surface_ast.simple_stmt) : unit =
                   container_ty path
               in
               unify value.loc elem_ty value_ty
-          | None -> type_error (Assign_to_non_variable name) loc))
+          | None -> assert false (* rejected by Check_scope *)))
   | Call (name, args) -> (
-      (* A statement call discards no value only a procedure can produce
-         steps for; a def function here would reach the emitter's
-         procedure table and crash. *)
-      if not (List.mem name ctx.proc_names) then
-        type_error (Not_a_procedure name) loc;
       match List.assoc_opt name ctx.env with
-      | None -> type_error (Unbound_variable name) loc
+      | None -> assert false (* rejected by Check_scope *)
       | Some tysc ->
           let fn_ty = instantiate ctx.fresh_tyvar tysc in
           let _ = infer_app ctx.fresh_tyvar ctx.env loc fn_ty args in
           ())
   | Return value ->
       unify value.loc ctx.return_ty (infer_expr ctx.fresh_tyvar ctx.env value)
-  | Break -> if not ctx.in_loop then type_error Break_outside_loop loc
-  | Continue -> if not ctx.in_loop then type_error Continue_outside_loop loc
+  | Break | Continue -> ()
   | Await cond ->
       unify cond.loc (infer_expr ctx.fresh_tyvar ctx.env cond) TyBool
   | Assert cond ->
       unify cond.loc (infer_expr ctx.fresh_tyvar ctx.env cond) TyBool
-
-(* One statement list (SimpleStep / WithStep) is one atomic action: its
-   assignments become one conjunction of primed equations. Multiple path
-   updates to a variable compose left-to-right into a single EXCEPT, but a
-   whole-variable write cannot be combined with any other write to the same
-   variable in the same step — there is no consistent value for the primed
-   variable, and the emitter would have to drop one silently. *)
-let check_no_conflicting_writes (stmts : Surface_ast.simple_stmt list) : unit =
-  let write (stmt : Surface_ast.simple_stmt) =
-    match stmt.desc with
-    | Assign (VarTarget name, _) -> Some (name, `Whole, stmt.loc)
-    | Assign (PathTarget (name, _), _) -> Some (name, `Path, stmt.loc)
-    | _ -> None
-  in
-  let (_ : (id * [ `Whole | `Path ]) list) =
-    List.fold_left
-      (fun seen (name, kind, loc) ->
-        if
-          List.exists
-            (fun (n, k) -> n = name && (k = `Whole || kind = `Whole))
-            seen
-        then type_error (Conflicting_assignments name) loc;
-        (name, kind) :: seen)
-      []
-      (List.filter_map write stmts)
-  in
-  ()
-(* One statement list (SimpleStep / WithStep) merges into one atomic action
-   whose call/return/break/continue slot is single-valued: a second control
-   transfer would silently overwrite the first (an entire procedure call can
-   vanish), and statements after a transfer would still execute inside the
-   same action. Require the transfer to be the step's final statement. *)
-let check_control_transfer_last (stmts : Surface_ast.simple_stmt list) : unit =
-  let kind (stmt : Surface_ast.simple_stmt) =
-    match stmt.desc with
-    | Call _ -> Some "a procedure call"
-    | Return _ -> Some "a return"
-    | Break -> Some "a break"
-    | Continue -> Some "a continue"
-    | Assign _ | Await _ | Assert _ -> None
-  in
-  let rec go = function
-    | [] | [ _ ] -> ()
-    | stmt :: rest ->
-        (match kind stmt with
-        | Some k -> type_error (Control_transfer_not_last k) stmt.loc
-        | None -> ());
-        go rest
-  in
-  go stmts
 
 let rec check_body (ctx : proc_ctx) (steps : Surface_ast.body) : unit =
   match steps with
@@ -521,13 +433,11 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
   match step.desc with
   | EmptyStep -> ctx
   | SimpleStep stmts ->
-      check_no_conflicting_writes stmts;
-      check_control_transfer_last stmts;
       List.iter (check_simple_stmt ctx) stmts;
       ctx
   | BlockStep (While { cond; body }) ->
       unify cond.loc (infer_expr ctx.fresh_tyvar ctx.env cond) TyBool;
-      check_body { ctx with in_loop = true } body;
+      check_body ctx body;
       ctx
   | BlockStep (If { cond; body; else_body }) ->
       unify cond.loc (infer_expr ctx.fresh_tyvar ctx.env cond) TyBool;
@@ -556,8 +466,6 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
             List.filter (fun (id, _) -> id <> binder) ctx.mutable_vars;
         }
       in
-      check_no_conflicting_writes stmts;
-      check_control_transfer_last stmts;
       List.iter (check_simple_stmt binder_ctx) stmts;
       ctx
   | VarStep (name, value) ->
@@ -569,45 +477,6 @@ and check_step (ctx : proc_ctx) (step : Surface_ast.step) : proc_ctx =
         env = (name, tysc_of_ty val_ty) :: ctx.env;
         mutable_vars = (name, val_ty) :: ctx.mutable_vars;
       }
-
-(* ===== Process domain constancy =====
-
-   PlusCal requires a process set to be a constant expression: the emitted
-   spec fixes ProcSet and the domains of pc/stack at Init, so a domain that
-   reads mutable state breaks TLC at runtime the moment the state changes.
-   sanpou has no CONSTANT stage — literals, atoms, and defs form the constant
-   fragment — so a module-level name is non-constant iff it is a [var], or a
-   def whose body (transitively) mentions one. *)
-let rec first_nonconst_ref (nonconst : id list) (e : Surface_ast.expr) :
-    (id * loc) option =
-  let first_of es = List.find_map (first_nonconst_ref nonconst) es in
-  let under_binder binder e =
-    first_nonconst_ref (List.filter (fun n -> n <> binder) nonconst) e
-  in
-  match e.desc with
-  | IntLit _ | BoolLit _ | StrLit _ | AtomLit _ | Self -> None
-  | Var name -> if List.mem name nonconst then Some (name, e.loc) else None
-  | App (name, args) ->
-      if List.mem name nonconst then Some (name, e.loc) else first_of args
-  | UnOp (_, e1) -> first_nonconst_ref nonconst e1
-  | BinOp (_, a, b) | Range (a, b) | Subscript (a, b) -> first_of [ a; b ]
-  | Field (record, _) -> first_nonconst_ref nonconst record
-  | Record fields -> first_of (List.map snd fields)
-  | Builtin (_, args) | SetLit args | Tuple args | Sequence args ->
-      first_of args
-  | IfExpr (a, b, c) -> first_of [ a; b; c ]
-  | MapInit { binder; domain; value } -> (
-      match first_nonconst_ref nonconst domain with
-      | Some r -> Some r
-      | None -> under_binder binder value)
-  | SetComp { binder; domain; pred } -> (
-      match first_nonconst_ref nonconst domain with
-      | Some r -> Some r
-      | None -> under_binder binder pred)
-  | Quant { binder; domain; body; _ } -> (
-      match first_nonconst_ref nonconst domain with
-      | Some r -> Some r
-      | None -> under_binder binder body)
 
 (* ===== Check a module ===== *)
 
@@ -623,44 +492,17 @@ let check_module (m : Surface_ast.module_def) : unit =
      all processes must share one ID element type, which is also the type of
      [self] in every procedure body. *)
   let self_ty = fresh_tyvar () in
-  (* Module-level names shadow sequentially like every other binding; the
-     flat TLA+ namespace is reconciled by alpha-conversion, which renames
-     the shadowed declarations. Names the emitter itself generates (or
-     pulls in via EXTENDS) are reserved outright. *)
-  let declare names loc name =
-    if
-      List.mem name Emit_tla.reserved_module_names
-      || Emit_tla.is_generated_action_label name
-    then type_error (Reserved_module_name name) loc;
-    name :: names
-  in
-  (* [nonconst] accumulates the module-level names whose values can change
-     over a behavior: vars, and defs that (transitively) read one. *)
-  let nonconst_def nonconst name body =
-    match first_nonconst_ref nonconst body with
-    | Some _ -> name :: nonconst
-    | None -> nonconst
-  in
-  let (_ : tyenv * id list * id list * id list) =
+  let (_ : tyenv) =
     List.fold_left
-      (fun (env, proc_names, names, nonconst) (item : Surface_ast.item) ->
+      (fun env (item : Surface_ast.item) ->
         match item.desc with
         | ConstDef { name; value } ->
-            let names = declare names item.loc name in
             let ty = infer_expr fresh_tyvar env value in
-            ( (name, generalize env ty) :: env,
-              proc_names,
-              names,
-              nonconst_def nonconst name value )
+            (name, generalize env ty) :: env
         | PropDef { name; value } ->
-            let names = declare names item.loc name in
             unify value.loc (infer_expr fresh_tyvar env value) TyBool;
-            ( (name, tysc_of_ty TyBool) :: env,
-              proc_names,
-              names,
-              nonconst_def nonconst name value )
+            (name, tysc_of_ty TyBool) :: env
         | FunDef { name; params; body_expr } ->
-            let names = declare names item.loc name in
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
               List.map2
@@ -669,19 +511,8 @@ let check_module (m : Surface_ast.module_def) : unit =
             in
             let body_ty = infer_expr fresh_tyvar (param_env @ env) body_expr in
             let fn_ty = TyFun (param_tys, body_ty) in
-            (* Params shadow module names inside the body, but the filtered
-               list is only for the body check: the accumulator keeps them. *)
-            let body_nonconst =
-              List.filter (fun n -> not (List.mem n params)) nonconst
-            in
-            let nonconst =
-              match first_nonconst_ref body_nonconst body_expr with
-              | Some _ -> name :: nonconst
-              | None -> nonconst
-            in
-            ((name, generalize env fn_ty) :: env, proc_names, names, nonconst)
+            (name, generalize env fn_ty) :: env
         | VarDecl { name; init } ->
-            let names = declare names item.loc name in
             let ty =
               match init with
               | InitValue value -> infer_expr fresh_tyvar env value
@@ -692,9 +523,8 @@ let check_module (m : Surface_ast.module_def) : unit =
                     (TySet elem_ty);
                   elem_ty
             in
-            ((name, tysc_of_ty ty) :: env, proc_names, names, name :: nonconst)
+            (name, tysc_of_ty ty) :: env
         | ProcDef { name = proc_name; params; body } ->
-            let names = declare names item.loc proc_name in
             let param_tys = List.map (fun _ -> fresh_tyvar ()) params in
             let param_env =
               List.map2
@@ -725,16 +555,8 @@ let check_module (m : Surface_ast.module_def) : unit =
                   | _ -> None)
                 env
             in
-            let proc_names = proc_name :: proc_names in
             let ctx =
-              {
-                env = proc_env;
-                mutable_vars;
-                proc_names;
-                return_ty;
-                in_loop = false;
-                fresh_tyvar;
-              }
+              { env = proc_env; mutable_vars; return_ty; fresh_tyvar }
             in
             check_body ctx body;
             (* Generalize with [self] in scope: [self_ty] is not part of the
@@ -744,56 +566,19 @@ let check_module (m : Surface_ast.module_def) : unit =
                its own [self] type, breaking the one-self-type-per-module
                invariant. *)
             let gen_env = ("self", tysc_of_ty self_ty) :: env in
-            ( (proc_name, generalize gen_env fn_ty) :: env,
-              proc_names,
-              names,
-              nonconst )
-        | Process { name; proc; domain; _ } ->
-            let names = declare names item.loc name in
-            (* The root must be a procedure: a def function here would
-               reach the emitter's procedure table and crash. *)
-            if not (List.mem proc proc_names) then
-              type_error (Not_a_procedure proc) item.loc;
-            (* ... and a nullary one: the wrapper pushes an empty argument
-               list, so parameters would silently start as the null frame
-               sentinel and blow up inside TLC. *)
-            (match List.assoc_opt proc env with
-            | Some (TyScheme (_, ty)) -> (
-                match repr ty with
-                | TyFun (_ :: _ as params, _) ->
-                    type_error
-                      (Process_root_takes_params (proc, List.length params))
-                      item.loc
-                | _ -> ())
-            | None -> ());
+            (proc_name, generalize gen_env fn_ty) :: env
+        | Process { domain; _ } ->
             (* The ID set's element type is [self]'s type, shared across the
                module (all processes must agree). *)
-            unify domain.loc
-              (infer_expr fresh_tyvar env domain)
-              (TySet self_ty);
-            (match first_nonconst_ref nonconst domain with
-            | Some (name, loc) ->
-                type_error (Non_constant_process_domain name) loc
-            | None -> ());
-            (env, proc_names, names, nonconst))
-      ([], [], [], []) m.items
+            unify domain.loc (infer_expr fresh_tyvar env domain) (TySet self_ty);
+            env)
+      [] m.items
   in
   ()
 
 (* ===== Check a program ===== *)
 
-let check (prog : Surface_ast.program) : unit =
-  (* Each module becomes its own <name>.tla output file, so a duplicate
-     would silently overwrite the previous module's spec. *)
-  let (_ : id list) =
-    List.fold_left
-      (fun seen (m : Surface_ast.module_def) ->
-        if List.mem m.mod_name seen then
-          type_error (Duplicate_module m.mod_name) m.mod_loc;
-        m.mod_name :: seen)
-      [] prog
-  in
-  List.iter check_module prog
+let check (prog : Surface_ast.program) : unit = List.iter check_module prog
 
 (* ===== Pretty printing for error messages ===== *)
 
@@ -835,53 +620,12 @@ let string_of_type_error = function
   | Type_clash (t1, t2) ->
       Printf.sprintf "Type error: cannot unify %s with %s" (string_of_ty t1)
         (string_of_ty t2)
-  | Unbound_variable id -> Printf.sprintf "Unbound variable: %s" id
   | Arity_mismatch (id, expected, actual) ->
       Printf.sprintf "Function %s expects %d arguments but got %d" id expected
         actual
-  | Not_a_function id -> Printf.sprintf "%s is not a function" id
-  | Callable_as_value id ->
-      Printf.sprintf
-        "%s is a function or procedure and cannot be used as a value; apply \
-         it instead"
-        id
-  | Not_a_procedure id -> Printf.sprintf "%s is not a procedure" id
   | Not_a_record ty ->
       Printf.sprintf "%s is not a record; cannot access a field of it"
         (string_of_ty ty)
   | Unknown_field (field, ty) ->
       Printf.sprintf "record %s has no field %s" (string_of_ty ty) field
-  | Self_outside_procedure -> "self can only be used inside a procedure"
-  | Reserved_module_name id ->
-      Printf.sprintf
-        "%s is reserved: it collides with a name in the emitted TLA+ module"
-        id
-  | Conflicting_assignments id ->
-      Printf.sprintf
-        "conflicting assignments to %s in one step: a whole-variable \
-         assignment cannot be combined with another assignment to the same \
-         variable"
-        id
-  | Non_constant_process_domain id ->
-      Printf.sprintf
-        "a process ID set must be constant, but %s is mutable state (or \
-         depends on it)"
-        id
-  | Control_transfer_not_last kind ->
-      Printf.sprintf
-        "%s must be the last statement of its step: the following statements \
-         merge into the same atomic action and the transfer would discard them"
-        kind
-  | Process_root_takes_params (id, n) ->
-      Printf.sprintf
-        "%s takes %d parameter%s; a process root procedure must take none \
-         (the process wrapper calls it without arguments)"
-        id n
-        (if n = 1 then "" else "s")
-  | Duplicate_module id -> Printf.sprintf "module %s is already defined" id
-  | Break_outside_loop -> "break outside of loop"
-  | Continue_outside_loop -> "continue outside of loop"
-  | Return_type_mismatch -> "return type mismatch"
-  | Assign_to_non_variable id ->
-      Printf.sprintf "Cannot assign to %s: not a mutable variable" id
   | Recursive_type -> "Recursive type detected"
