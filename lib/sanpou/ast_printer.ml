@@ -256,9 +256,9 @@ let pretty_item name_of callee_of indent (item : ('n, 'c) item) =
         | Unfair -> "process "
         | WeakFair -> "fair process "
         | StrongFair -> "fair+ process ")
-      ^ name ^ " = " ^ proc ^ " in "
+      ^ name ^ "(self in "
       ^ pretty_expr name_of callee_of domain
-      ^ ";\n"
+      ^ ") = " ^ proc ^ ";\n"
 
 let pretty_module_def name_of callee_of (m : ('n, 'c) module_def) =
   "mod " ^ m.mod_name ^ " {\n"

@@ -17,5 +17,5 @@ mod factorial {
     return ();
   }
 
-  fair process workers = worker in 1..1;
+  fair process workers(self in {1}) = worker;
 }

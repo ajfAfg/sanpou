@@ -13,7 +13,7 @@ A single process stuck on an await gives a short, deterministic trace.
   >       x = 0;
   >     }
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ cat > dl.json <<'EOF'
@@ -56,7 +56,7 @@ summary is keyed by the ids.
   >     turn = 2;
   >     return ();
   >   }
-  >   process p = f in {`alice, `bob};
+  >   process p(self in {`alice, `bob}) = f;
   > }
   > EOF
   $ cp dl.json atoms.json
@@ -108,7 +108,7 @@ output is what these tests assert.)
   >     }
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cat > afail.json <<'EOF'
@@ -130,7 +130,7 @@ output is what these tests assert.)
   >       await x == 1;
   >     }
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   >   property never = finally(x == 1);
   > }
   > EOF
