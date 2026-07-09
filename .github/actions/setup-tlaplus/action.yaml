@@ -18,12 +18,13 @@ runs:
         distribution: zulu
         java-version: "25"
 
+    # yq is preinstalled on the GitHub-hosted ubuntu and macos runner images.
     - name: Read the pinned tla2tools version from mise.toml
       id: pin
       shell: bash
       run: |
-        version="$(sed -n 's/^tla2tools_version = "\(.*\)"$/\1/p' mise.toml)"
-        if [ -z "$version" ]; then
+        version="$(yq -p toml -oy '.vars.tla2tools_version' mise.toml)"
+        if [ -z "$version" ] || [ "$version" = "null" ]; then
           echo "::error::tla2tools_version not found in mise.toml" >&2
           exit 1
         fi

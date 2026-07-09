@@ -117,10 +117,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # Installs only actionlint (pinned in mise.toml [tools]), not the
+      # whole toolchain.
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install_args: actionlint
+
       - name: Run actionlint
-        env:
-          ACTIONLINT_VERSION: 1.7.12
-        run: |
-          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
-            | tar -xz actionlint
-          ./actionlint -color
+        run: mise x -- actionlint -color
