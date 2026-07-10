@@ -39,7 +39,7 @@ position, and the deadlock summary points at the blocking await.
     (no changes)
   
   DEADLOCK — all processes blocked:
-    process 1 (f): await x == 1, x = 0  [line 5]
+    process 1 (f): await x == 1, x = 0; while (true) [check]  [line 5]
 
 Process ID sets need not be 1..n: with model-value ids, TLC prints pc/stack
 in the function form ((Alice :> ... @@ Bob :> ...)); steps are attributed to
@@ -73,24 +73,12 @@ summary is keyed by the ids.
   Step 2: p (process alice): [process p starts f]  [line 9]
     (frame: t = null)
   
-  Step 3: f (process alice): var t = 10  [line 4]
-    t = 10
-  
-  Step 4: f (process alice): t = t + 1  [line 5]
-    t = 11
-  
-  Step 5: p (process bob): [process p starts f]  [line 9]
+  Step 3: p (process bob): [process p starts f]  [line 9]
     (frame: t = null)
   
-  Step 6: f (process bob): var t = 10  [line 4]
-    t = 10
-  
-  Step 7: f (process bob): t = t + 1  [line 5]
-    t = 11
-  
   DEADLOCK — all processes blocked:
-    process alice (f): await turn == 1, turn = 2  [line 6]
-    process bob (f): await turn == 1, turn = 2  [line 6]
+    process alice (f): var t = 10; t = t + 1; await turn == 1, turn = 2; return ()  [line 4]
+    process bob (f): var t = 10; t = t + 1; await turn == 1, turn = 2; return ()  [line 4]
 Non-deadlock verdicts are reported instead of silently truncating the
 output: an assert failure surfaces TLC's message (with the sanpou source
 position baked into it), and a temporal violation reports the stuttering
