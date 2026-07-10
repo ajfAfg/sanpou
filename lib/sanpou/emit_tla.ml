@@ -737,15 +737,27 @@ let generate_module ?(config = Config.default) (ir : module_ir) : tla_module =
         (p.proc_name, (p.params, other_fields)))
       ir.procs
   in
-  (* The null sentinel appears when a push leaves frame fields unbound:
+  (* The null sentinel appears when a push leaves frame fields unbound —
      locals and callRet temps always, params only when the pushing action
-     supplies no arguments (a wrapper starting a root proc). *)
+     supplies no arguments (a wrapper starting a root proc) — and when
+     Canonicalize_locals pinned a dead local to it (an [AssignVar] whose
+     right-hand side is the bare sentinel). *)
   let uses_default_init_value =
     let node_actions = function Action a -> [ a ] | Choice c -> c.arms in
+    let assigns_sentinel (a : action) =
+      List.exists
+        (function
+          | AssignVar (_, { Generic_ast.desc = Generic_ast.Var i; _ }) ->
+              i.name = default_init_value
+          | _ -> false)
+        a.assignments
+    in
     List.exists
       (fun (p : proc_ir) ->
         List.exists
           (fun (a : action) ->
+            assigns_sentinel a
+            ||
             match a.stack_op with
             | StackPush (callee, _, args) ->
                 let params, other_fields = List.assoc callee frame_fields in
