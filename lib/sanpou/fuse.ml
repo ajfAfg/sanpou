@@ -108,29 +108,6 @@ let rec expr_reads_global env (e : Normalized_ast.expr) : bool =
   | Generic_ast.IfExpr (a, b, c) -> reads a || reads b || reads c
   | Generic_ast.Quant { domain; body; _ } -> reads domain || reads body
 
-(* Every expression an action evaluates, for shared-read analysis and
-   substitution budgets. *)
-let action_exprs (a : action) : Normalized_ast.expr list =
-  Option.to_list a.guard @ List.map fst a.asserts
-  @ List.concat_map
-      (function
-        | AssignVar (_, e) -> [ e ]
-        | AssignPath (_, path, e) ->
-            e
-            :: List.filter_map
-                 (function
-                   | Generic_ast.AccIndex i -> Some i
-                   | Generic_ast.AccField _ -> None)
-                 path)
-      a.assignments
-  @ List.map snd a.binders
-  @ (match a.pc_dest with PcBranch (c, _, _) -> [ c ] | _ -> [])
-  @
-  match a.stack_op with
-  | StackPush (_, _, args) -> args
-  | StackReturn e -> [ e ]
-  | StackNone | StackDiscard | StackPopAssign _ -> []
-
 (* Does the action observe or modify any module variable? Reads and writes
    both count: either way the action marks one instant of shared-state
    interaction, and a fused action may contain at most one such instant. *)
@@ -139,7 +116,7 @@ let touches_shared env (a : action) : bool =
     (function AssignVar (v, _) | AssignPath (v, _, _) -> env.is_global v)
     a.assignments
   || (match a.stack_op with StackPopAssign v -> env.is_global v | _ -> false)
-  || List.exists (expr_reads_global env) (action_exprs a)
+  || List.exists (expr_reads_global env) (Ir.action_exprs a)
 
 (* ===== Substitution ===== *)
 

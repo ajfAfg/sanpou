@@ -78,6 +78,31 @@ type action_node =
 let node_label = function Action a -> a.label | Choice c -> c.label
 let node_source = function Action a -> a.source | Choice c -> c.source
 
+(* Every expression an action evaluates, in one list: guard, assert
+   conditions, assignment right-hand sides and subscript indices, binder
+   domains, a branching destination's condition, and stack-operation
+   operands. Shared by the IR passes for read-set analysis. *)
+let action_exprs (a : action) : Normalized_ast.expr list =
+  Option.to_list a.guard @ List.map fst a.asserts
+  @ List.concat_map
+      (function
+        | AssignVar (_, e) -> [ e ]
+        | AssignPath (_, path, e) ->
+            e
+            :: List.filter_map
+                 (function
+                   | Generic_ast.AccIndex i -> Some i
+                   | Generic_ast.AccField _ -> None)
+                 path)
+      a.assignments
+  @ List.map snd a.binders
+  @ (match a.pc_dest with PcBranch (c, _, _) -> [ c ] | _ -> [])
+  @
+  match a.stack_op with
+  | StackPush (_, _, args) -> args
+  | StackReturn e -> [ e ]
+  | StackNone | StackDiscard | StackPopAssign _ -> []
+
 type proc_ir = {
   proc_name : string;
   params : Generic_ast.id list;
