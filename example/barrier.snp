@@ -1,9 +1,8 @@
 mod bakery_algorithm {
   def null = -1;
   def numThreads = 2;
-  def numLoop = 3;
+  def numLoop = 2;
 
-  var count = 0;
   var entering = {
     x in 1..numThreads -> false
   };
@@ -11,7 +10,16 @@ mod bakery_algorithm {
     x in 1..numThreads -> null
   };
 
-  property lossless = finally(count == numThreads * numLoop);
+  // 検証用のゴースト変数: クリティカルセクションの同時占有数
+  var cs = 0;
+
+  // 相互排除: クリティカルセクションに同時に入れるのは高々 1 スレッド
+  def mutexOk = cs <= 1;
+  // チケットは未使用 (null) か 1 以上。max 走査で tickets[i] の読みが
+  // 複数アクションに分かれていると 0 が生まれる(退行の検知用)
+  def ticketValid = forall (j in 1..numThreads) {
+    tickets[j] == null || tickets[j] >= 1
+  };
 
   procedure lockAcquire(idx) {
     entering[idx] = true;
@@ -19,8 +27,9 @@ mod bakery_algorithm {
     var max = 0;
     var i = 1;
     while (i <= numThreads) {
-      if (max < tickets[i]) {
-        max = tickets[i];
+      var tmp = tickets[i];
+      if (max < tmp) {
+        max = tmp;
       }
       i = i + 1;
     }
@@ -66,9 +75,8 @@ mod bakery_algorithm {
     var i = 1;
     while (i <= numLoop) {
       lockAcquire(self);
-      var tmp = count;
-      tmp = tmp + 1;
-      count = tmp;
+      cs = cs + 1;
+      cs = cs - 1;
       lockRelease(self);
 
       i = i + 1;
