@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" width="520" height="120">
+  <title>sanpou</title>
+  <g fill="none" stroke-linecap="round" stroke-width="14">
+    <path d="M24 34H80" stroke="#221B15"/>
+    <path d="M40 60H96" stroke="#D8432A"/>
+    <path d="M24 86H80" stroke="#221B15"/>
+  </g>
+  <g transform="translate(152 26) scale(1.4)" fill="none" stroke="#221B15" stroke-width="8" stroke-linecap="round">
+    <path d="M24 14C24 9 6 9 6 15.5C6 22 24 24 24 30.5C24 36.5 6 36.5 6 31"/>
+    <g transform="translate(36 0)"><circle cx="17" cy="23" r="13"/><path d="M30 10V36"/></g>
+    <g transform="translate(80 0)"><path d="M4 36V10M4 23A13 13 0 0 1 30 23V36"/></g>
+    <g transform="translate(124 0)"><path d="M4 10V48"/><circle cx="17" cy="23" r="13"/></g>
+    <g transform="translate(168 0)"><circle cx="17" cy="23" r="13"/></g>
+    <g transform="translate(212 0)"><path d="M4 10V23A13 13 0 0 0 30 23M30 10V36"/></g>
+  </g>
+</svg>
