@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>sanpou</title>
+  <g fill="none" stroke-linecap="round" stroke-width="14">
+    <path d="M24 34H80" stroke="#221B15"/>
+    <path d="M40 60H96" stroke="#D8432A"/>
+    <path d="M24 86H80" stroke="#221B15"/>
+  </g>
+</svg>
