@@ -94,7 +94,8 @@ let check_config_names (config : Config.t) (prog : Surface_ast.program) :
       | None -> missing "invariant" "def" defs config.invariants)
     prog
 
-let compile ?config (source : string) : (output list, diagnostic) result =
+let compile ?config ?(optimize = true) (source : string) :
+    (output list, diagnostic) result =
   match parse source with
   | Error d -> Error d
   | Ok prog -> (
@@ -134,9 +135,12 @@ let compile ?config (source : string) : (output list, diagnostic) result =
                       | exception Linearize.Error (message, loc) ->
                           Error { loc; message }
                       | irs ->
-                          let irs = List.map Fuse.fuse_module irs in
                           let irs =
-                            List.map Canonicalize_locals.canonicalize_module irs
+                            if optimize then
+                              irs |> List.map Fuse.fuse_module
+                              |> List.map
+                                   Canonicalize_locals.canonicalize_module
+                            else irs
                           in
                           Ok
                             (List.map
