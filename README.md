@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
-    <img src="docs/logo.svg" alt="sanpou" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+    <img src="docs/assets/logo.svg" alt="sanpou" width="360">
   </picture>
 </h1>
 
@@ -128,155 +128,36 @@ sanpou compile example/rwlock.snp -o dist
 sanpou trace dist/rwlock.out -o dist
 ```
 
-## Language overview
+## Language
+
+A taste of sanpou:
 
 ```sanpou
 mod example {
-  def n = 3;                       // constant definition
-  def inc(x) = x + 1;              // function definition (pure expression)
-  def abs(x) = if (x < 0) { -x } else { x };   // if expression
-  def pair = (1, true);            // tuple value
-  def queue = [1, 2, 3];           // sequence value
-  def label = "idle";              // string value
-  def msg = {kind: "req", src: 1}; // record value; msg.kind reads a field
-  def ids = {1, 2, 3};             // set value
-  def evens = { i in 1..n : i % 2 == 0 };  // set comprehension (filter)
-  def table = { i in 1..n -> 0 };  // map with domain 1..n (any set works)
+  def n = 3;
+  var count = 0;
 
-  var count = 0;                   // mutable variable declaration
-  var start in 1..n;               // non-deterministic initial value (from a set)
-  var grid = { i in 1..n -> { j in 1..n -> 0 } };
-
-  // temporal properties: globally/finally are allowed only here
-  // (list property names in the sidecar config)
   property counted = finally(count > 0);
-  property bounded = globally(forall (i in 1..n) { grid[i][1] >= 0 });
 
-  procedure worker() {                    // procedure definition
-    while (count < n) {            // while loop
-      either {                     //   non-deterministic branch;
-        await count % 2 == 0,      //   only arms whose guards hold
-        count = count + 1;         //   are offered
-      } or {
-        await count % 2 == 1,
-        count = count + 1;
-      }
-      with (v in 1..n) {           //   non-deterministic choice of v,
-        grid[v][1] = count;        //   one atomic step; nested
-      }                            //   subscript assignment
-      assert count <= n;           //   checked by TLC; failing is an error
-      ;                            //   empty step (yield point)
+  procedure worker() {
+    while (count < n) {
+      count = count + 1;
     }
     return ();
   }
 
-  fair process workers(self in 1..n) = worker;   // process definition
+  fair process workers(self in 1..n) = worker;
 }
 ```
 
-- **Operators**: `+ - * / %` (integer arithmetic; `/` is integer division),
-  `< > <= >= == !=`, `&& || !`, and `in` (set membership: `x in S`).
-- **Values**: tuples `(a, b)` may mix types; sequences `[a, b, c]` are
-  homogeneous; sets `{a, b, c}` (and `{}`) are homogeneous; maps
-  `{ x in S -> e }` take any set as their domain — ints, strings, or model
-  values — and subscript keys take the domain's element type. Strings `"idle"` support
-  only equality (`==` / `!=`); there is no concatenation or indexing.
-  Records `{f1: e1, f2: e2}` have fixed named fields (field types may differ);
-  read a field with `r.f`. Records are structural: two record types match only
-  when their field sets are identical (no row polymorphism).
-- **Atoms**: `` `red `` is an opaque constant that compares unequal to
-  everything but itself — the idiomatic way to write sentinels and
-  enumeration-like tags without integer encodings. Atoms are literals
-  (Elixir-style): no declaration, their own syntactic namespace, usable
-  anywhere (`state = `red`, `{`red, `green}`). They share one type and
-  support only `==` / `!=`. Every atom used in a module becomes a TLA+
-  `CONSTANT` of the same name, assigned a model value in the generated
-  `.cfg` — the name is the value's identity in traces, so an atom whose
-  text collides with a compiler-generated name is rejected. Note that a
-  typo makes a fresh atom, not an error: `` s == `redy `` is simply always
-  false.
-- **Subscript and field paths**: read with `a[i]` and `r.f`, and they compose
-  (`grid[i].tag`). An assignment target is a variable followed by any mix of
-  `[i]` and `.f` steps (`grid[i].tag = e`), compiling to a TLA+ `EXCEPT`
-  update; several writes to one variable in a step merge into one `EXCEPT`.
-- **Sets**: `lo..hi` is the set of integers in that range, and a first-class
-  value like any other set. Set comprehension `{ x in S : p }` keeps the
-  elements of `S` satisfying `p`. Any binder domain — quantifiers, `with`,
-  `var`, `process`, and map/comprehension initializers — is an arbitrary set
-  expression, not just a range.
-- **Sequence builtins**: `head`, `tail`, `append`, `concat`, `len`.
-- **Set builtins**: `union`, `intersection`, `difference` (binary set
-  operations), `cardinality` (element count), `subseteq` (subset test).
-  Builtins are lexically shadowed by module definitions of the same name.
-- **Scoping**: name resolution is sequential and lexical everywhere, module
-  level included — a later `def`/`var`/`procedure`/`process` of the same
-  name shadows the earlier one from its point onward (the compiler renames
-  the shadowed declarations apart in the emitted TLA+). Atom literals live
-  in their own syntactic namespace and never clash with declarations; a
-  declaration whose name coincides with a used atom's text is renamed apart
-  in the emitted TLA+ (the atom keeps its name — it is the model value's
-  identity).
-- **Quantifiers**: `forall (x in S) { p }` and `exists (x in S) { p }` are
-  boolean expressions ranging over the set `S`.
-- **Statements**: assignment (including nested subscripts `a[i][j] = e`),
-  procedure calls (with return values; recursion is supported), `await`,
-  `assert`, `return`, `break`, `continue`; `if`/`else if`/`else`, `while`,
-  `either { } or { }`, `with (x in S) { }`.
-- **Returns are explicit**: every finishing path of a procedure must end in
-  `return` (`return ();` when there is nothing to return) — the compiler
-  rejects a body that can fall off its end. A procedure that never
-  finishes, such as a `while (true)` loop with no `break`, needs none.
-  The return type of such a never-finishing procedure is left fully
-  unconstrained (polymorphic), so binding its "result" (`x = p();`)
-  typechecks at any type; the statements after that call are simply
-  unreachable, and the compiler does not diagnose the dead code. This is a
-  deliberate trade-off — see the discussion in
-  [#153](https://github.com/ajfAfg/sanpou/issues/153).
-- **Steps and atomicity**: statements joined by commas and ended with `;`
-  form one atomic action; block statements evaluate their condition in an
-  action of its own; a bare `;` is an explicit yield point.
-- **Reads within a step see the pre-state**: the statements of one step
-  execute *simultaneously*, not in sequence — every expression (an
-  assignment's right-hand side, an `await`, an `assert`) reads the state
-  from before the step. So in `x = 1, y = x;` the new `y` is the *old* `x`,
-  and `x = 1, await x == 1;` blocks forever when `x` starts at 0. This is
-  TLA+'s (and multi-assignment's) semantics but the *opposite* of PlusCal,
-  where a read after an assignment in the same step sees the new value —
-  split the step with `;` when you want sequencing. Guards are also checked
-  before asserts regardless of their order in the step, so a disabled step
-  never fires its asserts.
-- **Processes**: `process name(self in S) = proc;` instantiates the procedure
-  `proc` once per id in the set `S`; inside the procedure the instance's id is
-  read as `self`, which is exactly the binding the head introduces. `S` may be
-  any set — integers, strings, or model values — and `self` takes its element
-  type; all processes in a module share one id type. For a single instance,
-  write a one-element set: `process p(self in {1}) = f;`. `fair` adds weak
-  fairness, `fair+` strong fairness. The id sets of different processes must
-  be pairwise disjoint; the compiler emits `ASSUME` disjointness checks, so
-  TLC fails fast at startup if they overlap.
-- **Temporal properties**: `property name = ...;` is the only place
-  `globally(p)` / `finally(p)` may appear, and only properties may
-  reference other properties; list property names in the sidecar config's
-  `properties` (and plain boolean `def`s in `invariants`).
+The full language reference lives in [docs/language/](docs/language/README.md):
 
-### If expressions and atomicity
-
-`if (cond) { e1 } else { e2 }` is an expression; the `else` branch is
-mandatory. Unlike the statement `if`, whose condition check compiles to its
-own action (an interleaving point), an assignment step containing an if
-expression is a single atomic action:
-
-```sanpou
-x = if (x == 0) { 1 } else { x };  // atomic test-and-set
-```
-
-Caveat: this atomicity guarantee only holds when the condition is call-free.
-A procedure call in the condition is hoisted into its own preceding steps
-(the call runs first, binding a temporary the condition then reads), so other
-processes can interleave between the call returning and the update. When you
-rely on the test and the update being one step, keep the condition free of
-procedure calls. Calls in a branch are rejected at compile time, since
-hoisting them would run them unconditionally.
+- [Modules and scoping](docs/language/modules-and-scoping.md)
+- [Values](docs/language/values.md)
+- [Expressions](docs/language/expressions.md)
+- [Statements, steps, and atomicity](docs/language/statements.md)
+- [Procedures and processes](docs/language/procedures-and-processes.md)
+- [Temporal properties](docs/language/properties.md)
 
 ## Project structure
 
@@ -314,4 +195,7 @@ test/
   sanpou/      Alcotest unit tests for the compiler passes
   cram/        E2E tests running the sanpou CLI (cram)
 example/       Example inputs (.snp files)
+docs/
+  language/    Language reference
+  assets/      Logos and other images
 ```
