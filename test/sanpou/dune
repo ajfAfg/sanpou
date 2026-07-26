@@ -12,5 +12,6 @@
   test_check_temporal
   test_normalize_calls
   test_linearize
-  test_trace)
+  test_trace
+  test_projection)
  (libraries sanpou tla alcotest str))
