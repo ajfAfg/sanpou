@@ -16,9 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  DUNE_CACHE: enabled
-
 jobs:
   test:
     strategy:
