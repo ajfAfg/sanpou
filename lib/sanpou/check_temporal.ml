@@ -37,8 +37,7 @@ let rec temporal_occurrence (props : id list) (e : Resolved_ast.expr) :
       if List.mem i.name props then
         Some
           ( i.original
-            ^ " is a property and can only be referenced from another \
-               property",
+            ^ " is a property and can only be referenced from another property",
             e.loc )
       else None
   | IntLit _ | BoolLit _ | StrLit _ | AtomLit _ | Self -> None
@@ -94,9 +93,7 @@ let check_stmt props (stmt : Resolved_ast.simple_stmt) : unit =
       (match target with
       | VarTarget _ -> ()
       | PathTarget (_, path) ->
-          List.iter
-            (function AccIndex e -> check e | AccField _ -> ())
-            path);
+          List.iter (function AccIndex e -> check e | AccField _ -> ()) path);
       check value
   | Call (_, args) -> List.iter check args
   | Return value | Await value | Assert value -> check value

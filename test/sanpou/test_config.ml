@@ -116,7 +116,8 @@ let () =
               let config = Sanpou.Config.default in
               let with_constants =
                 Sanpou.Config.to_cfg_string
-                  ~constants:[ "defaultInitValue"; "NoValue" ] config
+                  ~constants:[ "defaultInitValue"; "NoValue" ]
+                  config
               in
               check_has "CONSTANT defaultInitValue = defaultInitValue"
                 with_constants;
@@ -137,7 +138,7 @@ let () =
                   "mod m {\n\
                    var x = 0;\n\
                    procedure f() { while (true) { x = 1 - x; } }\n\
-                   fair process p = f in 1..1;\n\
+                   fair process p(self in 1..1) = f;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -151,7 +152,7 @@ let () =
                   "mod m {\n\
                    var x = 0;\n\
                    procedure f() { while (true) { x = 1 - x; } }\n\
-                   fair process p = f in 1..1;\n\
+                   fair process p(self in 1..1) = f;\n\
                    }\n"
               in
               let config =

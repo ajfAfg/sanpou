@@ -1,10 +1,5 @@
 type checks = { deadlock : bool; termination : bool }
-
-type t = {
-  checks : checks;
-  properties : string list;
-  invariants : string list;
-}
+type t = { checks : checks; properties : string list; invariants : string list }
 
 let default =
   {

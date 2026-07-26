@@ -5,6 +5,9 @@
   test_config
   test_ast_printer
   test_typing
+  test_check_scope
+  test_check_steps
+  test_check_process_domains
   test_alpha_convert
   test_check_temporal
   test_normalize_calls

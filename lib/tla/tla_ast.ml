@@ -17,8 +17,7 @@ and tla_expr =
   | TRecord of (string * tla_expr) list
   | TRange of tla_expr * tla_expr
   | TSet of tla_expr list
-  | TSetFilter of string * tla_expr * tla_expr
-    (* {x \in S : p} *)
+  | TSetFilter of string * tla_expr * tla_expr (* {x \in S : p} *)
   | TCup of tla_expr list
   | TNot of tla_expr
   | TConj of layout * tla_expr list

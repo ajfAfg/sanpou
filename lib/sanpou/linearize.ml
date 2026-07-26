@@ -198,7 +198,8 @@ let rec linearize_step ctx (step : Normalized_ast.step) (next_label : string) :
         make_source ~proc_name:ctx.proc_name
           ~description:
             ("with (" ^ binder.original ^ " in " ^ pretty_expr domain ^ ") { "
-           ^ describe_simple_stmts stmts ^ " }")
+            ^ describe_simple_stmts stmts
+            ^ " }")
           ~loc:step.loc
       in
       let eff =
@@ -310,9 +311,9 @@ and linearize_either ctx arms next_label loc =
   let referenced_labels nodes =
     let of_action (a : action) =
       (match a.pc_dest with
-      | PcNext l -> [ l ]
-      | PcBranch (_, t, f) -> [ t; f ]
-      | PcCall _ | PcReturn -> [])
+        | PcNext l -> [ l ]
+        | PcBranch (_, t, f) -> [ t; f ]
+        | PcCall _ | PcReturn -> [])
       @ match a.stack_op with StackPush (_, ret, _) -> [ ret ] | _ -> []
     in
     List.concat_map
@@ -332,11 +333,7 @@ and linearize_either ctx arms next_label loc =
   in
   let choice =
     Choice
-      {
-        label;
-        arms = List.concat_map entry_alternatives compiled_arms;
-        source;
-      }
+      { label; arms = List.concat_map entry_alternatives compiled_arms; source }
   in
   {
     actions = choice :: List.concat_map arm_actions compiled_arms;
@@ -472,9 +469,7 @@ let linearize_module (m : Normalized_ast.module_def) : module_ir =
            break — needs no return: its loop's exit edge is dead and a
            literal-condition branch only references the arm it can take. *)
         let fallthrough_label = "__" ^ p.name ^ "_fallthrough__" in
-        let compiled =
-          linearize_body ctx p.body fallthrough_label ~loc:p.loc
-        in
+        let compiled = linearize_body ctx p.body fallthrough_label ~loc:p.loc in
         let jump_targets =
           let of_dest = function
             | PcNext l -> [ l ]
@@ -485,8 +480,7 @@ let linearize_module (m : Normalized_ast.module_def) : module_ir =
           in
           let of_action (a : action) =
             of_dest a.pc_dest
-            @
-            match a.stack_op with StackPush (_, ret, _) -> [ ret ] | _ -> []
+            @ match a.stack_op with StackPush (_, ret, _) -> [ ret ] | _ -> []
           in
           List.concat_map
             (function

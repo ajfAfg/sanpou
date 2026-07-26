@@ -67,6 +67,6 @@ mod rwlock {
     return ();
   }
 
-  process readers = reader in 1..readerNum;
-  process writers = writer in readerNum + 1..readerNum + writerNum;
+  process readers(self in 1..readerNum) = reader;
+  process writers(self in readerNum + 1..readerNum + writerNum) = writer;
 }

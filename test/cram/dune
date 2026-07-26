@@ -15,6 +15,6 @@
 ; mise provides SANPOU_JAVA and SANPOU_TLA2TOOLS_JAR (see AGENTS.md).
 
 (cram
- (applies_to tlc trace)
+ (applies_to tlc trace states)
  (enabled_if
   (<> %{env:SANPOU_JAVA=} "")))

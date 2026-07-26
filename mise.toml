@@ -3,6 +3,9 @@ java = "openjdk-26"
 # Pinned opam release (https://github.com/ocaml/opam/releases).
 # Bump deliberately; do not track the latest release automatically.
 opam = "2.5.1"
+# Pinned actionlint release (https://github.com/rhysd/actionlint/releases).
+# Bump deliberately; do not track the latest release automatically.
+actionlint = "1.7.12"
 
 [vars]
 # Pinned TLA+ tools release (https://github.com/tlaplus/tlaplus/releases).

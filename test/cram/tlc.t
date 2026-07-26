@@ -59,7 +59,7 @@ through the stack frames.
   >       await x == 6;
   >     }
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ cat > fact.json <<'EOF'
@@ -84,7 +84,7 @@ With the returns written, the caller resumes and the property holds:
   >     a = 2;
   >     return ();
   >   }
-  >   fair process p = main in 1..1;
+  >   fair process p(self in 1..1) = main;
   >   property done2 = finally(a == 2);
   > }
   > EOF
@@ -108,7 +108,7 @@ Next. (It used to be gated on the termination check, so this reported
   >     x = 1;
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp fact.json run_done.json
@@ -126,7 +126,7 @@ undefined operator):
   >     x = 1;
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cat > term_prop.json <<'EOF'
@@ -149,7 +149,7 @@ that can never fire, and two processes each waiting on the other.
   >       x = 0;
   >     }
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ cp fact.json single_dl.json
@@ -173,8 +173,8 @@ that can never fire, and two processes each waiting on the other.
   >       b = true;
   >     }
   >   }
-  >   process pa = fa in 1..1;
-  >   process pb = fb in 2..2;
+  >   process pa(self in 1..1) = fa;
+  >   process pb(self in 2..2) = fb;
   > }
   > EOF
   $ cp fact.json mutual_dl.json
@@ -203,7 +203,7 @@ in a single behavior, so termination also proves both arms fire.
   >     }
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cat > either_guard.json <<'EOF'
@@ -230,7 +230,7 @@ would block the single fair process forever.
   >     }
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json with_guard.json
@@ -251,7 +251,7 @@ An assert that holds is silent; one that fails halts TLC with an error
   >     }
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json assert_ok.json
@@ -269,7 +269,7 @@ An assert that holds is silent; one that fails halts TLC with an error
   >     }
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json assert_fail.json
@@ -291,7 +291,7 @@ emission; the spec parses and the guard computes through them.
   >     x = 1;
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json shadow.json
@@ -317,7 +317,7 @@ reference resolved to the binding in scope at its position.
   >     assert seen == 12;
   >     return ();
   >   }
-  >   fair process p = main in 1..1;
+  >   fair process p(self in 1..1) = main;
   > }
   > EOF
   $ cp either_guard.json shadow_seq.json
@@ -333,8 +333,8 @@ pairwise-disjointness ASSUME fails fast instead.
   >   var b = 0;
   >   procedure noop() { return (); }
   >   procedure g() { b = b + 1; return (); }
-  >   fair process pf = noop in 1..2;
-  >   fair process pg = g in 2..3;
+  >   fair process pf(self in 1..2) = noop;
+  >   fair process pg(self in 2..3) = g;
   > }
   > EOF
   $ cp fact.json overlap.json
@@ -354,7 +354,7 @@ the last await, letting the step fire.)
   >     await false, await true, x = 1;
   >     return ();
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ cat > await_conj.json <<'EOF'
@@ -376,7 +376,7 @@ application syntax; the call site used to emit one and fail SANY).
   >     ok = f() + 1;
   >     return ();
   >   }
-  >   fair process p = main in 1..1;
+  >   fair process p(self in 1..1) = main;
   > }
   > EOF
   $ cp either_guard.json nullary.json
@@ -400,7 +400,7 @@ therefore proves the emitted set constructs check under TLC's FiniteSets.
   >     x = 1;
   >     return ();
   >   }
-  >   fair process p = f in {7, 8};
+  >   fair process p(self in {7, 8}) = f;
   > }
   > EOF
   $ cp either_guard.json sets_check.json
@@ -422,7 +422,7 @@ before funs used to break define-before-use at SANY).
   >     ok = 1;
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json def_order.json
@@ -446,7 +446,7 @@ correctly under TLC.
   >       s = "idle";
   >     }
   >   }
-  >   process p = f in 1..1;
+  >   process p(self in 1..1) = f;
   > }
   > EOF
   $ cat > str_check.json <<'EOF'
@@ -469,7 +469,7 @@ emitted TLA+ — SANY would otherwise reject the spec.
   >     s = "x\";
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json str_esc.json
@@ -492,7 +492,7 @@ access, and multi-field EXCEPT all check under TLC.
   >     }
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json rec_check.json
@@ -515,7 +515,7 @@ renamed apart while the atom keeps its name, and both survive TLC.
   >     tag = `nobody;
   >     return ();
   >   }
-  >   fair process p = main in 1..1;
+  >   fair process p(self in 1..1) = main;
   > }
   > EOF
   $ cp either_guard.json atom_ns.json
@@ -538,7 +538,7 @@ never before call hoisting): pb's append lands before pa's.
   >     assert log == [2, 1];
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json rec_order.json
@@ -562,7 +562,7 @@ emitted CONSTANTs compare as distinct opaque values.
   >     }
   >     return ();
   >   }
-  >   fair process p = f in 1..1;
+  >   fair process p(self in 1..1) = f;
   > }
   > EOF
   $ cp either_guard.json mv_check.json
@@ -583,7 +583,7 @@ own slot and waits until all slots are set, then the module terminates.
   >     await forall (i in ids) { t[i] == 1 };
   >     return ();
   >   }
-  >   fair process p = f in ids;
+  >   fair process p(self in ids) = f;
   > }
   > EOF
   $ cp either_guard.json strmap.json
@@ -605,7 +605,7 @@ model-checks with non-integer process identities.
   >     count = count + 1;
   >     return ();
   >   }
-  >   fair process cs = client in clients;
+  >   fair process cs(self in clients) = client;
   > }
   > EOF
   $ cp either_guard.json client_ids.json

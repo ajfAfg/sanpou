@@ -2,5 +2,7 @@
   "checks": {
     "deadlock": true,
     "termination": true
-  }
+  },
+  "properties": [],
+  "invariants": ["mutexOk", "ticketValid"]
 }

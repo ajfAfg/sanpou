@@ -1,31 +1,18 @@
 (** Hindley-Milner type inference over the AST. [check] returns unit on success
     and raises [Type_error] otherwise; no type information is attached to the
-    tree. *)
+    tree. Assumes a well-scoped program: name resolution, callable kinds, and
+    statement context are [Check_scope]'s job, and inference here treats a
+    violation of that precondition as an internal error. *)
 
 type ty
 (** An inferred type; render with [string_of_ty]. *)
 
 type type_error =
   | Type_clash of ty * ty
-  | Unbound_variable of Generic_ast.id
   | Arity_mismatch of Generic_ast.id * int * int
-  | Not_a_function of Generic_ast.id
-  | Break_outside_loop
-  | Continue_outside_loop
-  | Return_type_mismatch
-  | Assign_to_non_variable of Generic_ast.id
   | Recursive_type
-  | Callable_as_value of Generic_ast.id
-  | Not_a_procedure of Generic_ast.id
   | Not_a_record of ty
   | Unknown_field of Generic_ast.id * ty
-  | Self_outside_procedure
-  | Reserved_module_name of Generic_ast.id
-  | Conflicting_assignments of Generic_ast.id
-  | Non_constant_process_domain of Generic_ast.id
-  | Control_transfer_not_last of string
-  | Process_root_takes_params of Generic_ast.id * int
-  | Duplicate_module of Generic_ast.id
 
 exception Type_error of type_error * Generic_ast.loc
 

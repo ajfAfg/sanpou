@@ -18,5 +18,5 @@ mod semaphore {
         return ();
     }
 
-    fair process processes = semaphore in 1..threadsNum;
+    fair process processes(self in 1..threadsNum) = semaphore;
 }

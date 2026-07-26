@@ -47,7 +47,7 @@ let () =
                   "mod foo {\n\
                    var x = 0;\n\
                    procedure foo() { while (true) { x = 1 - x; } }\n\
-                   process ps = foo in 1..2;\n\
+                   process ps(self in 1..2) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -59,7 +59,7 @@ let () =
                   "mod foo {\n\
                    var x = 0;\n\
                    procedure foo() { while (true) { x = 1 - x; } }\n\
-                   fair+ process ps = foo in 1..2;\n\
+                   fair+ process ps(self in 1..2) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -80,7 +80,7 @@ let () =
                    def keep = { j in 1..2 -> j };\n\
                    var x = 0;\n\
                    procedure f() { x = 1; return (); }\n\
-                   process ps = f in 1..1;\n\
+                   process ps(self in 1..1) = f;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -104,7 +104,7 @@ let () =
                    procedure f() { x = a; return (); }\n\
                    var x = 100;\n\
                    procedure main() { x = x + b, f(); return (); }\n\
-                   process p = main in 1..1;\n\
+                   process p(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -127,7 +127,7 @@ let () =
                    def s = { pc in 1..3 : pc > 0 };\n\
                    def n = forall (Len in s) { Len >= 1 };\n\
                    procedure f() { return (); }\n\
-                   process p = f in 1..1;\n\
+                   process p(self in 1..1) = f;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -142,9 +142,9 @@ let () =
                   "mod m {\n\
                    var x = 0;\n\
                    procedure f() { while (true) { x = 1 - x; } }\n\
-                   process a = f in 1..2;\n\
-                   process b = f in 3..4;\n\
-                   process c = f in {9};\n\
+                   process a(self in 1..2) = f;\n\
+                   process b(self in 3..4) = f;\n\
+                   process c(self in {9}) = f;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -158,7 +158,7 @@ let () =
                   "mod m {\n\
                    var x = 0;\n\
                    procedure f() { while (true) { x = 1 - x; } }\n\
-                   process a = f in 1..2;\n\
+                   process a(self in 1..2) = f;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -176,7 +176,7 @@ let () =
                    await x >= 0, await y >= 0, x = 1;\n\
                    return ();\n\
                    }\n\
-                   process ps = f in 1..1;\n\
+                   process ps(self in 1..1) = f;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -191,7 +191,7 @@ let () =
                    def f() = 1;\n\
                    var ok = 0;\n\
                    procedure main() { ok = f() + 1; return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -210,7 +210,7 @@ let () =
                    def ws = concat(xs, [4, 5]);\n\
                    def n = len(xs);\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -221,8 +221,8 @@ let () =
               has "zs == Append(xs, 3)";
               has "ws == (xs \\o << 4, 5 >>)";
               has "n == Len(xs)");
-          Alcotest.test_case "subscripting a concat result parenthesizes"
-            `Quick (fun () ->
+          Alcotest.test_case "subscripting a concat result parenthesizes" `Quick
+            (fun () ->
               let ast =
                 parse
                   "mod m {\n\
@@ -230,7 +230,7 @@ let () =
                    def b = [3, 4];\n\
                    def first = concat(a, b)[1];\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -250,7 +250,7 @@ let () =
                    def remainder = 7 % 2;\n\
                    def negated = !true;\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -275,14 +275,13 @@ let () =
                    def n = double(3);\n\
                    def sum(a, b) = a + n + b;\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_before "double(k) ==" "n ==" tla;
               has_before "n ==" "sum(a, b) ==" tla);
-          Alcotest.test_case "unary binds looser than postfix" `Quick
-            (fun () ->
+          Alcotest.test_case "unary binds looser than postfix" `Quick (fun () ->
               let ast =
                 parse
                   "mod u {\n\
@@ -291,7 +290,7 @@ let () =
                    def r = {f: true};\n\
                    def b = !r.f;\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -306,7 +305,7 @@ let () =
                   \  def tags = {\"idle\", \"busy\"};\n\
                   \  var s = \"idle\";\n\
                   \  procedure main() { s = \"busy\"; return (); }\n\
-                  \  process ps = main in 1..1;\n\
+                  \  process ps(self in 1..1) = main;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -326,7 +325,7 @@ let () =
                   \    s = \"x\\\";\n\
                   \    return ();\n\
                   \  }\n\
-                  \  process ps = main in 1..1;\n\
+                  \  process ps(self in 1..1) = main;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -344,7 +343,7 @@ let () =
                   \  def missing = `noValue;\n\
                   \  def colors = {`red, `green};\n\
                   \  procedure main() { return (); }\n\
-                  \  process ps = main in 1..1;\n\
+                  \  process ps(self in 1..1) = main;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -361,15 +360,16 @@ let () =
                 parse
                   "mod m {\n\
                   \  var g = `a;\n\
-                  \  procedure f(n) { if (n == 0) { return 1; } else { var r = f(n - 1); return r; } }\n\
+                  \  procedure f(n) { if (n == 0) { return 1; } else { var r = \
+                   f(n - 1); return r; } }\n\
                   \  procedure main() { g = `a; return (); }\n\
-                  \  process ps = main in 1..1;\n\
+                  \  process ps(self in 1..1) = main;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "CONSTANT a, defaultInitValue" tla);
-          Alcotest.test_case "declaration named like a used atom renames"
-            `Quick (fun () ->
+          Alcotest.test_case "declaration named like a used atom renames" `Quick
+            (fun () ->
               (* the atom's text is the model value's identity, so the atom
                  keeps the bare TLA+ name and the def renames apart *)
               let ast =
@@ -379,7 +379,7 @@ let () =
                   \  var seen = 0;\n\
                   \  var tag = `nobody;\n\
                   \  procedure main() { seen = red, tag = `red; return (); }\n\
-                  \  process ps = main in 1..1;\n\
+                  \  process ps(self in 1..1) = main;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -395,8 +395,9 @@ let () =
                   \  def msg = {kind: \"req\", src: 1};\n\
                   \  def k = msg.kind;\n\
                   \  var r = {tag: \"idle\", n: 0};\n\
-                  \  procedure main() { r.tag = \"busy\", r.n = r.n + 1; return (); }\n\
-                  \  process ps = main in 1..1;\n\
+                  \  procedure main() { r.tag = \"busy\", r.n = r.n + 1; \
+                   return (); }\n\
+                  \  process ps(self in 1..1) = main;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -414,7 +415,7 @@ let () =
                   "mod g {\n\
                   \  var grid = { i in 1..2 -> {v: 0} };\n\
                   \  procedure main() { grid[self].v = 5; return (); }\n\
-                  \  process ps = main in 1..2;\n\
+                  \  process ps(self in 1..2) = main;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -430,7 +431,7 @@ let () =
                    def mem = 1 in a;\n\
                    def rng = 1..3;\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -455,7 +456,7 @@ let () =
                    def n = cardinality(a);\n\
                    def sub = subseteq(a, b);\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -474,7 +475,7 @@ let () =
                   \  def clients = {\"a\", \"b\"};\n\
                   \  var turn = \"a\";\n\
                   \  procedure client() { turn = self; return (); }\n\
-                  \  process cs = client in clients;\n\
+                  \  process cs(self in clients) = client;\n\
                   \  }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -487,7 +488,7 @@ let () =
                 parse
                   "mod m {\n\
                    procedure main() { return (); }\n\
-                   process ps = main in {1, 2, 3};\n\
+                   process ps(self in {1, 2, 3}) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -503,7 +504,7 @@ let () =
                    var x in 1..3;\n\
                    var y = 0;\n\
                    procedure main() { y = x; return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -519,7 +520,7 @@ let () =
                    def head(x) = x + 1;\n\
                    def b = head(2);\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -533,7 +534,7 @@ let () =
                   "mod m {\n\
                    var x = 0;\n\
                    procedure foo() { assert x >= 0, x = x + 1; return (); }\n\
-                   process ps = foo in 1..1;\n\
+                   process ps(self in 1..1) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -548,14 +549,13 @@ let () =
                   "mod m {\n\
                    var grid = { i in 1..2 -> { j in 1..2 -> 0 } };\n\
                    procedure foo() { grid[1][2] = 5; return (); }\n\
-                   process ps = foo in 1..1;\n\
+                   process ps(self in 1..1) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               has_in "grid' = [grid EXCEPT ![1][2] = 5]" tla);
-          Alcotest.test_case
-            "with compiles to an existential over the range" `Quick
-            (fun () ->
+          Alcotest.test_case "with compiles to an existential over the range"
+            `Quick (fun () ->
               let ast =
                 parse
                   "mod m {\n\
@@ -564,16 +564,15 @@ let () =
                    with (v in 1..3) { await v > x, x = v; }\n\
                    return ();\n\
                    }\n\
-                   process ps = foo in 1..1;\n\
+                   process ps(self in 1..1) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
               let has s = has_in s tla in
               has "\\E v__1 \\in 1..3: /\\ (v__1 > x)";
               has "x' = v__1");
-          Alcotest.test_case
-            "either compiles to a disjunction of guarded arms" `Quick
-            (fun () ->
+          Alcotest.test_case "either compiles to a disjunction of guarded arms"
+            `Quick (fun () ->
               let ast =
                 parse
                   "mod m {\n\
@@ -582,7 +581,7 @@ let () =
                    either { x = 1; } or { await x > 0, x = 2; }\n\
                    return ();\n\
                    }\n\
-                   process ps = foo in 1..1;\n\
+                   process ps(self in 1..1) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -599,7 +598,7 @@ let () =
                    def inv = forall (i in 1..3) { i < 4 };\n\
                    def can = exists (i in 1..3) { i == 2 };\n\
                    procedure main() { return (); }\n\
-                   process ps = main in 1..1;\n\
+                   process ps(self in 1..1) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -613,8 +612,9 @@ let () =
                 parse
                   "mod m {\n\
                    var x = 0;\n\
-                   procedure foo() { x = if (x == 0) { 1 } else { x }; return (); }\n\
-                   process ps = foo in 1..1;\n\
+                   procedure foo() { x = if (x == 0) { 1 } else { x }; return \
+                   (); }\n\
+                   process ps(self in 1..1) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -626,7 +626,7 @@ let () =
                   "mod maps {\n\
                    var xs = { i in 1..2 -> 0 };\n\
                    procedure main() { xs[1] = self; return (); }\n\
-                   process ps = main in 1..2;\n\
+                   process ps(self in 1..2) = main;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -638,12 +638,12 @@ let () =
                   "mod a {\n\
                    var x = 0;\n\
                    procedure f() { x = 1; return (); }\n\
-                   process ps = f in 1..2;\n\
+                   process ps(self in 1..2) = f;\n\
                    }\n\
                    mod b {\n\
                    var y = 0;\n\
                    procedure g() { y = 2; return (); }\n\
-                   process qs = g in 1..3;\n\
+                   process qs(self in 1..3) = g;\n\
                    }\n"
               in
               let modules = compile ast in
@@ -664,7 +664,7 @@ let () =
                   "mod m {\n\
                    var g = 0;\n\
                    procedure foo() { var x = 5; g = x; return (); }\n\
-                   process ps = foo in 1..2;\n\
+                   process ps(self in 1..2) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -678,7 +678,7 @@ let () =
                   "mod m {\n\
                    var x = 0;\n\
                    procedure foo() { while (true) { x = 1 - x; } }\n\
-                   process ps = foo in 1..2;\n\
+                   process ps(self in 1..2) = foo;\n\
                    }\n"
               in
               let tla = compile ast |> List.hd |> Tla.Tla_printer.render in
@@ -699,7 +699,7 @@ let () =
                    g = x;\n\
                    return ();\n\
                    }\n\
-                   process ps = foo in 1..2;\n\
+                   process ps(self in 1..2) = foo;\n\
                    }\n"
               in
               let modules = compile ast in

@@ -3,7 +3,6 @@ let parse input =
 
 (* The pass runs on the resolved tree, after scoping is settled. *)
 let run input = parse input |> Sanpou.Alpha_convert.transform
-
 let check_ok input = Sanpou.Check_temporal.check (run input)
 
 let check_fails input =
@@ -23,8 +22,7 @@ let () =
               check_ok "mod m { var x = 0; property p = globally(x == 0); }");
           test_case "nested temporal operators" `Quick (fun () ->
               check_ok
-                "mod m { var x = 0; property p = globally(finally(x == 0)); \
-                 }");
+                "mod m { var x = 0; property p = globally(finally(x == 0)); }");
           test_case "property referencing a property" `Quick (fun () ->
               check_ok
                 "mod m {\n\
@@ -52,7 +50,7 @@ let () =
                 \  var x = 0;\n\
                 \  def globally(p) = p;\n\
                 \  procedure f() { await globally(x == 0); return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  process ps(self in 1..1) = f;\n\
                 \  }");
           test_case "local shadowing a property is not a reference" `Quick
             (fun () ->
@@ -61,7 +59,7 @@ let () =
                 \  var x = 0;\n\
                 \  property p = globally(x == 0);\n\
                 \  procedure f() { var p = 1; x = p; return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  process ps(self in 1..1) = f;\n\
                 \  }");
         ] );
       ( "rejected",
@@ -88,7 +86,7 @@ let () =
                 "mod m {\n\
                 \  var x = 0;\n\
                 \  procedure f() { await globally(x == 0); return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  process ps(self in 1..1) = f;\n\
                 \  }");
           test_case "temporal operator in function def" `Quick (fun () ->
               check_fails "mod m { def g(y) = globally(y == 0); }");
@@ -100,7 +98,7 @@ let () =
                 \  var x = 0;\n\
                 \  property p = globally(x == 0);\n\
                 \  procedure f() { await p; return (); }\n\
-                \  process ps = f in 1..1;\n\
+                \  process ps(self in 1..1) = f;\n\
                 \  }");
           test_case "property referenced in a def" `Quick (fun () ->
               check_fails

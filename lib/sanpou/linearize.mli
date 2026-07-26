@@ -3,7 +3,7 @@
     transitions. *)
 
 exception Error of string * Generic_ast.loc
-(** A located linearization diagnostic (e.g. a procedure body that can fall
-    off its end without a return). *)
+(** A located linearization diagnostic (e.g. a procedure body that can fall off
+    its end without a return). *)
 
 val linearize : Normalized_ast.program -> Ir.module_ir list

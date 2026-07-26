@@ -51,14 +51,13 @@ let rename st name : Resolved_ast.ident =
    exactly the enclosing binder (and, in procedures, local) names. Binders
    named like an emitter-generated TLA+ name (pc, Len, ...) collide just
    like module-level names do — TLA+ allows no shadowing — so they are
-   renamed too (declarations of those names are rejected by Typing; a
+   renamed too (declarations of those names are rejected by Check_scope; a
    binder is fine once renamed). *)
 let fresh st env name : Resolved_ast.ident =
   if
     st.rename_binders
     || List.mem name st.module_names
-    || List.mem name Emit_tla.reserved_module_names
-    || Emit_tla.is_generated_action_label name
+    || Reserved_names.is_reserved name
     || List.mem_assoc name env
   then rename st name
   else Resolved_ast.ident name
@@ -138,8 +137,8 @@ let rec alpha_expr env st (e : Surface_ast.expr) : Resolved_ast.expr =
   in
   { desc; loc = e.loc }
 
-let alpha_accessor env st :
-    Surface_ast.accessor -> Resolved_ast.accessor = function
+let alpha_accessor env st : Surface_ast.accessor -> Resolved_ast.accessor =
+  function
   | AccIndex e -> AccIndex (alpha_expr env st e)
   | AccField f -> AccField f
 
@@ -248,7 +247,10 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
           walk b
       | Field (r, _) -> walk r
       | Record fields -> List.iter (fun (_, e) -> walk e) fields
-      | App (_, args) | Builtin (_, args) | Tuple args | Sequence args
+      | App (_, args)
+      | Builtin (_, args)
+      | Tuple args
+      | Sequence args
       | SetLit args ->
           List.iter walk args
       | MapInit { domain; value; _ } ->
@@ -312,9 +314,7 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
     !texts
   in
   let module_names = declared_names @ atom_texts in
-  let total_count name =
-    List.length (List.filter (( = ) name) module_names)
-  in
+  let total_count name = List.length (List.filter (( = ) name) module_names) in
   (* Module-level binders keep their source name unless it collides (see
      [fresh]); their names display as themselves. *)
   let module_st defs =
@@ -405,7 +405,10 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
                 | Some (Resolved_ast.Proc n) | Some (Resolved_ast.Fun n) -> n
                 | None -> proc
               in
-              (Process { name = id_.name; proc; fairness; domain }, defs, menv, seen)
+              ( Process { name = id_.name; proc; fairness; domain },
+                defs,
+                menv,
+                seen )
           | ProcDef { name; params; body } ->
               let seen, id_ = declare seen name in
               (* The procedure sees itself (self-recursion), again matching
@@ -428,7 +431,8 @@ let transform_module (m : Surface_ast.module_def) : Resolved_ast.module_def =
               in
               let env = List.rev env_rev @ menv in
               let params = List.rev params_rev in
-              ( ProcDef { name = id_.name; params; body = alpha_body pst env body },
+              ( ProcDef
+                  { name = id_.name; params; body = alpha_body pst env body },
                 defs,
                 (name, id_) :: menv,
                 seen )

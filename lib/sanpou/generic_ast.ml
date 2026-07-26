@@ -52,7 +52,7 @@ and ('n, 'c) expr_desc =
   | BoolLit of bool
   | StrLit of string
   | AtomLit of id
-      (* an opaque model value, written [`name]: no declaration, its own
+    (* an opaque model value, written [`name]: no declaration, its own
          syntactic namespace, only equality — two atoms are equal iff their
          names are; the name is the model value's identity in traces *)
   | Var of 'n
@@ -64,21 +64,17 @@ and ('n, 'c) expr_desc =
   | Subscript of ('n, 'c) expr * ('n, 'c) expr
   | Field of ('n, 'c) expr * id (* record field access [r.f] *)
   | Record of (id * ('n, 'c) expr) list
-      (* a record literal [{f1: e1, ..., fn: en}]; fields are kept in a
+    (* a record literal [{f1: e1, ..., fn: en}]; fields are kept in a
          canonical (label-sorted) order so structurally equal records compare
          equal regardless of source order *)
   | Range of ('n, 'c) expr * ('n, 'c) expr
-      (* [lo..hi] as a first-class set of integers; the domain any binder
+    (* [lo..hi] as a first-class set of integers; the domain any binder
          ranges over is an arbitrary set expression, of which a range is the
          common case *)
   | MapInit of { binder : 'n; domain : ('n, 'c) expr; value : ('n, 'c) expr }
   | SetLit of ('n, 'c) expr list
-  | SetComp of {
-      binder : 'n;
-      domain : ('n, 'c) expr;
-      pred : ('n, 'c) expr;
-    }
-      (* a filter comprehension [{x in S : p}]: the elements of [domain]
+  | SetComp of { binder : 'n; domain : ('n, 'c) expr; pred : ('n, 'c) expr }
+    (* a filter comprehension [{x in S : p}]: the elements of [domain]
          satisfying [pred] *)
   | Tuple of ('n, 'c) expr list
   | Sequence of ('n, 'c) expr list
@@ -95,15 +91,13 @@ and ('n, 'c) expr_desc =
    Reads compose the corresponding expressions ([Subscript]/[Field]); a write
    path is a list of these so index and field steps can interleave
    ([a[i].f = e]). *)
-type ('n, 'c) accessor =
-  | AccIndex of ('n, 'c) expr
-  | AccField of id
+type ('n, 'c) accessor = AccIndex of ('n, 'c) expr | AccField of id
 [@@deriving show, eq]
 
 type ('n, 'c) assign_target =
   | VarTarget of 'n
   | PathTarget of 'n * ('n, 'c) accessor list
-      (* one entry per subscript/field step, outermost first; never empty *)
+    (* one entry per subscript/field step, outermost first; never empty *)
 [@@deriving show, eq]
 
 type ('n, 'c) simple_stmt = ('n, 'c) simple_stmt_desc node
@@ -130,7 +124,7 @@ and ('n, 'c) step_desc =
       domain : ('n, 'c) expr;
       stmts : ('n, 'c) simple_stmt list;
     }
-      (* one atomic step under a non-deterministically chosen binder;
+(* one atomic step under a non-deterministically chosen binder;
          restricting the body to simple statements keeps the binder's
          scope within a single action *)
 
@@ -150,7 +144,7 @@ and ('n, 'c) body = ('n, 'c) step list [@@deriving show, eq]
 type ('n, 'c) var_init =
   | InitValue of ('n, 'c) expr
   | InitIn of ('n, 'c) expr
-      (* a non-deterministic initial value drawn from a set *)
+    (* a non-deterministic initial value drawn from a set *)
 [@@deriving show, eq]
 
 type ('n, 'c) item = ('n, 'c) item_desc node
