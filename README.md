@@ -1,4 +1,9 @@
-# sanpou
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo.svg" alt="sanpou" width="360">
+  </picture>
+</h1>
 
 > [!WARNING]
 > Under development. Specifications are subject to drastic changes.

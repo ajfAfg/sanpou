@@ -78,17 +78,11 @@ and termination checking.
   
   L4(self) ==
       /\ pc[self] = "L4"
-      /\ stack' = [stack EXCEPT ![self] = [stack[self] EXCEPT ![1].ans__2 = (Head(stack[self]).x__1 * Head(stack[self]).callRet__1)]]
-      /\ pc' = [pc EXCEPT ![self] = "L3"]
-      /\ UNCHANGED << x >>
-  
-  L3(self) ==
-      /\ pc[self] = "L3"
-      /\ stack' = [stack EXCEPT ![self] = << [value |-> Head(stack[self]).ans__2] >> \o Tail(stack[self])]
+      /\ stack' = [stack EXCEPT ![self] = << [value |-> (Head(stack[self]).x__1 * Head(stack[self]).callRet__1)] >> \o Tail([stack[self] EXCEPT ![1].ans__2 = (Head(stack[self]).x__1 * Head(stack[self]).callRet__1)])]
       /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).return_pc]
       /\ UNCHANGED << x >>
   
-  fact(self) == L1(self) \/ L2(self) \/ L5(self) \/ L6(self) \/ L4(self) \/ L3(self)
+  fact(self) == L1(self) \/ L2(self) \/ L5(self) \/ L6(self) \/ L4(self)
   
   L9(self) ==
       /\ pc[self] = "L9"
@@ -105,16 +99,10 @@ and termination checking.
   L8(self) ==
       /\ pc[self] = "L8"
       /\ x' = Head(stack[self]).callRet__2
-      /\ pc' = [pc EXCEPT ![self] = "L7"]
-      /\ UNCHANGED << stack >>
-  
-  L7(self) ==
-      /\ pc[self] = "L7"
       /\ stack' = [stack EXCEPT ![self] = << [value |-> << >>] >> \o Tail(stack[self])]
       /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).return_pc]
-      /\ UNCHANGED << x >>
   
-  worker(self) == L9(self) \/ L10(self) \/ L8(self) \/ L7(self)
+  worker(self) == L9(self) \/ L10(self) \/ L8(self)
   
   __w_workers_entry__(self) ==
       /\ pc[self] = "__w_workers_entry__"
@@ -160,12 +148,10 @@ and termination checking.
       { "label": "L2", "proc": "fact", "desc": "return 1", "line": 8, "col": 7 },
       { "label": "L5", "proc": "fact", "desc": "[call fact]", "line": 10, "col": 21 },
       { "label": "L6", "proc": "fact", "desc": "[return from fact]", "line": 10, "col": 21 },
-      { "label": "L4", "proc": "fact", "desc": "var ans = x * callRet__1", "line": 10, "col": 7 },
-      { "label": "L3", "proc": "fact", "desc": "return ans", "line": 11, "col": 7 },
+      { "label": "L4", "proc": "fact", "desc": "var ans = x * callRet__1; return ans", "line": 10, "col": 7 },
       { "label": "L9", "proc": "worker", "desc": "[call fact]", "line": 16, "col": 9 },
       { "label": "L10", "proc": "worker", "desc": "[return from fact]", "line": 16, "col": 9 },
-      { "label": "L8", "proc": "worker", "desc": "x = callRet__2", "line": 16, "col": 5 },
-      { "label": "L7", "proc": "worker", "desc": "return ()", "line": 17, "col": 5 },
+      { "label": "L8", "proc": "worker", "desc": "x = callRet__2; return ()", "line": 16, "col": 5 },
       { "label": "__w_workers_entry__", "proc": "workers", "desc": "[process workers starts worker]", "line": 20, "col": 3 },
       { "label": "__w_workers_discard__", "proc": "workers", "desc": "[process workers finished]", "line": 20, "col": 3 }
   ]

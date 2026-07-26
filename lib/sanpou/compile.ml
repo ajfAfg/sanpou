@@ -134,6 +134,10 @@ let compile ?config (source : string) : (output list, diagnostic) result =
                       | exception Linearize.Error (message, loc) ->
                           Error { loc; message }
                       | irs ->
+                          let irs = List.map Fuse.fuse_module irs in
+                          let irs =
+                            List.map Canonicalize_locals.canonicalize_module irs
+                          in
                           Ok
                             (List.map
                                (fun ir ->
