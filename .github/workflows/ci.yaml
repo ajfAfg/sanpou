@@ -42,11 +42,6 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
 
-      # opam's build sandbox requires bubblewrap, which the GitHub-hosted
-      # Ubuntu runner image does not ship.
-      - name: Install bubblewrap for the opam sandbox
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
-
       # The opam root holds the repository index `mise run setup` needs;
       # _opam is the project-local switch (compiler + deps). A cold switch
       # build compiles OCaml, so cache both. The OCaml version pin lives in
@@ -58,6 +53,15 @@ jobs:
             ~/.opam
             _opam
           key: opam-${{ runner.os }}-${{ hashFiles('sanpou.opam', 'mise.toml') }}
+
+      # opam's build sandbox does not work on GitHub-hosted runners (bwrap
+      # cannot configure its network namespace: "loopback: Failed
+      # RTM_NEWADDR"), and the opam FAQ recommends disabling it in CI. The
+      # runner VM is ephemeral, so the sandbox adds nothing. `mise run
+      # setup` skips its own `opam init` once ~/.opam exists, so local
+      # contributors keep the sandbox.
+      - name: Initialize opam without the build sandbox
+        run: opam init --bare -n --disable-sandboxing
 
       - name: Provision the opam switch
         run: mise run setup
@@ -111,11 +115,6 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
 
-      # opam's build sandbox requires bubblewrap, which the GitHub-hosted
-      # Ubuntu runner image does not ship.
-      - name: Install bubblewrap for the opam sandbox
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
-
       - name: Cache the opam root and local switch
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -123,6 +122,15 @@ jobs:
             ~/.opam
             _opam
           key: opam-${{ runner.os }}-${{ hashFiles('sanpou.opam', 'mise.toml') }}
+
+      # opam's build sandbox does not work on GitHub-hosted runners (bwrap
+      # cannot configure its network namespace: "loopback: Failed
+      # RTM_NEWADDR"), and the opam FAQ recommends disabling it in CI. The
+      # runner VM is ephemeral, so the sandbox adds nothing. `mise run
+      # setup` skips its own `opam init` once ~/.opam exists, so local
+      # contributors keep the sandbox.
+      - name: Initialize opam without the build sandbox
+        run: opam init --bare -n --disable-sandboxing
 
       - name: Provision the opam switch
         run: mise run setup
