@@ -2,8 +2,7 @@
 
 ## Module structure
 
-A sanpou file contains modules. A module groups the declarations that make up
-one specification:
+A sanpou file contains modules. A module groups the declarations that make up one specification:
 
 ```sanpou
 mod example {
@@ -22,32 +21,18 @@ mod example {
 
 ## Definitions: `def`
 
-`def name = e;` binds a constant, and `def name(x, ...) = e;` a function whose
-body is a pure expression. Definitions cannot mutate state; they are the
-place for constants, derived values, and helper functions.
+`def name = e;` binds a constant, and `def name(x, ...) = e;` a function whose body is a pure expression. Definitions cannot mutate state; they are the place for constants, derived values, and helper functions.
 
 ## Variables: `var`
 
-`var name = e;` declares a mutable state variable with initial value `e`.
-`var name in S;` gives it a non-deterministic initial value drawn from the set
-`S` — TLC explores every choice. The domain `S` may be any set expression,
-not just a range.
+`var name = e;` declares a mutable state variable with initial value `e`. `var name in S;` gives it a non-deterministic initial value drawn from the set `S` — TLC explores every choice. The domain `S` may be any set expression, not just a range.
 
-Variables are the mutable state of the specification; they may only be
-assigned inside procedures (see
-[Statements, steps, and atomicity](statements.md)).
+Variables are the mutable state of the specification; they may only be assigned inside procedures (see [Statements, steps, and atomicity](statements.md)).
 
 ## Scoping
 
-Name resolution is sequential and lexical everywhere, module level included —
-a later `def`/`var`/`procedure`/`process` of the same name shadows the
-earlier one from its point onward (the compiler renames the shadowed
-declarations apart in the emitted TLA+).
+Name resolution is sequential and lexical everywhere, module level included — a later `def`/`var`/`procedure`/`process` of the same name shadows the earlier one from its point onward (the compiler renames the shadowed declarations apart in the emitted TLA+).
 
-Built-in functions (see [Values](values.md#built-in-functions)) are lexically
-shadowed by module definitions of the same name.
+Built-in functions (see [Values](values.md#built-in-functions)) are lexically shadowed by module definitions of the same name.
 
-Atom literals live in their own syntactic namespace and never clash with
-declarations; a declaration whose name coincides with a used atom's text is
-renamed apart in the emitted TLA+ (the atom keeps its name — it is the model
-value's identity).
+Atom literals live in their own syntactic namespace and never clash with declarations; a declaration whose name coincides with a used atom's text is renamed apart in the emitted TLA+ (the atom keeps its name — it is the model value's identity).

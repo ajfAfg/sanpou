@@ -1,24 +1,15 @@
 # The sanpou language
 
-sanpou is a small specification language that compiles to TLA+. A program is
-a set of modules containing pure definitions, mutable variables, procedures,
-processes, and temporal properties; the compiler translates it into a TLA+
-specification that TLC can model-check.
+sanpou is a small specification language that compiles to TLA+. A program is a set of modules containing pure definitions, mutable variables, procedures, processes, and temporal properties; the compiler translates it into a TLA+ specification that TLC can model-check.
 
 ## Contents
 
-- [Modules and scoping](modules-and-scoping.md) — module structure, `def`,
-  `var`, and name resolution
-- [Values](values.md) — integers, booleans, strings, tuples, sequences, sets,
-  maps, records, atoms, and the built-in functions
-- [Expressions](expressions.md) — operators, if expressions, quantifiers, and
-  subscript/field reads
-- [Statements, steps, and atomicity](statements.md) — statements, step
-  structure, and the simultaneous-read semantics
-- [Procedures and processes](procedures-and-processes.md) — procedure
-  definitions, explicit returns, process instantiation, and fairness
-- [Temporal properties](properties.md) — `property`, `globally`/`finally`,
-  and invariants
+- [Modules and scoping](modules-and-scoping.md) — module structure, `def`, `var`, and name resolution
+- [Values](values.md) — integers, booleans, strings, tuples, sequences, sets, maps, records, atoms, and the built-in functions
+- [Expressions](expressions.md) — operators, if expressions, quantifiers, and subscript/field reads
+- [Statements, steps, and atomicity](statements.md) — statements, step structure, and the simultaneous-read semantics
+- [Procedures and processes](procedures-and-processes.md) — procedure definitions, explicit returns, process instantiation, and fairness
+- [Temporal properties](properties.md) — `property`, `globally`/`finally`, and invariants
 
 ## A complete example
 
