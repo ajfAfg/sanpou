@@ -1,6 +1,7 @@
 (tests
  (names
   test_parse
+  test_parse_pbt
   test_compile
   test_config
   test_ast_printer
@@ -14,4 +15,4 @@
   test_linearize
   test_trace
   test_projection)
- (libraries sanpou tla alcotest str))
+ (libraries sanpou tla alcotest str qcheck-core qcheck-alcotest))

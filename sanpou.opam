@@ -14,6 +14,8 @@ depends: [
   "dune" {>= "3.22" & = "3.22.0"}
   "menhir" {= "20260209"}
   "alcotest" {= "1.9.1" & with-test}
+  "qcheck-core" {= "0.91" & with-test}
+  "qcheck-alcotest" {= "0.91" & with-test}
   "ocamlformat" {= "0.29.0"}
   "ppx_deriving" {>= "6.0.3"}
   "odoc" {with-doc}
