@@ -1,2 +1,13 @@
 (library
  (name json))
+
+(menhir
+ (flags (--explain))
+ ; Same setup as the sanpou parser: inference would make the generated
+ ; parser depend on the library's own alias module, which dune rejects as
+ ; circular. Every symbol is typed by hand in json_parser.mly instead.
+ (infer false)
+ (modules json_parser))
+
+(ocamllex
+ (modules json_lexer))

@@ -422,7 +422,7 @@ Invalid sidecar config:
   > EOF
   $ echo 'not json' > cfg.json
   $ sanpou compile cfg.snp -o out
-  Error: invalid sanpou config 'cfg.json': Json.parse: unexpected char 'n' at 0
+  Error: invalid sanpou config 'cfg.json': Json.parse: unexpected character 'n' at offset 0
   [1]
 
 Sidecar property/invariant names are validated against the module:
