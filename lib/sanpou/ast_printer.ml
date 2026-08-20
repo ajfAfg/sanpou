@@ -31,7 +31,7 @@ let binop_str = function
 let unop_str = function Neg -> "-" | Not -> "!"
 
 (* Higher binds tighter; mirrors the stratified grammar rules
-   (or < and < comparison < range < add < mult < subscript < unary < atom). *)
+   (or < and < comparison < range < add < mult < unary < postfix < atom). *)
 let binop_prec = function
   | Or -> 1
   | And -> 2
@@ -43,8 +43,8 @@ let prec (e : ('n, 'c) expr) =
   match e.desc with
   | BinOp (op, _, _) -> binop_prec op
   | Range _ -> 4
-  | Subscript _ | Field _ -> 7
-  | UnOp _ -> 8
+  | UnOp _ -> 7
+  | Subscript _ | Field _ -> 8
   | IntLit _ | BoolLit _ | StrLit _ | AtomLit _ | Var _ | Self | App _
   | Builtin _ | MapInit _ | SetLit _ | SetComp _ | Record _ | Tuple _
   | Sequence _ | IfExpr _ | Quant _ ->
@@ -62,7 +62,7 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
   | AtomLit a -> "`" ^ a
   | Var n -> name_of n
   | Self -> "self"
-  | UnOp (op, rhs) -> unop_str op ^ at 8 rhs
+  | UnOp (op, rhs) -> unop_str op ^ at 7 rhs
   | BinOp (op, lhs, rhs) ->
       let level = binop_prec op in
       (* left-associative: the right operand must bind strictly tighter *)
@@ -76,8 +76,8 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       ^ String.concat ", " (List.map (pretty_expr name_of callee_of) args)
       ^ ")"
   | Subscript (lhs, index) ->
-      at 7 lhs ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
-  | Field (record, label) -> at 7 record ^ "." ^ label
+      at 8 lhs ^ "[" ^ pretty_expr name_of callee_of index ^ "]"
+  | Field (record, label) -> at 8 record ^ "." ^ label
   | Record fields ->
       "{"
       ^ String.concat ", "
@@ -86,10 +86,12 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
              fields)
       ^ "}"
   | Range (lo, hi) -> at 5 lo ^ ".." ^ at 5 hi
+  (* The `x in <domain>` binder prefix reparses as a membership expression,
+     so the domain must bind strictly tighter than a comparison — otherwise
+     the reparse reassociates it into the binder (e.g. `x in a in b` groups
+     as `(x in a) in b`, which is no longer a binder). *)
   | MapInit { binder; domain; value } ->
-      "{ " ^ name_of binder ^ " in "
-      ^ pretty_expr name_of callee_of domain
-      ^ " -> "
+      "{ " ^ name_of binder ^ " in " ^ at 4 domain ^ " -> "
       ^ pretty_expr name_of callee_of value
       ^ " }"
   | Tuple elems -> (
@@ -108,10 +110,9 @@ let rec pretty_expr name_of callee_of (e : ('n, 'c) expr) =
       "{"
       ^ String.concat ", " (List.map (pretty_expr name_of callee_of) elems)
       ^ "}"
+  (* Same binder-prefix constraint as [MapInit]. *)
   | SetComp { binder; domain; pred } ->
-      "{ " ^ name_of binder ^ " in "
-      ^ pretty_expr name_of callee_of domain
-      ^ " : "
+      "{ " ^ name_of binder ^ " in " ^ at 4 domain ^ " : "
       ^ pretty_expr name_of callee_of pred
       ^ " }"
   | IfExpr (cond, then_e, else_e) ->
