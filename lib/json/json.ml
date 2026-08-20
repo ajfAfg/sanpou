@@ -82,7 +82,7 @@ let parse_int_value s pos =
   let rec digits_end p =
     if p < len && s.[p] >= '0' && s.[p] <= '9' then digits_end (p + 1) else p
   in
-  let p = digits_end pos in
+  let p = digits_end (if pos < len && s.[pos] = '-' then pos + 1 else pos) in
   (int_of_string (String.sub s pos (p - pos)), p)
 
 let rec parse_value s pos =
@@ -96,7 +96,7 @@ let rec parse_value s pos =
     | '"' ->
         let v, next = parse_string_value s p in
         (String v, next)
-    | '0' .. '9' ->
+    | '0' .. '9' | '-' ->
         let v, next = parse_int_value s p in
         (Int v, next)
     | '[' -> parse_array s (p + 1)
