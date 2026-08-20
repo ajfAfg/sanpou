@@ -2,6 +2,10 @@
 
 Read `README.md` before working in this repository. It is the source of truth for setup, build, test, and CLI usage.
 
+## Language
+
+Everything in this repository is written in English: code, comments, documentation, commit messages, PR titles and descriptions, and review comments. Do not introduce content in other languages, even if a conversation with a user happens in another language.
+
 ## TLC and E2E tests
 
 The E2E tests are dune cram tests (`test/cram/`) that run the `sanpou` CLI
