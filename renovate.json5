@@ -1,0 +1,54 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":timezone(Asia/Tokyo)"],
+
+  // Supply chain attack mitigation
+  "minimumReleaseAge": "14 days",
+
+  "labels": ["renovate"],
+  "automerge": true,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+    },
+    {
+      // These pins are bumped deliberately (see the comments in mise.toml).
+      // An OCaml bump also requires rebuilding the local opam switch, and a
+      // TLA+ tools bump can change TLC behavior, so keep a human in the loop.
+      "matchDepNames": ["ocaml/ocaml", "tlaplus/tlaplus"],
+      "automerge": false,
+    },
+  ],
+  "customManagers": [
+    {
+      // tla2tools_version in mise.toml tracks
+      // https://github.com/tlaplus/tlaplus/releases (tags are "vX.Y.Z";
+      // the literal "v" stays in mise.toml, so strip it from the datasource).
+      "customType": "regex",
+      "managerFilePatterns": ["/^mise\\.toml$/"],
+      "matchStrings": ['tla2tools_version = "v(?<currentValue>[^"]+)"'],
+      "depNameTemplate": "tlaplus/tlaplus",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$",
+    },
+    {
+      // The OCaml compiler is pinned in three places that must stay in sync:
+      // mise.toml (opam switch create), dune-project, and the generated
+      // sanpou.opam. One manager updates all three in a single PR.
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^mise\\.toml$/",
+        "/^dune-project$/",
+        "/^sanpou\\.opam$/",
+      ],
+      "matchStrings": [
+        "opam switch create[^\\n]* (?<currentValue>\\d+\\.\\d+\\.\\d+) --no-install",
+        "\\(ocaml\\s+\\(= (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)\\)",
+        '"ocaml" \\{= "(?<currentValue>\\d+\\.\\d+\\.\\d+)"\\}',
+      ],
+      "depNameTemplate": "ocaml/ocaml",
+      "datasourceTemplate": "github-releases",
+    },
+  ],
+}
